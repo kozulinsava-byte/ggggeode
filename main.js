@@ -1,6 +1,6 @@
-// ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · ALPHA 0.03 ==========
-import { initializeState, startGlobalTimer, showSkeleton, terminateEvent, exitMeteorStormEarly } from './core.js?v=003';
-import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=003';
+// ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · ALPHA 0.04 · ИСПРАВЛЕНО ==========
+import { initializeState, startGlobalTimer, showSkeleton, terminateEvent, exitMeteorStormEarly, clearActiveOverlay } from './core.js?v=004';
+import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=004';
 
 // Тихая инициализация Telegram
 const tg = window.Telegram?.WebApp;
@@ -15,24 +15,77 @@ if (tg) {
   }
 }
 
-// Привязка событий
-try {
-  document.getElementById('showcaseClose')?.addEventListener('click', closeShowcase);
-  document.getElementById('showcaseOverlay')?.addEventListener('click', (e) => {
-    if (e.target === document.getElementById('showcaseOverlay')) closeShowcase();
-  });
+// ---------- ЦЕНТРАЛИЗОВАННАЯ ПРИВЯЗКА ВСЕХ ГЛОБАЛЬНЫХ СОБЫТИЙ ----------
+function bindGlobalEvents() {
+  // Закрытие витрины
+  const showcaseCloseBtn = document.getElementById('showcaseClose');
+  const showcaseOverlayEl = document.getElementById('showcaseOverlay');
+  
+  if (showcaseCloseBtn) {
+    showcaseCloseBtn.addEventListener('click', closeShowcase);
+  }
+  if (showcaseOverlayEl) {
+    showcaseOverlayEl.addEventListener('click', (e) => {
+      if (e.target === showcaseOverlayEl) closeShowcase();
+    });
+  }
+  
+  // Закрытие модалок
   document.addEventListener('closeModal', closeModal);
-} catch(e) {}
-
-// ---------- ПРИВЯЗКА КНОПОК МЕТЕОРИТНОГО ШТОРМА ----------
-try {
+  
+  // Закрытие модалки по клику на оверлей
+  const modalOverlayEl = document.getElementById('modalOverlay');
+  if (modalOverlayEl) {
+    modalOverlayEl.addEventListener('click', (e) => {
+      if (e.target === modalOverlayEl) closeModal();
+    });
+  }
+  
+  // Кнопка выхода из Метеоритного Шторма
   const stormExitBtn = document.getElementById('meteorStormExitBtn');
   if (stormExitBtn) {
     stormExitBtn.addEventListener('click', () => {
       exitMeteorStormEarly();
     });
   }
-} catch(e) {}
+  
+  // Закрытие по Escape (для десктопа)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      // Закрываем все оверлеи
+      const overlays = [
+        'showcaseOverlay',
+        'modalOverlay',
+        'brawlOverlay',
+        'conveyorOverlay',
+        'forgeOverlay',
+        'forgeProgressOverlay',
+        'rewardPopupOverlay',
+        'signalGameOverlay',
+        'meteorStormOverlay',
+        'meteorStormResultOverlay'
+      ];
+      
+      overlays.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.classList.contains('active')) {
+          if (id === 'showcaseOverlay') closeShowcase();
+          else if (id === 'modalOverlay') closeModal();
+          else if (id === 'meteorStormOverlay') exitMeteorStormEarly();
+          else {
+            el.classList.remove('active');
+            clearActiveOverlay(id.replace('Overlay', ''));
+          }
+        }
+      });
+      
+      terminateEvent();
+    }
+  });
+}
+
+// Привязываем события сразу
+bindGlobalEvents();
 
 // ---------- ПРЕЛОАДЕР ----------
 const preloader = document.getElementById('preloader');
@@ -43,22 +96,26 @@ const preloaderText = document.getElementById('preloaderText');
 function hidePreloader() {
   if (preloader) {
     preloader.classList.add('hidden');
-    setTimeout(() => { preloader.style.display = 'none'; }, 500);
+    setTimeout(() => { 
+      if (preloader) preloader.style.display = 'none'; 
+    }, 500);
   }
 }
 
-// ---------- ASSET MANAGER ----------
+// ---------- ASSET MANAGER (С УЛУЧШЕННОЙ ОБРАБОТКОЙ ОШИБОК) ----------
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
     this.loadedCount = 0;
     this.maxRetries = 3;
+    this.paths = [];
   }
 
   collectPaths() {
     const paths = new Set();
     
-    import('./config.js?v=003').then(({ CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS }) => {
+    // Статический импорт config для мгновенного доступа
+    import('./config.js?v=004').then(({ CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS }) => {
       Object.values(CONFIG_ITEMS).forEach(item => {
         if (item.imagePath) paths.add(item.imagePath);
       });
@@ -74,16 +131,22 @@ class AssetManager {
       Object.values(CONFIG_EXPEDITIONS).forEach(exp => {
         if (exp.imagePath) paths.add(exp.imagePath);
       });
+      
+      this.paths = [...paths];
+      this.totalAssets = this.paths.length;
+    }).catch(err => {
+      console.error('[StarForge] Failed to collect asset paths:', err);
+      this.totalAssets = 0;
     });
-    
-    return [...paths];
   }
 
   updateProgress() {
     this.loadedCount++;
-    const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
-    if (preloaderBar) preloaderBar.style.width = percent + '%';
-    if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+    if (this.totalAssets > 0) {
+      const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
+      if (preloaderBar) preloaderBar.style.width = percent + '%';
+      if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+    }
   }
 
   async loadAsset(src, retryCount = 0) {
@@ -97,12 +160,12 @@ class AssetManager {
       
       img.onerror = () => {
         if (retryCount < this.maxRetries) {
-          console.warn(`Retry ${retryCount + 1}/${this.maxRetries} for: ${src}`);
+          console.warn(`[StarForge] Retry ${retryCount + 1}/${this.maxRetries} for: ${src}`);
           setTimeout(() => {
             this.loadAsset(src, retryCount + 1).then(resolve);
           }, 500 * (retryCount + 1));
         } else {
-          console.error(`Failed to load after ${this.maxRetries} retries: ${src}`);
+          console.error(`[StarForge] Failed to load after ${this.maxRetries} retries: ${src}`);
           this.updateProgress();
           resolve({ src, success: false });
         }
@@ -113,10 +176,14 @@ class AssetManager {
   }
 
   async start() {
-    const paths = this.collectPaths();
-    this.totalAssets = paths.length;
+    this.collectPaths();
+    
+    // Даём время на сбор путей
+    await new Promise(r => setTimeout(r, 50));
     
     if (this.totalAssets === 0) {
+      if (preloaderText) preloaderText.textContent = 'Пропуск загрузки...';
+      await new Promise(r => setTimeout(r, 300));
       hidePreloader();
       initializeGame();
       return;
@@ -124,11 +191,16 @@ class AssetManager {
     
     if (preloaderText) preloaderText.textContent = 'Загрузка ресурсов...';
     
-    const loadPromises = paths.map(src => this.loadAsset(src));
+    const loadPromises = this.paths.map(src => this.loadAsset(src));
     const results = await Promise.all(loadPromises);
     
+    // Кешируем успешно загруженные изображения
     const cacheContainer = document.createElement('div');
     cacheContainer.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
+    cacheContainer.id = 'assetCache';
+    
+    const existingCache = document.getElementById('assetCache');
+    if (existingCache) existingCache.remove();
     
     results.forEach(({ src, success }) => {
       if (success) {
@@ -143,10 +215,12 @@ class AssetManager {
     
     if (preloaderText) preloaderText.textContent = 'Запуск...';
     
+    // Убираем кеш-контейнер через 2 секунды
     setTimeout(() => {
-      cacheContainer.remove();
+      if (cacheContainer.isConnected) cacheContainer.remove();
     }, 2000);
     
+    // Запускаем игру
     setTimeout(() => {
       initializeGame();
       hidePreloader();
@@ -159,15 +233,21 @@ function initializeGame() {
   initializeState();
   startGlobalTimer();
 
+  // Привязка табов
   document.querySelectorAll('.tab-item').forEach((t) =>
     t.addEventListener('click', () => setActiveTab(t.dataset.tab))
   );
 
+  // Стартовая вкладка
   setActiveTab('expeditions');
+  
+  console.log('[StarForge] Game initialized successfully. Alpha 0.04');
 }
 
+// Показываем скелетон пока грузится
 showSkeleton();
 
+// Запускаем ассет-менеджер
 const assetManager = new AssetManager();
 
 if (document.readyState === 'loading') {
@@ -175,3 +255,12 @@ if (document.readyState === 'loading') {
 } else {
   assetManager.start();
 }
+
+// Обработка невидимых ошибок
+window.addEventListener('error', (e) => {
+  console.error('[StarForge] Global error:', e.message, e.filename, e.lineno);
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[StarForge] Unhandled promise rejection:', e.reason);
+});
