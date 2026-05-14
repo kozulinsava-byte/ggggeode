@@ -1,6 +1,6 @@
-// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
+// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ · ИСПРАВЛЕНО ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, EVENTS_CONFIG } from './config.js';
-import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup, renderMeteorStormUI, showMeteorStormResult, updateMeteorStormUI } from './ui.js';
+import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup, renderMeteorStormUI, showMeteorStormResult, updateMeteorStormUI, setActiveTab } from './ui.js';
 
 const isTelegram = !!window.Telegram?.WebApp;
 const tg = window.Telegram?.WebApp;
@@ -37,6 +37,7 @@ Object.keys(CONFIG_ITEMS).forEach((k) => {
 });
 
 let isOpeningGeode = false;
+let isOverlayActive = false; // ГЛОБАЛЬНЫЙ ФЛАГ АКТИВНОГО ОВЕРЛЕЯ
 
 export function sendBotNotification(message) {
   console.log('[StarForge Bot Notification]', message);
@@ -54,6 +55,31 @@ export function showSkeleton() {
       </div>
     `;
   }
+}
+
+// ========== ДИСПЕТЧЕР ОВЕРЛЕЕВ (ЗАЩИТА ОТ КОНФЛИКТОВ) ==========
+let activeOverlayId = null;
+
+export function setActiveOverlay(overlayId) {
+  if (activeOverlayId && activeOverlayId !== overlayId) {
+    console.warn(`[StarForge] Overlay conflict: ${activeOverlayId} -> ${overlayId}. Forcing cleanup.`);
+    terminateEvent();
+    closeForgeForce();
+    closeBrawlOverlayForce();
+  }
+  activeOverlayId = overlayId;
+  isOverlayActive = !!overlayId;
+}
+
+export function clearActiveOverlay(overlayId) {
+  if (activeOverlayId === overlayId) {
+    activeOverlayId = null;
+    isOverlayActive = false;
+  }
+}
+
+export function isAnyOverlayActive() {
+  return isOverlayActive;
 }
 
 // ========== МЕНЕДЖЕР ИВЕНТОВ (РОТАЦИЯ) ==========
@@ -114,7 +140,7 @@ export const eventsManager = {
     showToast('🔥 Великая Переплавка началась!', '🔥');
     sendBotNotification('🚀 Кузня открыта! 15 минут для переплавки!');
     saveGame();
-    renderCurrentTab();
+    if (!isAnyOverlayActive()) renderCurrentTab();
   },
   
   triggerMeteorStorm() {
@@ -132,7 +158,7 @@ export const eventsManager = {
     showToast('☄️ Метеоритный Шторм начинается!', '☄️');
     sendBotNotification('☄️ Метеоритный Шторм! Лови метеориты!');
     saveGame();
-    renderCurrentTab();
+    if (!isAnyOverlayActive()) renderCurrentTab();
   },
   
   endEvent() {
@@ -146,7 +172,7 @@ export const eventsManager = {
     }
     
     saveGame();
-    renderCurrentTab();
+    if (!isAnyOverlayActive()) renderCurrentTab();
   }
 };
 
@@ -175,11 +201,15 @@ export function openMeteorStorm() {
   
   if (meteorStormState.active) return;
   
+  terminateEvent(); // Чистим предыдущий шторм если был
+  
   meteorStormState.active = true;
   meteorStormState.timer = EVENTS_CONFIG.meteor_storm.stormDuration;
   meteorStormState.captured = { legendary: 0, rare: 0, common: 0 };
   meteorStormState.totalSpawned = 0;
   meteorStormState.meteorElements = [];
+  
+  setActiveOverlay('meteorStorm');
   
   const overlay = document.getElementById('meteorStormOverlay');
   const gameArea = document.getElementById('meteorStormGameArea');
@@ -420,6 +450,7 @@ export function claimMeteorStormRewards() {
   
   document.getElementById('meteorStormOverlay').classList.remove('active');
   document.getElementById('meteorStormResultOverlay').classList.remove('active');
+  clearActiveOverlay('meteorStorm');
   
   showToast(`Шторм завершён! +${commonGeodes + rareGeodes + legendaryGeodes} жеод, +${totalXP} XP`, '☄️');
   renderCurrentTab();
@@ -457,6 +488,7 @@ export function exitMeteorStormEarly() {
   
   document.getElementById('meteorStormOverlay').classList.remove('active');
   document.getElementById('meteorStormResultOverlay').classList.remove('active');
+  clearActiveOverlay('meteorStorm');
   
   if (totalXP > 0 || (legendaryGeodes + rareGeodes + commonGeodes) > 0) {
     showToast(`Шторм прерван. Получено: +${commonGeodes + rareGeodes + legendaryGeodes} жеод, +${totalXP} XP`, '☄️');
@@ -514,6 +546,8 @@ export function openForge() {
   if (forgeState.active) return;
   forgeState.active = true;
   forgeState.selectedRecipe = null;
+  
+  setActiveOverlay('forge');
   
   const overlay = document.getElementById('forgeOverlay');
   const content = document.getElementById('forgeContent');
@@ -622,6 +656,20 @@ function closeForge() {
   content.innerHTML = '';
   forgeState.active = false;
   forgeState.selectedRecipe = null;
+  clearActiveOverlay('forge');
+}
+
+function closeForgeForce() {
+  if (forgeState.smeltInterval) {
+    clearInterval(forgeState.smeltInterval);
+    forgeState.smeltInterval = null;
+  }
+  const overlay = document.getElementById('forgeOverlay');
+  const progressOverlay = document.getElementById('forgeProgressOverlay');
+  if (overlay) overlay.classList.remove('active');
+  if (progressOverlay) progressOverlay.classList.remove('active');
+  forgeState.active = false;
+  forgeState.selectedRecipe = null;
 }
 
 function startSmeltProcess(recipe) {
@@ -686,6 +734,7 @@ function finishSmeltProcess(recipe) {
   
   forgeState.active = false;
   forgeState.selectedRecipe = null;
+  clearActiveOverlay('forge');
   renderCurrentTab();
 }
 
@@ -884,6 +933,8 @@ export function startSignalGame(expId, bonusType) {
   const counterEl = document.getElementById('signalCounter');
   const area = document.getElementById('signalGameArea');
   
+  setActiveOverlay('signalGame');
+  
   overlay.classList.add('active');
   timerEl.textContent = '10';
   counterEl.textContent = `Сигналов: 0 / 8`;
@@ -960,6 +1011,7 @@ function signalGameSuccess() {
   
   cleanupSignalGame();
   document.getElementById('signalGameOverlay').classList.remove('active');
+  clearActiveOverlay('signalGame');
   showToast('✅ Все сигналы пойманы! Бонус применён!', '📡');
 }
 
@@ -973,6 +1025,7 @@ function signalGameFail() {
   
   cleanupSignalGame();
   document.getElementById('signalGameOverlay').classList.remove('active');
+  clearActiveOverlay('signalGame');
   showToast('❌ Сбой системы... Разведка ушла на перезарядку', '📡');
 }
 
@@ -1054,7 +1107,7 @@ function loadGame() {
           try {
             applySaveData(JSON.parse(cloudData));
             localStorage.setItem('starforge_v1', cloudData);
-            renderCurrentTab();
+            if (!isAnyOverlayActive()) renderCurrentTab();
           } catch (e) {}
         }
       });
@@ -1086,7 +1139,19 @@ export function initializeState() {
   eventsManager.startEventCycle();
 }
 
-// ---------- ЭКСПЕДИЦИИ ----------
+// ========== ЕДИНЫЙ ГЛОБАЛЬНЫЙ ТАЙМЕР ==========
+let globalTimerInterval = null;
+
+export function startGlobalTimer() {
+  if (globalTimerInterval) clearInterval(globalTimerInterval);
+  globalTimerInterval = setInterval(() => {
+    checkCompletedExpeditions();
+    updateExpeditionTimersUI();
+    updateGlobalEventTimerUI();
+  }, 500);
+}
+
+// ========== ЭКСПЕДИЦИИ (ИСПРАВЛЕНО) ==========
 function getRandomDropFromExpedition(expId) {
   const exp = CONFIG_EXPEDITIONS[expId];
   if (!exp) return { geodeId: 'mine', isSpecial: false };
@@ -1139,22 +1204,11 @@ function checkCompletedExpeditions() {
   
   if (changed) {
     saveGame();
-    renderCurrentTab();
+    if (!isAnyOverlayActive()) renderCurrentTab();
   }
 }
 
-let globalTimerInterval = null;
-
-export function startGlobalTimer() {
-  if (globalTimerInterval) clearInterval(globalTimerInterval);
-  globalTimerInterval = setInterval(() => {
-    checkCompletedExpeditions();
-    updateExpeditionTimers();
-    updateEventTimer();
-  }, 500);
-}
-
-function updateExpeditionTimers() {
+function updateExpeditionTimersUI() {
   const now = Date.now();
   for (let k in CONFIG_EXPEDITIONS) {
     const exp = playerState.expeditions[k];
@@ -1164,37 +1218,72 @@ function updateExpeditionTimers() {
       const m = Math.floor(diff / 60000);
       const s = Math.ceil((diff % 60000) / 1000);
       el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
+    } else if (el && (!exp || !exp.active)) {
+      el.textContent = '';
+      const parent = el.closest('.expedition-action');
+      if (parent) {
+        const btn = parent.querySelector('.small-btn');
+        if (!btn) {
+          el.outerHTML = `<button class="small-btn" data-info-exp="${k}">Подробнее</button>`;
+          const newBtn = parent.querySelector(`[data-info-exp="${k}"]`);
+          if (newBtn) {
+            newBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              import('./ui.js').then(ui => ui.showExpeditionInfoModal(k));
+            });
+          }
+        }
+      }
     }
   }
 }
 
-function updateEventTimer() {
+function updateGlobalEventTimerUI() {
   const event = eventsManager.getActiveEvent();
   const timerEl = document.getElementById('eventTimer');
-  if (timerEl && event) {
+  if (timerEl && event && eventsManager.eventPhase === 'active') {
     timerEl.textContent = eventsManager.getTimeLeft();
   }
   
   if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime && eventsManager.eventPhase === 'active') {
     eventsManager.endEvent();
-    renderCurrentTab();
   }
 }
 
 export function startExpedition(expId) {
   const exp = playerState.expeditions[expId];
-  if (!exp || exp.active) return;
+  if (!exp || exp.active) {
+    console.warn(`[StarForge] Expedition ${expId} is already active or doesn't exist.`);
+    return false;
+  }
+  
+  const config = CONFIG_EXPEDITIONS[expId];
+  if (!config) {
+    console.error(`[StarForge] No config for expedition ${expId}`);
+    return false;
+  }
+  
+  // Проверка уровня
+  if (playerState.player.level < config.requiredLevel) {
+    showToast(`Требуется ${config.requiredLevel} уровень!`, '🔒');
+    return false;
+  }
   
   exp.active = true;
-  exp.endTime = Date.now() + CONFIG_EXPEDITIONS[expId].timer * 1000;
+  exp.endTime = Date.now() + config.timer * 1000;
   exp.scanUsed = false;
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
   
   saveGame();
-  renderExpeditionsTab();
-  showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
-  sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${CONFIG_EXPEDITIONS[expId].name}`);
+  showToast(`Экспедиция «${config.name}» началась!`, config.fallbackIcon);
+  sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${config.name}`);
+  
+  if (!isAnyOverlayActive()) {
+    renderExpeditionsTab();
+  }
+  
+  return true;
 }
 
 // ---------- ЧАСТИЦЫ И ТРЯСКА ----------
@@ -1286,8 +1375,6 @@ function showCollectibleAnimation(ingot) {
 }
 
 // ---------- ЛИДЕРБОРД (ТЕСТОВЫЙ РЕЖИМ) ----------
-const LEADERBOARD_URL = 'https://ТВОЙ-ДОМЕН/api/leaderboard';
-
 export async function updateLeaderboard() {
   if (!isTelegram || !tg.initData) {
     showToast('Лидерборд доступен только в Telegram', '⚠️');
@@ -1398,6 +1485,8 @@ export function initRoulette(geodeId) {
   conveyorState.items = items;
   conveyorState.trackItems = trackItems;
   
+  setActiveOverlay('conveyor');
+  
   conveyorTrack.innerHTML = '';
   trackItems.forEach((item, index) => {
     const itemEl = document.createElement('div');
@@ -1458,6 +1547,7 @@ function stopRoulette() {
   saveGame();
   
   cleanupConveyor();
+  clearActiveOverlay('conveyor');
   isOpeningGeode = false;
   
   setTimeout(() => {
@@ -1507,6 +1597,8 @@ export function openBrawlOverlay(geodeId, isSpecial) {
   brawlState.tapsRemaining = 10;
   brawlState.isOpen = true;
 
+  setActiveOverlay('brawl');
+
   brawlCounter.textContent = '10';
   brawlResult.classList.remove('show');
   brawlCloseBtn.style.display = 'none';
@@ -1531,7 +1623,14 @@ function closeBrawlOverlay() {
   brawlOverlay.classList.remove('active');
   brawlState.isOpen = false;
   isOpeningGeode = false;
+  clearActiveOverlay('brawl');
   renderCurrentTab();
+}
+
+function closeBrawlOverlayForce() {
+  brawlOverlay.classList.remove('active');
+  brawlState.isOpen = false;
+  isOpeningGeode = false;
 }
 
 function handleBrawlTap(e) {
@@ -1605,6 +1704,7 @@ function finishBrawlOpening() {
       brawlResult.classList.add('show');
       brawlCloseBtn.style.display = 'block';
       isOpeningGeode = false;
+      clearActiveOverlay('brawl');
       renderCurrentTab();
     }, 500);
     
@@ -1616,6 +1716,7 @@ function finishBrawlOpening() {
     setTimeout(() => {
       brawlOverlay.classList.remove('active');
       brawlState.isOpen = false;
+      clearActiveOverlay('brawl');
       initRoulette(geodeId);
     }, 500);
   }
