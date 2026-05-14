@@ -1,6 +1,6 @@
-// ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
+// ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА · ИСПРАВЛЕНО ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES, EVENTS_CONFIG } from './config.js';
-import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, openMeteorStorm, claimMeteorStormRewards, exitMeteorStormEarly, meteorStormState, terminateEvent } from './core.js';
+import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, openMeteorStorm, claimMeteorStormRewards, exitMeteorStormEarly, meteorStormState, terminateEvent, setActiveOverlay, clearActiveOverlay, isAnyOverlayActive } from './core.js';
 
 // DOM-элементы
 export const mainContent = document.getElementById('mainContent');
@@ -14,8 +14,12 @@ export let currentTab = 'expeditions';
 export let inventorySubTab = 'geodes';
 export let collectionSubTab = 'encyclopedia';
 
-// ID интервала для живого таймера в модалке
+// ЕДИНЫЙ ИНТЕРВАЛ ДЛЯ МОДАЛОК (замена разрозненных таймеров)
 let modalTimerInterval = null;
+let currentModalExpId = null;
+
+// ЕДИНЫЙ ИНТЕРВАЛ ДЛЯ ВКЛАДКИ ИВЕНТОВ (замена eventTimerInterval)
+let eventTabInterval = null;
 
 // ---------- ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ТЕМЫ ----------
 function initTheme() {
@@ -101,6 +105,8 @@ export function showRewardPopup(ingot) {
   const nameEl = document.getElementById('rewardPopupName');
   const closeBtn = document.getElementById('rewardPopupClose');
   
+  setActiveOverlay('rewardPopup');
+  
   renderImageToElement(iconEl, ingot.imagePath, ingot.icon, ingot.fallbackColor);
   nameEl.textContent = ingot.name;
   
@@ -108,6 +114,7 @@ export function showRewardPopup(ingot) {
   
   const closeHandler = () => {
     overlay.classList.remove('active');
+    clearActiveOverlay('rewardPopup');
     closeBtn.removeEventListener('click', closeHandler);
   };
   closeBtn.addEventListener('click', closeHandler);
@@ -120,7 +127,11 @@ export function renderMeteorStormUI() {
   const rareEl = document.getElementById('meteorCountRare');
   const commonEl = document.getElementById('meteorCountCommon');
   
-  if (timerEl) timerEl.textContent = meteorStormState.timer;
+  if (timerEl) {
+    timerEl.textContent = meteorStormState.timer;
+    timerEl.style.color = '#FFD700';
+    timerEl.style.textShadow = '0 0 20px rgba(255,215,0,0.5)';
+  }
   if (legendaryEl) legendaryEl.textContent = meteorStormState.captured.legendary;
   if (rareEl) rareEl.textContent = meteorStormState.captured.rare;
   if (commonEl) commonEl.textContent = meteorStormState.captured.common;
@@ -137,6 +148,9 @@ export function updateMeteorStormUI() {
     if (meteorStormState.timer <= 5) {
       timerEl.style.color = '#FF4444';
       timerEl.style.textShadow = '0 0 30px rgba(255,68,68,0.8)';
+    } else {
+      timerEl.style.color = '#FFD700';
+      timerEl.style.textShadow = '0 0 20px rgba(255,215,0,0.5)';
     }
   }
   if (legendaryEl) legendaryEl.textContent = meteorStormState.captured.legendary;
@@ -158,13 +172,22 @@ export function showMeteorStormResult(data) {
   
   overlay.classList.add('active');
   
-  document.getElementById('meteorStormClaimBtn').onclick = () => claimMeteorStormRewards();
+  const claimBtn = document.getElementById('meteorStormClaimBtn');
+  if (claimBtn) {
+    const newClaimBtn = claimBtn.cloneNode(true);
+    claimBtn.parentNode.replaceChild(newClaimBtn, claimBtn);
+    newClaimBtn.addEventListener('click', () => claimMeteorStormRewards());
+  }
 }
 
 // ---------- SHOWCASE (ПОЛНОЭКРАННЫЙ ПРОСМОТР) ----------
 export function openShowcase(ingotId, isMystery = false) {
+  if (isAnyOverlayActive()) return;
+  
   const ingot = CONFIG_ITEMS[ingotId];
   if (!ingot) return;
+  
+  setActiveOverlay('showcase');
   
   const owned = playerState.ingots[ingotId] > 0;
   const discovered = playerState.minedStats[ingotId] > 0;
@@ -224,6 +247,7 @@ export function openShowcase(ingotId, isMystery = false) {
 
 export function closeShowcase() {
   showcaseOverlay.classList.remove('active');
+  clearActiveOverlay('showcase');
 }
 
 // ---------- АДМИН-ПАНЕЛЬ ----------
@@ -365,12 +389,14 @@ function showAdminPanel() {
   }, 50);
 }
 
-// ---------- МОДАЛЬНЫЕ ОКНА ----------
+// ---------- МОДАЛЬНЫЕ ОКНА (ИСПРАВЛЕНО — ЗАЩИТА ОТ ЗАДВАИВАНИЯ) ----------
 export function openModal(html) {
+  // Чистим предыдущий модальный таймер
   if (modalTimerInterval) {
     clearInterval(modalTimerInterval);
     modalTimerInterval = null;
   }
+  currentModalExpId = null;
   
   modalContent.innerHTML = html;
   modalOverlay.classList.add('active');
@@ -385,6 +411,7 @@ export function closeModal() {
     clearInterval(modalTimerInterval);
     modalTimerInterval = null;
   }
+  currentModalExpId = null;
   
   modalOverlay.classList.remove('active');
   modalContent.innerHTML = '';
@@ -454,26 +481,30 @@ export function showGeodeModal(geodeId) {
       });
     }
     
-    document.getElementById('modalOpenGeodeBtn').addEventListener('click', function () {
-      closeModal();
-      const isSpecial = this.dataset.special === 'true';
-      const geodeId = this.dataset.geode;
-      
-      if (isSpecial) {
-        const g = CONFIG_GEODES[geodeId];
-        const completed = isLocationCompleted(g.location);
-        if (completed) {
-          exchangeSpecialGeodeForXP(geodeId);
+    const openBtn = document.getElementById('modalOpenGeodeBtn');
+    if (openBtn) {
+      openBtn.addEventListener('click', function () {
+        closeModal();
+        const isSpecial = this.dataset.special === 'true';
+        const gId = this.dataset.geode;
+        
+        if (isSpecial) {
+          const g = CONFIG_GEODES[gId];
+          const completed = isLocationCompleted(g.location);
+          if (completed) {
+            exchangeSpecialGeodeForXP(gId);
+          } else {
+            openBrawlOverlay(gId, true);
+          }
         } else {
-          openBrawlOverlay(geodeId, true);
+          openBrawlOverlay(gId, false);
         }
-      } else {
-        openBrawlOverlay(geodeId, false);
-      }
-    });
+      });
+    }
   }, 10);
 }
 
+// ---------- МОДАЛКА ЭКСПЕДИЦИИ (ИСПРАВЛЕНО — НАДЁЖНЫЙ ОБРАБОТЧИК) ----------
 function updateModalExpeditionTimer(expId) {
   const timerEl = document.getElementById('modalExpeditionTimer');
   const actionBtnEl = document.getElementById('modalExpeditionAction');
@@ -481,11 +512,20 @@ function updateModalExpeditionTimer(expId) {
 
   const exp = playerState.expeditions[expId];
   if (!exp || !exp.active || !exp.endTime) {
-    actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button>`;
-    document.getElementById('modalStartExpedition')?.addEventListener('click', function () {
-      startExpedition(this.dataset.expedition);
-      closeModal();
-    });
+    // Экспедиция завершена — показываем кнопку отправки
+    actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition">⛏️ ОТПРАВИТЬСЯ</button>`;
+    const startBtn = document.getElementById('modalStartExpedition');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        startExpedition(expId);
+        closeModal();
+      });
+    }
+    // Останавливаем таймер
+    if (modalTimerInterval) {
+      clearInterval(modalTimerInterval);
+      modalTimerInterval = null;
+    }
     return;
   }
 
@@ -493,11 +533,18 @@ function updateModalExpeditionTimer(expId) {
   const diff = Math.max(0, exp.endTime - now);
   
   if (diff <= 0) {
-    actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button>`;
-    document.getElementById('modalStartExpedition')?.addEventListener('click', function () {
-      startExpedition(this.dataset.expedition);
-      closeModal();
-    });
+    actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition">⛏️ ОТПРАВИТЬСЯ</button>`;
+    const startBtn = document.getElementById('modalStartExpedition');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        startExpedition(expId);
+        closeModal();
+      });
+    }
+    if (modalTimerInterval) {
+      clearInterval(modalTimerInterval);
+      modalTimerInterval = null;
+    }
     return;
   }
 
@@ -533,6 +580,12 @@ function showScoutChoiceModal(expId) {
 }
 
 export function showExpeditionInfoModal(expId) {
+  // Чистим предыдущий модальный таймер
+  if (modalTimerInterval) {
+    clearInterval(modalTimerInterval);
+    modalTimerInterval = null;
+  }
+  
   const exp = CONFIG_EXPEDITIONS[expId];
   if (!exp) return;
   
@@ -587,7 +640,7 @@ export function showExpeditionInfoModal(expId) {
   if (isActive) {
     actionBtn = `<div id="modalExpeditionAction">${timerHtml}${scoutButton}</div>`;
   } else {
-    actionBtn = `<div id="modalExpeditionAction"><button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button></div>`;
+    actionBtn = `<div id="modalExpeditionAction"><button class="btn" id="modalStartExpedition">⛏️ ОТПРАВИТЬСЯ</button></div>`;
   }
 
   let html = `
@@ -610,24 +663,35 @@ export function showExpeditionInfoModal(expId) {
   `;
   
   openModal(html);
+  currentModalExpId = expId;
   
+  // ЕДИНЫЙ таймер для модалки
   if (isActive) {
     modalTimerInterval = setInterval(() => {
-      updateModalExpeditionTimer(expId);
+      if (currentModalExpId) {
+        updateModalExpeditionTimer(currentModalExpId);
+      } else {
+        clearInterval(modalTimerInterval);
+        modalTimerInterval = null;
+      }
     }, 500);
   }
   
   setTimeout(() => {
     renderImageToElement(document.getElementById('modalExpeditionImage'), exp.imagePath, exp.fallbackIcon, '#FFD700');
     
+    // КНОПКА СТАРТА — НАДЁЖНЫЙ ОБРАБОТЧИК
     const startBtn = document.getElementById('modalStartExpedition');
     if (startBtn) {
-      startBtn.addEventListener('click', function () {
-        startExpedition(this.dataset.expedition);
-        closeModal();
+      startBtn.addEventListener('click', () => {
+        const success = startExpedition(expId);
+        if (success) {
+          closeModal();
+        }
       });
     }
     
+    // КНОПКА РАЗВЕДКИ
     const scoutBtn = document.getElementById(`scoutBtn-${expId}`);
     if (scoutBtn) {
       scoutBtn.addEventListener('click', () => {
@@ -681,8 +745,10 @@ export function updateCollectionProgress() {
   if (textEl) textEl.textContent = `${discovered}/${totalRegular} открыто`;
 }
 
-// ---------- РЕНДЕРИНГ ВКЛАДОК ----------
+// ---------- РЕНДЕРИНГ ВКЛАДОК (ЗАЩИТА ОТ КОНФЛИКТОВ) ----------
 export function renderProfileTab() {
+  if (isAnyOverlayActive()) return;
+  
   const userName = window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || 'Старатель';
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
   const themeBtnText = currentTheme === 'dark' ? '🌙 Сменить тему (Светлая)' : '☀️ Сменить тему (Тёмная)';
@@ -768,6 +834,8 @@ export function renderProfileTab() {
 }
 
 export function renderExpeditionsTab() {
+  if (isAnyOverlayActive()) return;
+  
   let html = '<div class="section-title">⛏️ Экспедиции</div>';
   
   for (let k in CONFIG_EXPEDITIONS) {
@@ -829,6 +897,8 @@ export function renderExpeditionsTab() {
 }
 
 export function renderInventoryTab() {
+  if (isAnyOverlayActive()) return;
+  
   let html = `
     <div class="section-title">🎒 Инвентарь</div>
     <div class="inventory-subtabs">
@@ -906,6 +976,8 @@ export function renderInventoryTab() {
 }
 
 export function renderCollectionTab() {
+  if (isAnyOverlayActive()) return;
+  
   const totalRegular = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible).length;
   const discovered = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible && playerState.minedStats[i.id] > 0).length;
   const percent = (discovered / totalRegular) * 100;
@@ -997,6 +1069,8 @@ export function renderCollectionTab() {
 }
 
 export function renderEventsTab() {
+  if (isAnyOverlayActive()) return;
+  
   const activeEvent = eventsManager.getActiveEvent();
   const timeLeft = activeEvent ? eventsManager.getTimeLeft() : '';
   const phase = eventsManager.eventPhase;
@@ -1087,33 +1161,38 @@ export function renderEventsTab() {
     });
   }
   
-  updateEventTimerInterval();
+  startEventTabInterval();
 }
 
-let eventTimerInterval = null;
-
-function updateEventTimerInterval() {
-  if (eventTimerInterval) clearInterval(eventTimerInterval);
+// ЕДИНЫЙ ИНТЕРВАЛ ДЛЯ ВКЛАДКИ ИВЕНТОВ (замена разрозненных)
+function startEventTabInterval() {
+  if (eventTabInterval) clearInterval(eventTabInterval);
   
-  eventTimerInterval = setInterval(() => {
+  eventTabInterval = setInterval(() => {
+    if (currentTab !== 'events') {
+      clearInterval(eventTabInterval);
+      eventTabInterval = null;
+      return;
+    }
+    
+    if (isAnyOverlayActive()) return;
+    
     const timerEl = document.getElementById('eventTimer');
-    if (timerEl && currentTab === 'events') {
-      const event = eventsManager.getActiveEvent();
-      if (event) {
-        timerEl.textContent = eventsManager.getTimeLeft();
-      } else {
-        clearInterval(eventTimerInterval);
-        eventTimerInterval = null;
-        renderEventsTab();
-      }
-    } else if (currentTab !== 'events') {
-      clearInterval(eventTimerInterval);
-      eventTimerInterval = null;
+    const event = eventsManager.getActiveEvent();
+    
+    if (timerEl && event && eventsManager.eventPhase === 'active') {
+      timerEl.textContent = eventsManager.getTimeLeft();
+    }
+    
+    if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime && eventsManager.eventPhase === 'active') {
+      eventsManager.endEvent();
     }
   }, 1000);
 }
 
 export function renderCurrentTab() {
+  if (isAnyOverlayActive()) return;
+  
   if (currentTab === 'expeditions') renderExpeditionsTab();
   else if (currentTab === 'inventory') renderInventoryTab();
   else if (currentTab === 'collection') renderCollectionTab();
@@ -1122,6 +1201,8 @@ export function renderCurrentTab() {
 }
 
 export function setActiveTab(tabId) {
+  if (isAnyOverlayActive()) return;
+  
   currentTab = tabId;
   document.querySelectorAll('.tab-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tabId));
   renderCurrentTab();
