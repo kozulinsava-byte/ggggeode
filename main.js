@@ -1,8 +1,8 @@
-// ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · ALPHA 0.01 ==========
-import { initializeState, startGlobalTimer, showSkeleton, terminateEvent, exitMeteorStormEarly, forceCleanupAllOverlays } from './core.js?v=001';
-import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=001';
+// ========== MAIN МОДУЛЬ: ЖЁСТКИЙ ПОРЯДОК ЗАГРУЗКИ · ФАЗА 1 → 2 → 3 ==========
+import { initializeState, validateState, startGameSystems, showSkeleton, forceCleanupAllOverlays, terminateEvent, playerState } from './core.js?v=002';
+import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=002';
 
-// Тихая инициализация Telegram
+// ========== TELEGRAM (ТИХАЯ ИНИЦИАЛИЗАЦИЯ) ==========
 const tg = window.Telegram?.WebApp;
 if (tg) {
   try {
@@ -10,65 +10,91 @@ if (tg) {
     tg.expand();
     try { tg.setHeaderColor('#000000'); } catch(e) {}
     try { tg.setBackgroundColor('#000000'); } catch(e) {}
+    console.log('[StarForge] Telegram WebApp ready');
   } catch(e) {
     console.warn('[StarForge] Telegram init delayed');
   }
 }
 
-// Привязка событий
-try {
-  document.getElementById('showcaseClose')?.addEventListener('click', closeShowcase);
-  document.getElementById('showcaseOverlay')?.addEventListener('click', (e) => {
-    if (e.target === document.getElementById('showcaseOverlay')) closeShowcase();
-  });
+// ========== ГЛОБАЛЬНЫЕ СОБЫТИЯ (ПОСЛЕ ЗАГРУЗКИ DOM) ==========
+function bindGlobalEvents() {
+  console.log('[StarForge] Binding global events...');
+  
+  // Витрина
+  const showcaseCloseBtn = document.getElementById('showcaseClose');
+  const showcaseOverlayEl = document.getElementById('showcaseOverlay');
+  if (showcaseCloseBtn) showcaseCloseBtn.addEventListener('click', closeShowcase);
+  if (showcaseOverlayEl) {
+    showcaseOverlayEl.addEventListener('click', (e) => {
+      if (e.target === showcaseOverlayEl) closeShowcase();
+    });
+  }
+  
+  // Модалки
   document.addEventListener('closeModal', closeModal);
-} catch(e) {}
-
-// Привязка кнопок Метеоритного Шторма
-try {
+  const modalOverlayEl = document.getElementById('modalOverlay');
+  if (modalOverlayEl) {
+    modalOverlayEl.addEventListener('click', (e) => {
+      if (e.target === modalOverlayEl) closeModal();
+    });
+  }
+  
+  // Метеоритный Шторм (заглушка)
   const stormExitBtn = document.getElementById('meteorStormExitBtn');
   if (stormExitBtn) {
     stormExitBtn.addEventListener('click', () => {
-      exitMeteorStormEarly();
+      import('./core.js').then(core => core.exitMeteorStormEarly());
     });
   }
-} catch(e) {}
+  
+  // Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      console.log('[StarForge] Escape — force cleanup');
+      forceCleanupAllOverlays();
+      closeModal();
+      closeShowcase();
+      terminateEvent();
+    }
+  });
+  
+  console.log('[StarForge] Global events bound');
+}
 
-// Закрытие по Escape (десктоп)
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    forceCleanupAllOverlays();
-    closeModal();
-    closeShowcase();
-    terminateEvent();
-  }
-});
-
-// ---------- ПРЕЛОАДЕР ----------
+// ========== ПРЕЛОАДЕР ==========
 const preloader = document.getElementById('preloader');
 const preloaderBar = document.getElementById('preloaderBar');
 const preloaderPercent = document.getElementById('preloaderPercent');
 const preloaderText = document.getElementById('preloaderText');
 
+function updatePreloader(percent, text) {
+  if (preloaderBar) preloaderBar.style.width = percent + '%';
+  if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+  if (preloaderText) preloaderText.textContent = text;
+}
+
 function hidePreloader() {
   if (preloader) {
     preloader.classList.add('hidden');
-    setTimeout(() => { preloader.style.display = 'none'; }, 500);
+    setTimeout(() => {
+      if (preloader) preloader.style.display = 'none';
+    }, 500);
   }
 }
 
-// ---------- ASSET MANAGER ----------
+// ========== ASSET MANAGER ==========
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
     this.loadedCount = 0;
     this.maxRetries = 3;
+    this.paths = [];
   }
 
   collectPaths() {
     const paths = new Set();
     
-    import('./config.js?v=001').then(({ CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS }) => {
+    import('./config.js?v=002').then(({ CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS }) => {
       Object.values(CONFIG_ITEMS).forEach(item => {
         if (item.imagePath) paths.add(item.imagePath);
       });
@@ -84,16 +110,22 @@ class AssetManager {
       Object.values(CONFIG_EXPEDITIONS).forEach(exp => {
         if (exp.imagePath) paths.add(exp.imagePath);
       });
+      
+      this.paths = [...paths];
+      this.totalAssets = this.paths.length;
+      console.log('[StarForge] Asset paths collected:', this.totalAssets);
+    }).catch(err => {
+      console.error('[StarForge] Failed to collect asset paths:', err);
+      this.totalAssets = 0;
     });
-    
-    return [...paths];
   }
 
   updateProgress() {
     this.loadedCount++;
-    const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
-    if (preloaderBar) preloaderBar.style.width = percent + '%';
-    if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+    if (this.totalAssets > 0) {
+      const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
+      updatePreloader(percent, 'Загрузка ресурсов...');
+    }
   }
 
   async loadAsset(src, retryCount = 0) {
@@ -107,12 +139,12 @@ class AssetManager {
       
       img.onerror = () => {
         if (retryCount < this.maxRetries) {
-          console.warn(`Retry ${retryCount + 1}/${this.maxRetries} for: ${src}`);
+          console.warn(`[StarForge] Retry ${retryCount + 1}/${this.maxRetries}: ${src}`);
           setTimeout(() => {
             this.loadAsset(src, retryCount + 1).then(resolve);
           }, 500 * (retryCount + 1));
         } else {
-          console.error(`Failed to load after ${this.maxRetries} retries: ${src}`);
+          console.error(`[StarForge] Failed: ${src}`);
           this.updateProgress();
           resolve({ src, success: false });
         }
@@ -123,22 +155,30 @@ class AssetManager {
   }
 
   async start() {
-    const paths = this.collectPaths();
-    this.totalAssets = paths.length;
+    updatePreloader(0, 'Сбор ресурсов...');
+    this.collectPaths();
+    
+    // Ждём сбор путей
+    await new Promise(r => setTimeout(r, 100));
     
     if (this.totalAssets === 0) {
-      hidePreloader();
-      initializeGame();
+      updatePreloader(100, 'Пропуск загрузки...');
+      await new Promise(r => setTimeout(r, 300));
       return;
     }
     
-    if (preloaderText) preloaderText.textContent = 'Загрузка ресурсов...';
+    updatePreloader(5, 'Загрузка ресурсов...');
     
-    const loadPromises = paths.map(src => this.loadAsset(src));
+    const loadPromises = this.paths.map(src => this.loadAsset(src));
     const results = await Promise.all(loadPromises);
     
+    // Кешируем
     const cacheContainer = document.createElement('div');
     cacheContainer.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
+    cacheContainer.id = 'assetCache';
+    
+    const existingCache = document.getElementById('assetCache');
+    if (existingCache) existingCache.remove();
     
     results.forEach(({ src, success }) => {
       if (success) {
@@ -151,54 +191,126 @@ class AssetManager {
     
     document.body.appendChild(cacheContainer);
     
-    if (preloaderText) preloaderText.textContent = 'Запуск...';
-    
     setTimeout(() => {
-      cacheContainer.remove();
-    }, 2000);
-    
-    setTimeout(() => {
-      initializeGame();
-      hidePreloader();
-    }, 100);
+      if (cacheContainer.isConnected) cacheContainer.remove();
+    }, 3000);
   }
 }
 
-function initializeGame() {
-  hidePreloader();
+// ========== ФАЗА 1: PRELOAD ==========
+async function phase1_Preload() {
+  console.log('[StarForge] ========== ФАЗА 1: PRELOAD ==========');
+  updatePreloader(10, 'Инициализация состояния...');
+  
+  // 1. Инициализируем состояние (создаётся ОДИН раз)
   initializeState();
-  startGlobalTimer();
-
-  document.querySelectorAll('.tab-item').forEach((t) =>
-    t.addEventListener('click', () => setActiveTab(t.dataset.tab))
-  );
-
-  setActiveTab('expeditions');
+  
+  updatePreloader(20, 'Загрузка ресурсов...');
+  
+  // 2. Загружаем ассеты
+  const assetManager = new AssetManager();
+  await assetManager.start();
+  
+  updatePreloader(90, 'Валидация...');
+  
+  console.log('[StarForge] ФАЗА 1: ЗАВЕРШЕНА');
 }
 
-showSkeleton();
+// ========== ФАЗА 2: VALIDATION ==========
+function phase2_Validation() {
+  console.log('[StarForge] ========== ФАЗА 2: VALIDATION ==========');
+  updatePreloader(95, 'Проверка данных...');
+  
+  // Проверяем и исправляем состояние
+  const valid = validateState();
+  
+  if (!valid) {
+    console.error('[StarForge] State validation FAILED');
+    updatePreloader(100, 'Ошибка данных. Обновите страницу.');
+    return false;
+  }
+  
+  updatePreloader(98, 'Запуск систем...');
+  
+  console.log('[StarForge] ФАЗА 2: ЗАВЕРШЕНА');
+  return true;
+}
 
-const assetManager = new AssetManager();
+// ========== ФАЗА 3: RENDER ==========
+function phase3_Render() {
+  console.log('[StarForge] ========== ФАЗА 3: RENDER ==========');
+  updatePreloader(99, 'Запуск...');
+  
+  // 1. Привязываем глобальные события
+  bindGlobalEvents();
+  
+  // 2. Запускаем игровые системы (ивенты, таймеры)
+  startGameSystems();
+  
+  // 3. Привязываем табы
+  document.querySelectorAll('.tab-item').forEach((t) => {
+    t.addEventListener('click', () => setActiveTab(t.dataset.tab));
+  });
+  
+  updatePreloader(100, 'Готово!');
+  
+  // 4. Скрываем прелоадер
+  setTimeout(() => {
+    hidePreloader();
+    
+    // 5. ЗАПУСКАЕМ UI — только теперь!
+    console.log('[StarForge] UI RENDER START');
+    setActiveTab('expeditions');
+    
+    console.log('[StarForge] ========== ИГРА ЗАПУЩЕНА ==========');
+    console.log('[StarForge] Player state ready:', {
+      level: playerState?.player?.level,
+      xp: playerState?.player?.xp,
+      expeditions: { ...playerState?.expeditions }
+    });
+  }, 300);
+}
 
+// ========== ТОЧКА ВХОДА ==========
+async function boot() {
+  console.log('[StarForge] ========== BOOT SEQUENCE START ==========');
+  
+  // Показываем скелетон
+  showSkeleton();
+  
+  // ФАЗА 1
+  await phase1_Preload();
+  
+  // ФАЗА 2
+  const valid = phase2_Validation();
+  if (!valid) return;
+  
+  // ФАЗА 3
+  phase3_Render();
+}
+
+// ========== ЗАПУСК ==========
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => assetManager.start());
+  document.addEventListener('DOMContentLoaded', boot);
 } else {
-  assetManager.start();
+  boot();
 }
 
-// Глобальная обработка ошибок
+// ========== ОБРАБОТКА ОШИБОК ==========
 window.addEventListener('error', (e) => {
   console.error('[StarForge] Global error:', e.message, e.filename, e.lineno);
 });
 
 window.addEventListener('unhandledrejection', (e) => {
-  console.error('[StarForge] Unhandled promise rejection:', e.reason);
+  console.error('[StarForge] Unhandled rejection:', e.reason);
 });
 
-// Отладка в консоли
+// ========== ОТЛАДКА ==========
 window.__starforge = {
-  version: '0.01',
-  forceCleanup: forceCleanupAllOverlays
+  version: '0.02',
+  getState: () => playerState,
+  forceCleanup: forceCleanupAllOverlays,
+  boot: boot
 };
 
-console.log('🚀 Star Forge · Alpha 0.01 готов');
+console.log('[StarForge] Main module loaded. Waiting for boot sequence...');
