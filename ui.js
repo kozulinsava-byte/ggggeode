@@ -1,6 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES, EVENTS_CONFIG } from './config.js';
-import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, openMeteorStorm, claimMeteorStormRewards, exitMeteorStormEarly, meteorStormState, terminateEvent, setActiveOverlay, clearActiveOverlay, isAnyOverlayActive } from './core.js';
+import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, openMeteorStorm, claimMeteorStormRewards, exitMeteorStormEarly, meteorStormState, terminateEvent, setActiveOverlay, clearActiveOverlay, isAnyOverlayActive } from './core.js';
 
 // DOM-элементы
 export const mainContent = document.getElementById('mainContent');
@@ -255,8 +255,9 @@ export function openShowcase(ingotId, isMystery) {
 
     setActiveOverlay('showcase');
 
-    const owned = playerState.ingots[ingotId] > 0;
-    const discovered = playerState.minedStats[ingotId] > 0;
+    const state = getPlayerState();
+    const owned = state.ingots[ingotId] > 0;
+    const discovered = state.minedStats[ingotId] > 0;
 
     let name = ingot.name;
     let desc = ingot.description;
@@ -289,7 +290,7 @@ export function openShowcase(ingotId, isMystery) {
         if (ingot.isCollectible) {
             idHtml = '<div class="showcase-serial"><span class="showcase-serial-label">Серийный номер</span><span class="showcase-serial-value">#' + getSerialForCollectible(ingotId) + '</span></div>';
         } else {
-            idHtml = '<div class="showcase-id"><span class="showcase-id-label">Добыто всего</span><span class="showcase-id-value">' + (playerState.minedStats[ingotId] || 0) + ' ед.</span></div>';
+            idHtml = '<div class="showcase-id"><span class="showcase-id-label">Добыто всего</span><span class="showcase-id-value">' + (state.minedStats[ingotId] || 0) + ' ед.</span></div>';
         }
     }
 
@@ -302,7 +303,7 @@ export function openShowcase(ingotId, isMystery) {
     html = html + '<div class="showcase-description">' + desc + '</div>';
     html = html + '<div class="showcase-count">';
     if (owned) {
-        html = html + 'В наличии: ' + playerState.ingots[ingotId] + ' шт.';
+        html = html + 'В наличии: ' + state.ingots[ingotId] + ' шт.';
     } else {
         html = html + 'Ещё не найден';
     }
@@ -395,13 +396,14 @@ function showAdminPanel() {
         });
 
         document.getElementById('adminFillIngots')?.addEventListener('click', function() {
+            const state = getPlayerState();
             Object.keys(CONFIG_ITEMS).forEach(function(id) {
                 if (!CONFIG_ITEMS[id].isCollectible) {
-                    playerState.ingots[id] = (playerState.ingots[id] || 0) + 10;
-                    playerState.minedStats[id] = (playerState.minedStats[id] || 0) + 10;
+                    state.ingots[id] = (state.ingots[id] || 0) + 10;
+                    state.minedStats[id] = (state.minedStats[id] || 0) + 10;
                 }
             });
-            playerState.player.totalIngots = playerState.player.totalIngots + Object.keys(CONFIG_ITEMS).filter(function(id) {
+            state.player.totalIngots = state.player.totalIngots + Object.keys(CONFIG_ITEMS).filter(function(id) {
                 return !CONFIG_ITEMS[id].isCollectible;
             }).length * 10;
             saveGame();
@@ -410,13 +412,14 @@ function showAdminPanel() {
         });
 
         document.getElementById('adminFillArtifacts')?.addEventListener('click', function() {
+            const state = getPlayerState();
             Object.keys(CONFIG_ITEMS).forEach(function(id) {
                 if (CONFIG_ITEMS[id].isCollectible && CONFIG_ITEMS[id].location !== 'craft') {
-                    playerState.ingots[id] = (playerState.ingots[id] || 0) + 1;
-                    playerState.minedStats[id] = (playerState.minedStats[id] || 0) + 1;
+                    state.ingots[id] = (state.ingots[id] || 0) + 1;
+                    state.minedStats[id] = (state.minedStats[id] || 0) + 1;
                 }
             });
-            playerState.player.totalArtifacts = playerState.player.totalArtifacts + 6;
+            state.player.totalArtifacts = state.player.totalArtifacts + 6;
             saveGame();
             showToast('+1 артефакт каждого типа!', '💎');
             closeModal();
@@ -445,8 +448,9 @@ function showAdminPanel() {
 
         document.querySelectorAll('.admin-add-geode').forEach(function(btn) {
             btn.addEventListener('click', function() {
+                const state = getPlayerState();
                 const id = btn.dataset.geode;
-                playerState.geodes[id] = (playerState.geodes[id] || 0) + 5;
+                state.geodes[id] = (state.geodes[id] || 0) + 5;
                 saveGame();
                 showToast('+5 ' + CONFIG_GEODES[id].name, '🪨');
                 closeModal();
@@ -455,10 +459,11 @@ function showAdminPanel() {
 
         document.querySelectorAll('.admin-add-ingot').forEach(function(btn) {
             btn.addEventListener('click', function() {
+                const state = getPlayerState();
                 const id = btn.dataset.ingot;
-                playerState.ingots[id] = (playerState.ingots[id] || 0) + 10;
-                playerState.minedStats[id] = (playerState.minedStats[id] || 0) + 10;
-                playerState.player.totalIngots = playerState.player.totalIngots + 10;
+                state.ingots[id] = (state.ingots[id] || 0) + 10;
+                state.minedStats[id] = (state.minedStats[id] || 0) + 10;
+                state.player.totalIngots = state.player.totalIngots + 10;
                 saveGame();
                 showToast('+10 ' + CONFIG_ITEMS[id].name, '✨');
                 closeModal();
@@ -528,6 +533,8 @@ export function showGeodeModal(geodeId) {
         }
     }
 
+    const state = getPlayerState();
+
     let html = '';
     html = html + '<div class="modal-header">';
     html = html + '<div class="modal-title">' + g.name + '</div>';
@@ -546,7 +553,7 @@ export function showGeodeModal(geodeId) {
     html = html + '</div>';
     html = html + lootHtml;
     html = html + '</div>';
-    html = html + '<div style="margin:20px 0; color:var(--text-secondary);">В инвентаре: ' + (playerState.geodes[geodeId] || 0) + ' шт.</div>';
+    html = html + '<div style="margin:20px 0; color:var(--text-secondary);">В инвентаре: ' + (state.geodes[geodeId] || 0) + ' шт.</div>';
     html = html + '<button class="btn" id="modalOpenGeodeBtn" data-geode="' + geodeId + '" data-special="' + g.isSpecial + '">' + openButtonText + '</button>';
     html = html + '</div>';
 
@@ -593,7 +600,8 @@ function updateModalExpeditionTimer(expId) {
         return;
     }
 
-    const exp = playerState.expeditions[expId];
+    const state = getPlayerState();
+    const exp = state.expeditions[expId];
     if (!exp || !exp.active || !exp.endTime) {
         actionBtnEl.innerHTML = '<button class="btn" id="modalStartExpedition">⛏️ ОТПРАВИТЬСЯ</button>';
         const startBtn = document.getElementById('modalStartExpedition');
@@ -676,16 +684,18 @@ export function showExpeditionInfoModal(expId) {
         return;
     }
 
-    if (playerState.player.level < exp.requiredLevel) {
+    const state = getPlayerState();
+
+    if (state.player.level < exp.requiredLevel) {
         showToast('Требуется ' + exp.requiredLevel + ' уровень!', '🔒');
         return;
     }
 
-    const act = playerState.expeditions[expId];
+    const act = state.expeditions[expId];
     const isActive = act && act.active && act.endTime && Date.now() < act.endTime;
     const completed = isLocationCompleted(expId);
     const special = CONFIG_GEODES[exp.specialGeodeId];
-    const discovered = playerState.discoveredSpecialGeodes[expId];
+    const discovered = state.discoveredSpecialGeodes[expId];
 
     let specialText = '';
     if (completed) {
@@ -708,8 +718,8 @@ export function showExpeditionInfoModal(expId) {
 
     let scoutButton = '';
     if (expId !== 'mine' && isActive) {
-        const bonusUsed = playerState.expeditionBonuses && playerState.expeditionBonuses[expId] !== undefined;
-        const echoCooldown = playerState.echoCooldowns ? (playerState.echoCooldowns[expId] || 0) : 0;
+        const bonusUsed = state.expeditionBonuses && state.expeditionBonuses[expId] !== undefined;
+        const echoCooldown = state.echoCooldowns ? (state.echoCooldowns[expId] || 0) : 0;
         const now = Date.now();
         const onCooldown = echoCooldown > now && !bonusUsed;
         const cooldownRemaining = onCooldown ? Math.ceil((echoCooldown - now) / 1000) : 0;
@@ -803,17 +813,19 @@ export function updateProfileUI() {
         return;
     }
 
+    const state = getPlayerState();
+
     const levelEl = document.getElementById('profileLevel');
     if (levelEl) {
-        levelEl.textContent = playerState.player.level;
+        levelEl.textContent = state.player.level;
     }
 
     const xpFillEl = document.getElementById('xpFill');
     const xpTextEl = document.getElementById('xpText');
     if (xpFillEl && xpTextEl) {
-        const currentXP = playerState.player.xp;
-        const nextLevelXP = LEVELS[playerState.player.level] || LEVELS[LEVELS.length - 1];
-        const prevLevelXP = LEVELS[playerState.player.level - 1] || 0;
+        const currentXP = state.player.xp;
+        const nextLevelXP = LEVELS[state.player.level] || LEVELS[LEVELS.length - 1];
+        const prevLevelXP = LEVELS[state.player.level - 1] || 0;
         const progress = ((currentXP - prevLevelXP) / (nextLevelXP - prevLevelXP)) * 100;
         xpFillEl.style.width = Math.min(progress, 100) + '%';
         xpTextEl.textContent = currentXP + ' / ' + nextLevelXP + ' XP';
@@ -821,22 +833,22 @@ export function updateProfileUI() {
 
     const statusEl = document.getElementById('profileStatus');
     if (statusEl) {
-        statusEl.textContent = STATUSES[Math.min(playerState.player.level - 1, STATUSES.length - 1)];
+        statusEl.textContent = STATUSES[Math.min(state.player.level - 1, STATUSES.length - 1)];
     }
 
     const totalOpenedEl = document.getElementById('statOpened');
     if (totalOpenedEl) {
-        totalOpenedEl.textContent = playerState.player.totalOpened;
+        totalOpenedEl.textContent = state.player.totalOpened;
     }
 
     const totalIngotsEl = document.getElementById('statIngots');
     if (totalIngotsEl) {
-        totalIngotsEl.textContent = playerState.player.totalIngots;
+        totalIngotsEl.textContent = state.player.totalIngots;
     }
 
     const totalArtifactsEl = document.getElementById('statArtifacts');
     if (totalArtifactsEl) {
-        totalArtifactsEl.textContent = playerState.player.totalArtifacts;
+        totalArtifactsEl.textContent = state.player.totalArtifacts;
     }
 }
 
@@ -845,11 +857,13 @@ export function updateCollectionProgress() {
         return;
     }
 
+    const state = getPlayerState();
+
     const totalRegular = Object.values(CONFIG_ITEMS).filter(function(i) {
         return !i.isCollectible;
     }).length;
     const discovered = Object.values(CONFIG_ITEMS).filter(function(i) {
-        return !i.isCollectible && playerState.minedStats[i.id] > 0;
+        return !i.isCollectible && state.minedStats[i.id] > 0;
     }).length;
     const percent = (discovered / totalRegular) * 100;
 
@@ -869,6 +883,7 @@ export function renderProfileTab() {
         return;
     }
 
+    const state = getPlayerState();
     const userName = window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || 'Старатель';
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     let themeBtnText = '';
@@ -886,25 +901,25 @@ export function renderProfileTab() {
     html = html + '<div class="profile-avatar">👤</div>';
     html = html + '<div class="profile-info">';
     html = html + '<div class="profile-name">' + userName + '</div>';
-    html = html + '<div class="profile-status" id="profileStatus">' + STATUSES[Math.min(playerState.player.level - 1, STATUSES.length - 1)] + '</div>';
-    html = html + '<span class="level-badge" id="profileLevel">' + playerState.player.level + '</span> уровень';
+    html = html + '<div class="profile-status" id="profileStatus">' + STATUSES[Math.min(state.player.level - 1, STATUSES.length - 1)] + '</div>';
+    html = html + '<span class="level-badge" id="profileLevel">' + state.player.level + '</span> уровень';
     html = html + '<button class="dev-menu-btn" id="adminPanelBtn">🛠️ АДМИН</button>';
     html = html + '</div>';
     html = html + '</div>';
     html = html + '<div class="xp-bar-container"><div class="xp-bar-fill" id="xpFill" style="width:0%"></div></div>';
-    html = html + '<div class="xp-text" id="xpText">' + playerState.player.xp + ' / ' + (LEVELS[playerState.player.level] || 15000) + ' XP</div>';
+    html = html + '<div class="xp-text" id="xpText">' + state.player.xp + ' / ' + (LEVELS[state.player.level] || 15000) + ' XP</div>';
     html = html + '<button class="theme-profile-btn" id="themeProfileBtn">' + themeBtnText + '</button>';
     html = html + '<button class="vip-button" id="vipButton">💎 АКТИВИРОВАТЬ VIP</button>';
     html = html + '<button class="btn" id="leaderboardBtn" style="margin-top:12px;">🏆 ТОП ИГРОКОВ</button>';
     html = html + '<div class="stats-grid">';
-    html = html + '<div class="stat-card"><div class="stat-value" id="statOpened">' + playerState.player.totalOpened + '</div><div class="stat-label">Открыто жеод</div></div>';
-    html = html + '<div class="stat-card"><div class="stat-value" id="statIngots">' + playerState.player.totalIngots + '</div><div class="stat-label">Добыто слитков</div></div>';
-    html = html + '<div class="stat-card"><div class="stat-value" id="statArtifacts">' + playerState.player.totalArtifacts + '</div><div class="stat-label">Артефактов</div></div>';
+    html = html + '<div class="stat-card"><div class="stat-value" id="statOpened">' + state.player.totalOpened + '</div><div class="stat-label">Открыто жеод</div></div>';
+    html = html + '<div class="stat-card"><div class="stat-value" id="statIngots">' + state.player.totalIngots + '</div><div class="stat-label">Добыто слитков</div></div>';
+    html = html + '<div class="stat-card"><div class="stat-value" id="statArtifacts">' + state.player.totalArtifacts + '</div><div class="stat-label">Артефактов</div></div>';
     html = html + '</div>';
     html = html + '</div>';
     html = html + '<div class="card sell-section"><div class="section-title">💰 Сбыт сырья</div>';
 
-    const availableIngots = Object.entries(playerState.ingots).filter(function(entry) {
+    const availableIngots = Object.entries(state.ingots).filter(function(entry) {
         const k = entry[0];
         const v = entry[1];
         return v > 0 && !CONFIG_ITEMS[k].isCollectible;
@@ -972,13 +987,15 @@ export function renderExpeditionsTab() {
         return;
     }
 
+    const state = getPlayerState();
+
     let html = '';
     html = html + '<div class="section-title">⛏️ Экспедиции</div>';
 
     for (let k in CONFIG_EXPEDITIONS) {
         const exp = CONFIG_EXPEDITIONS[k];
-        const act = playerState.expeditions[k] || { active: false };
-        const isLocked = playerState.player.level < exp.requiredLevel;
+        const act = state.expeditions[k] || { active: false };
+        const isLocked = state.player.level < exp.requiredLevel;
         let timerHtml = '';
 
         if (isLocked) {
@@ -1015,7 +1032,7 @@ export function renderExpeditionsTab() {
     document.querySelectorAll('[data-expedition-click]').forEach(function(el) {
         el.addEventListener('click', function(e) {
             const key = this.dataset.expeditionClick;
-            if (playerState.player.level < CONFIG_EXPEDITIONS[key].requiredLevel) {
+            if (state.player.level < CONFIG_EXPEDITIONS[key].requiredLevel) {
                 showToast('Требуется ' + CONFIG_EXPEDITIONS[key].requiredLevel + ' уровень!', '🔒');
                 return;
             }
@@ -1038,6 +1055,8 @@ export function renderInventoryTab() {
         return;
     }
 
+    const state = getPlayerState();
+
     let html = '';
     html = html + '<div class="section-title">🎒 Инвентарь</div>';
     html = html + '<div class="inventory-subtabs">';
@@ -1046,7 +1065,7 @@ export function renderInventoryTab() {
     html = html + '</div>';
 
     if (inventorySubTab === 'geodes') {
-        const items = Object.entries(playerState.geodes).filter(function(entry) {
+        const items = Object.entries(state.geodes).filter(function(entry) {
             return entry[1] > 0;
         });
         if (!items.length) {
@@ -1070,12 +1089,12 @@ export function renderInventoryTab() {
 
         for (let k in CONFIG_GEODES) {
             const el = document.getElementById('inv-geode-' + k);
-            if (el && playerState.geodes[k] > 0) {
+            if (el && state.geodes[k] > 0) {
                 renderImageToElement(el, CONFIG_GEODES[k].stages[0].imagePath, CONFIG_GEODES[k].stages[0].fallbackIcon, '#8B7355');
             }
         }
     } else {
-        const items = Object.entries(playerState.ingots).filter(function(entry) {
+        const items = Object.entries(state.ingots).filter(function(entry) {
             const k = entry[0];
             const c = entry[1];
             return c > 0 && !CONFIG_ITEMS[k].isCollectible;
@@ -1104,7 +1123,7 @@ export function renderInventoryTab() {
                 continue;
             }
             const el = document.getElementById('inv-ingot-' + k);
-            if (el && playerState.ingots[k] > 0) {
+            if (el && state.ingots[k] > 0) {
                 renderImageToElement(el, CONFIG_ITEMS[k].imagePath, CONFIG_ITEMS[k].icon, CONFIG_ITEMS[k].fallbackColor);
             }
         }
@@ -1134,11 +1153,13 @@ export function renderCollectionTab() {
         return;
     }
 
+    const state = getPlayerState();
+
     const totalRegular = Object.values(CONFIG_ITEMS).filter(function(i) {
         return !i.isCollectible;
     }).length;
     const discovered = Object.values(CONFIG_ITEMS).filter(function(i) {
-        return !i.isCollectible && playerState.minedStats[i.id] > 0;
+        return !i.isCollectible && state.minedStats[i.id] > 0;
     }).length;
     const percent = (discovered / totalRegular) * 100;
 
@@ -1161,13 +1182,13 @@ export function renderCollectionTab() {
         });
         html = html + '<div class="grid-container">';
         regularIngots.forEach(function(ing) {
-            const discovered = playerState.minedStats[ing.id] > 0;
+            const discovered = state.minedStats[ing.id] > 0;
             const cardClass = discovered ? 'collection-card' : 'collection-card silhouette';
             html = html + '<div class="' + cardClass + '" data-ingot="' + ing.id + '">';
             html = html + '<div class="card-icon" id="enc-' + ing.id + '"></div>';
             if (discovered) {
                 html = html + '<div class="card-name">' + ing.name + '</div>';
-                html = html + '<div class="card-count-badge">Добыто: ' + playerState.minedStats[ing.id] + '</div>';
+                html = html + '<div class="card-count-badge">Добыто: ' + state.minedStats[ing.id] + '</div>';
             } else {
                 html = html + '<div class="card-name">Неизвестный материал</div>';
                 html = html + '<div class="card-count-badge">???</div>';
@@ -1181,7 +1202,7 @@ export function renderCollectionTab() {
         regularIngots.forEach(function(ing) {
             const el = document.getElementById('enc-' + ing.id);
             if (el) {
-                if (playerState.minedStats[ing.id] > 0) {
+                if (state.minedStats[ing.id] > 0) {
                     renderImageToElement(el, ing.imagePath, ing.icon, ing.fallbackColor);
                 } else {
                     renderMysteryPlaceholder(el);
@@ -1194,7 +1215,7 @@ export function renderCollectionTab() {
         });
         html = html + '<div class="grid-container">';
         coll.forEach(function(ing) {
-            const owned = playerState.ingots[ing.id] > 0;
+            const owned = state.ingots[ing.id] > 0;
             html = html + '<div class="collection-card ' + (owned ? '' : 'silhouette') + '" data-ingot="' + ing.id + '">';
             html = html + '<div class="card-icon" id="hall-' + ing.id + '"></div>';
             if (owned) {
@@ -1213,7 +1234,7 @@ export function renderCollectionTab() {
         coll.forEach(function(ing) {
             const el = document.getElementById('hall-' + ing.id);
             if (el) {
-                if (playerState.ingots[ing.id] > 0) {
+                if (state.ingots[ing.id] > 0) {
                     renderImageToElement(el, ing.imagePath, ing.icon, ing.fallbackColor);
                 } else {
                     renderMysteryPlaceholder(el);
@@ -1232,7 +1253,7 @@ export function renderCollectionTab() {
     document.querySelectorAll('[data-ingot]').forEach(function(c) {
         c.addEventListener('click', function() {
             const ing = CONFIG_ITEMS[c.dataset.ingot];
-            openShowcase(c.dataset.ingot, !playerState.minedStats[ing.id] && !ing.isCollectible);
+            openShowcase(c.dataset.ingot, !state.minedStats[ing.id] && !ing.isCollectible);
         });
     });
 }
