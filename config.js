@@ -64,20 +64,24 @@ export const DEFAULT_STATE = {
     player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 }
 };
 
-// ========== КОНФИГУРАЦИЯ ИВЕНТОВ ==========
+// ========== КОНФИГУРАЦИЯ ИВЕНТОВ (РОТАЦИЯ) ==========
 export const EVENTS_CONFIG = {
     rotationInterval: 30 * 60 * 1000,
     eventDuration: 15 * 60 * 1000,
     events: ['great_smelt', 'meteor_storm'],
     
     great_smelt: {
-        id: 'great_smelt', name: 'Великая Переплавка', icon: '🔥',
+        id: 'great_smelt',
+        name: 'Великая Переплавка',
+        icon: '🔥',
         description: 'Древние кузни остывают!',
         longDescription: 'Собери ресурсы и создай крафтовые предметы в Плавильне!'
     },
     
     meteor_storm: {
-        id: 'meteor_storm', name: 'Метеоритный Шторм', icon: '☄️',
+        id: 'meteor_storm',
+        name: 'Метеоритный Шторм',
+        icon: '☄️',
         description: 'Небо пылает! Лови падающие метеориты!',
         longDescription: 'Метеориты падают с небес! Тапай по ним, чтобы собрать. Обменяй осколки на жеоды!',
         stormDuration: 30,
