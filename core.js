@@ -59,6 +59,16 @@ let nextSerial = 1;
 
 let isOpeningGeode = false;
 
+// ========== ГЕТТЕР ДЛЯ UI (РЕШАЕТ ПРОБЛЕМУ NULL ПРИ СТАТИЧЕСКОМ ИМПОРТЕ) ==========
+export function getPlayerState() {
+    if (!playerState) {
+        console.error('[Core] getPlayerState called but playerState is null! Calling initializeState...');
+        initializeState();
+        validateState();
+    }
+    return playerState;
+}
+
 // ========== ДИСПЕТЧЕР ОВЕРЛЕЕВ ==========
 let activeOverlayId = null;
 let isOverlayActive = false;
@@ -172,8 +182,8 @@ export const eventsManager = {
             clearInterval(this.eventInterval);
         }
         this.triggerNextEvent();
-        this.eventInterval = setInterval(() => {
-            this.triggerNextEvent();
+        this.eventInterval = setInterval(function() {
+            eventsManager.triggerNextEvent();
         }, EVENTS_CONFIG.rotationInterval);
     },
 
@@ -278,6 +288,7 @@ export function openForge() {
 }
 
 function renderForgeInterface(container) {
+    const state = getPlayerState();
     const recipes = getCraftableRecipes();
 
     let html = '';
@@ -311,7 +322,7 @@ function renderForgeInterface(container) {
 
             for (let ingId in recipe.ingredients) {
                 const required = recipe.ingredients[ingId];
-                const owned = playerState.ingots[ingId] || 0;
+                const owned = state.ingots[ingId] || 0;
                 const hasEnough = owned >= required;
                 const ing = CONFIG_ITEMS[ingId];
 
@@ -429,6 +440,8 @@ function startSmeltProcess(recipe) {
 }
 
 function finishSmeltProcess(recipe) {
+    const state = getPlayerState();
+
     if (forgeState.smeltInterval) {
         clearInterval(forgeState.smeltInterval);
         forgeState.smeltInterval = null;
@@ -437,12 +450,12 @@ function finishSmeltProcess(recipe) {
     document.getElementById('forgeProgressOverlay').classList.remove('active');
 
     for (let ingId in recipe.ingredients) {
-        playerState.ingots[ingId] = playerState.ingots[ingId] - recipe.ingredients[ingId];
+        state.ingots[ingId] = state.ingots[ingId] - recipe.ingredients[ingId];
     }
 
-    playerState.ingots[recipe.resultIngotId] = (playerState.ingots[recipe.resultIngotId] || 0) + 1;
-    playerState.minedStats[recipe.resultIngotId] = (playerState.minedStats[recipe.resultIngotId] || 0) + 1;
-    playerState.player.totalIngots = playerState.player.totalIngots + 1;
+    state.ingots[recipe.resultIngotId] = (state.ingots[recipe.resultIngotId] || 0) + 1;
+    state.minedStats[recipe.resultIngotId] = (state.minedStats[recipe.resultIngotId] || 0) + 1;
+    state.player.totalIngots = state.player.totalIngots + 1;
 
     addXP(recipe.xpReward);
     saveGame();
@@ -464,6 +477,7 @@ function finishSmeltProcess(recipe) {
 
 // ---------- СИСТЕМА КРАФТА ----------
 export function getCraftableRecipes() {
+    const state = getPlayerState();
     const recipes = [];
 
     for (let recipeId in CRAFT_RECIPES) {
@@ -472,7 +486,7 @@ export function getCraftableRecipes() {
 
         for (let ingId in recipe.ingredients) {
             const required = recipe.ingredients[ingId];
-            const owned = playerState.ingots[ingId] || 0;
+            const owned = state.ingots[ingId] || 0;
             if (owned < required) {
                 canCraft = false;
                 break;
@@ -496,6 +510,7 @@ export function getCraftableRecipes() {
 }
 
 export function craftItem(recipeId) {
+    const state = getPlayerState();
     const recipe = CRAFT_RECIPES[recipeId];
     if (!recipe) {
         if (_showToast) {
@@ -520,17 +535,19 @@ export function craftItem(recipeId) {
 }
 
 function craftItemDirect(recipe) {
+    const state = getPlayerState();
+
     if (!recipe) {
         return false;
     }
 
     for (let ingId in recipe.ingredients) {
-        playerState.ingots[ingId] = playerState.ingots[ingId] - recipe.ingredients[ingId];
+        state.ingots[ingId] = state.ingots[ingId] - recipe.ingredients[ingId];
     }
 
-    playerState.ingots[recipe.resultIngotId] = (playerState.ingots[recipe.resultIngotId] || 0) + 1;
-    playerState.minedStats[recipe.resultIngotId] = (playerState.minedStats[recipe.resultIngotId] || 0) + 1;
-    playerState.player.totalIngots = playerState.player.totalIngots + 1;
+    state.ingots[recipe.resultIngotId] = (state.ingots[recipe.resultIngotId] || 0) + 1;
+    state.minedStats[recipe.resultIngotId] = (state.minedStats[recipe.resultIngotId] || 0) + 1;
+    state.player.totalIngots = state.player.totalIngots + 1;
 
     addXP(recipe.xpReward);
     saveGame();
@@ -539,9 +556,10 @@ function craftItemDirect(recipe) {
 
 // ---------- DEV ФУНКЦИИ ----------
 export function devGiveXP() {
-    playerState.player.xp = playerState.player.xp + 1000000;
-    while (playerState.player.level < LEVELS.length - 1 && playerState.player.xp >= LEVELS[playerState.player.level]) {
-        playerState.player.level = playerState.player.level + 1;
+    const state = getPlayerState();
+    state.player.xp = state.player.xp + 1000000;
+    while (state.player.level < LEVELS.length - 1 && state.player.xp >= LEVELS[state.player.level]) {
+        state.player.level = state.player.level + 1;
     }
     if (_updateProfileUI) {
         _updateProfileUI();
@@ -552,21 +570,24 @@ export function devGiveXP() {
 }
 
 export function devGiveGeodes() {
+    const state = getPlayerState();
     Object.keys(CONFIG_GEODES).forEach(function(geodeId) {
-        playerState.geodes[geodeId] = (playerState.geodes[geodeId] || 0) + 10;
+        state.geodes[geodeId] = (state.geodes[geodeId] || 0) + 10;
     });
 }
 
 export function devUnlockLocations() {
-    playerState.player.level = Math.max(playerState.player.level, 10);
+    const state = getPlayerState();
+    state.player.level = Math.max(state.player.level, 10);
     if (_updateProfileUI) {
         _updateProfileUI();
     }
 }
 
 export function devResetGeodes() {
+    const state = getPlayerState();
     Object.keys(CONFIG_GEODES).forEach(function(geodeId) {
-        playerState.geodes[geodeId] = 10;
+        state.geodes[geodeId] = 10;
     });
 }
 
@@ -579,17 +600,19 @@ export function getSerialForCollectible(ingotId) {
 }
 
 export function isLocationCompleted(locId) {
+    const state = getPlayerState();
     const special = CONFIG_GEODES['special_' + locId];
     if (!special) {
         return false;
     }
     return special.possibleIngots.every(function(ingId) {
-        return playerState.ingots[ingId] > 0;
+        return state.ingots[ingId] > 0;
     });
 }
 
 export function getExpeditionTimeLeft(expId) {
-    const exp = playerState.expeditions[expId];
+    const state = getPlayerState();
+    const exp = state.expeditions[expId];
     if (!exp || !exp.active || !exp.endTime) {
         return null;
     }
@@ -597,14 +620,15 @@ export function getExpeditionTimeLeft(expId) {
 }
 
 export function addXP(amount) {
-    playerState.player.xp = playerState.player.xp + amount;
+    const state = getPlayerState();
+    state.player.xp = state.player.xp + amount;
 
-    while (playerState.player.level < LEVELS.length - 1 && playerState.player.xp >= LEVELS[playerState.player.level]) {
-        playerState.player.level = playerState.player.level + 1;
+    while (state.player.level < LEVELS.length - 1 && state.player.xp >= LEVELS[state.player.level]) {
+        state.player.level = state.player.level + 1;
         if (_showToast) {
-            _showToast('🎉 Уровень ' + playerState.player.level + '!', '⬆️');
+            _showToast('🎉 Уровень ' + state.player.level + '!', '⬆️');
         }
-        sendBotNotification('⭐ Игрок достиг ' + playerState.player.level + ' уровня!');
+        sendBotNotification('⭐ Игрок достиг ' + state.player.level + ' уровня!');
     }
 
     if (_updateProfileUI) {
@@ -617,6 +641,7 @@ export function addXP(amount) {
 }
 
 export function sellIngot(ingotId) {
+    const state = getPlayerState();
     const ingot = CONFIG_ITEMS[ingotId];
 
     if (ingot.isCollectible) {
@@ -626,17 +651,17 @@ export function sellIngot(ingotId) {
         return;
     }
 
-    if (playerState.ingots[ingotId] <= 0) {
+    if (state.ingots[ingotId] <= 0) {
         if (_showToast) {
             _showToast('Нет слитков для сдачи!', '⚠️');
         }
         return;
     }
 
-    const count = playerState.ingots[ingotId];
+    const count = state.ingots[ingotId];
     const xpEarned = ingot.sellValue * count;
 
-    playerState.ingots[ingotId] = 0;
+    state.ingots[ingotId] = 0;
     addXP(xpEarned);
     saveGame();
 
@@ -649,7 +674,9 @@ export function sellIngot(ingotId) {
 }
 
 export function exchangeSpecialGeodeForXP(geodeId) {
-    if (playerState.geodes[geodeId] <= 0) {
+    const state = getPlayerState();
+
+    if (state.geodes[geodeId] <= 0) {
         if (_showToast) {
             _showToast('Нет такой жеоды!', '⚠️');
         }
@@ -670,7 +697,7 @@ export function exchangeSpecialGeodeForXP(geodeId) {
         return;
     }
 
-    playerState.geodes[geodeId] = playerState.geodes[geodeId] - 1;
+    state.geodes[geodeId] = state.geodes[geodeId] - 1;
     const xpGained = 800;
     addXP(xpGained);
     saveGame();
@@ -816,9 +843,10 @@ function signalGameFail() {
         return;
     }
 
+    const state = getPlayerState();
     const expId = activeSignalGame.expId;
 
-    playerState.echoCooldowns[expId] = Date.now() + 30000;
+    state.echoCooldowns[expId] = Date.now() + 30000;
     saveGame();
 
     cleanupSignalGame();
@@ -849,14 +877,15 @@ function cleanupSignalGame() {
 }
 
 function applyEchoBonus(expId) {
-    const exp = playerState.expeditions[expId];
+    const state = getPlayerState();
+    const exp = state.expeditions[expId];
     if (!exp || !exp.active) {
         return;
     }
 
     const reduction = Math.floor((exp.endTime - Date.now()) * 0.15);
     exp.endTime = exp.endTime - reduction;
-    playerState.expeditionBonuses[expId] = 'echo';
+    state.expeditionBonuses[expId] = 'echo';
 
     saveGame();
     if (_showToast) {
@@ -865,14 +894,15 @@ function applyEchoBonus(expId) {
 }
 
 function applyScanBonus(expId) {
-    const exp = playerState.expeditions[expId];
+    const state = getPlayerState();
+    const exp = state.expeditions[expId];
     if (!exp || !exp.active) {
         return;
     }
 
     exp.scanUsed = true;
     exp.specialChanceBoost = 1.2;
-    playerState.expeditionBonuses[expId] = 'scan';
+    state.expeditionBonuses[expId] = 'scan';
 
     saveGame();
     if (_showToast) {
@@ -884,12 +914,10 @@ function applyScanBonus(expId) {
 export function initializeState() {
     console.log('[StarForge] ФАЗА 1: PRELOAD — создание состояния');
 
-    // Создаём состояние ОДИН раз
     playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
     playerState.echoCooldowns = {};
     playerState.expeditionBonuses = {};
 
-    // Инициализируем ingots и minedStats из конфига
     Object.keys(CONFIG_ITEMS).forEach(function(k) {
         if (playerState.ingots[k] === undefined) {
             playerState.ingots[k] = 0;
@@ -899,7 +927,6 @@ export function initializeState() {
         }
     });
 
-    // Загружаем сохранения из localStorage
     try {
         const localData = localStorage.getItem('starforge_v1');
         if (localData) {
@@ -913,7 +940,6 @@ export function initializeState() {
         console.warn('[StarForge] Failed to load local save:', e);
     }
 
-    // Загружаем из Telegram CloudStorage (асинхронно)
     if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
         try {
             tg.CloudStorage.getItem('starforge_save', function(error, cloudData) {
@@ -956,7 +982,6 @@ export function validateState() {
 
     const now = Date.now();
 
-    // Проверяем экспедиции
     for (let expId in playerState.expeditions) {
         const exp = playerState.expeditions[expId];
         if (!exp) {
@@ -969,7 +994,6 @@ export function validateState() {
         }
 
         if (exp.active && exp.endTime && now >= exp.endTime) {
-            // Экспедиция завершилась пока игра была закрыта
             console.log('[StarForge] Expedition completed while offline:', expId);
             exp.active = false;
             exp.endTime = null;
@@ -990,7 +1014,6 @@ export function validateState() {
         }
     }
 
-    // Проверяем жеоды
     for (let geodeId in CONFIG_GEODES) {
         if (playerState.geodes[geodeId] === undefined) {
             console.log('[StarForge] Fixing missing geode:', geodeId);
@@ -998,7 +1021,6 @@ export function validateState() {
         }
     }
 
-    // Проверяем слитки
     for (let ingotId in CONFIG_ITEMS) {
         if (playerState.ingots[ingotId] === undefined) {
             playerState.ingots[ingotId] = 0;
@@ -1008,7 +1030,6 @@ export function validateState() {
         }
     }
 
-    // Проверяем коллекционные артефакты
     for (let locId in playerState.collectedArtifacts) {
         if (!Array.isArray(playerState.collectedArtifacts[locId])) {
             console.log('[StarForge] Fixing collectedArtifacts for:', locId);
@@ -1016,14 +1037,12 @@ export function validateState() {
         }
     }
 
-    // Проверяем открытые специальные жеоды
     for (let locId in playerState.discoveredSpecialGeodes) {
         if (playerState.discoveredSpecialGeodes[locId] === undefined) {
             playerState.discoveredSpecialGeodes[locId] = false;
         }
     }
 
-    // Проверяем игрока
     if (!playerState.player) {
         console.log('[StarForge] Fixing missing player object');
         playerState.player = {
@@ -1054,7 +1073,6 @@ export function validateState() {
         p.totalArtifacts = 0;
     }
 
-    // Проверяем echoCooldowns и expeditionBonuses
     if (!playerState.echoCooldowns) {
         playerState.echoCooldowns = {};
     }
@@ -1077,15 +1095,9 @@ export function validateState() {
 // ========== ФАЗА 3: ЗАПУСК ИГРОВЫХ СИСТЕМ ==========
 export function startGameSystems() {
     console.log('[StarForge] ФАЗА 3: RENDER — запуск игровых систем');
-
-    // Запускаем цикл ивентов
     eventsManager.startEventCycle();
-
-    // Запускаем глобальный таймер
     startGlobalTimer();
-
     console.log('[StarForge] ФАЗА 3: ЗАВЕРШЕНА — все системы запущены');
-
     return true;
 }
 
@@ -1127,7 +1139,6 @@ function applySaveData(data) {
         return;
     }
 
-    // Восстанавливаем состояние игрока
     if (data.playerState) {
         Object.assign(playerState, data.playerState);
         if (!playerState.echoCooldowns) {
@@ -1138,7 +1149,6 @@ function applySaveData(data) {
         }
     }
 
-    // Восстанавливаем коллекционные номера
     if (data.collectibleSerials) {
         Object.assign(collectibleSerials, data.collectibleSerials);
     }
@@ -1147,7 +1157,6 @@ function applySaveData(data) {
         nextSerial = data.nextSerial;
     }
 
-    // Восстанавливаем ивенты
     if (data.activeEvent) {
         eventsManager.activeEvent = data.activeEvent;
     }
@@ -1324,7 +1333,6 @@ export function startExpedition(expId) {
         return false;
     }
 
-    // ЗАПУСКАЕМ ЭКСПЕДИЦИЮ
     const now = Date.now();
     exp.active = true;
     exp.endTime = now + config.timer * 1000;
@@ -1337,15 +1345,12 @@ export function startExpedition(expId) {
     console.log('[StarForge] End time:', new Date(exp.endTime).toLocaleTimeString());
     console.log('[StarForge] Duration:', config.timer, 'seconds');
 
-    // Сохраняем НЕМЕДЛЕННО
     saveGame();
 
-    // Обновляем UI
     if (_renderExpeditionsTab) {
         _renderExpeditionsTab();
     }
 
-    // Показываем уведомление
     if (_showToast) {
         _showToast('Экспедиция «' + config.name + '» началась! (' + config.timer + 'с)', config.fallbackIcon);
     }
@@ -1466,12 +1471,13 @@ export async function updateLeaderboard() {
 }
 
 function renderTestLeaderboard() {
+    const state = getPlayerState();
     const userName = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.first_name : 'Старатель';
     const testData = [
         { rank: 1, name: '⛏️ Шахтёр_Бог', xp: 15000 },
         { rank: 2, name: '💎 Алмазный_Лорд', xp: 12000 },
         { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 },
-        { rank: 4, name: userName, xp: playerState.player.xp, isPlayer: true },
+        { rank: 4, name: userName, xp: state.player.xp, isPlayer: true },
         { rank: 5, name: '🪨 Геолог_777', xp: 3200 },
         { rank: 6, name: '🔥 Лавовый_Копатель', xp: 2100 },
         { rank: 7, name: '❄️ Ледяной_Бур', xp: 900 },
@@ -1612,6 +1618,8 @@ export function initRoulette(geodeId) {
 }
 
 function stopRoulette() {
+    const state = getPlayerState();
+
     if (!conveyorState.isOpen) {
         return;
     }
@@ -1622,7 +1630,7 @@ function stopRoulette() {
     let xpGained = g.xpValue + (resultIngot ? resultIngot.xpValue : 0);
     let isFirstDiscovery = false;
 
-    if (playerState.minedStats[resultIngot.id] === 0) {
+    if (state.minedStats[resultIngot.id] === 0) {
         isFirstDiscovery = true;
         xpGained = Math.floor(xpGained * 3);
         if (_showToast) {
@@ -1630,9 +1638,9 @@ function stopRoulette() {
         }
     }
 
-    playerState.ingots[resultIngot.id] = (playerState.ingots[resultIngot.id] || 0) + 1;
-    playerState.minedStats[resultIngot.id] = (playerState.minedStats[resultIngot.id] || 0) + 1;
-    playerState.player.totalIngots = playerState.player.totalIngots + 1;
+    state.ingots[resultIngot.id] = (state.ingots[resultIngot.id] || 0) + 1;
+    state.minedStats[resultIngot.id] = (state.minedStats[resultIngot.id] || 0) + 1;
+    state.player.totalIngots = state.player.totalIngots + 1;
 
     addXP(xpGained);
     saveGame();
@@ -1669,11 +1677,13 @@ const brawlResultRarity = document.getElementById('brawlResultRarity');
 const brawlCloseBtn = document.getElementById('brawlCloseBtn');
 
 export function openBrawlOverlay(geodeId, isSpecial) {
+    const state = getPlayerState();
+
     if (isOpeningGeode) {
         return;
     }
 
-    if (playerState.geodes[geodeId] <= 0) {
+    if (state.geodes[geodeId] <= 0) {
         if (_showToast) {
             _showToast('Нет такой жеоды!', '⚠️');
         }
@@ -1766,13 +1776,14 @@ function handleBrawlTap(e) {
 }
 
 function finishBrawlOpening() {
+    const state = getPlayerState();
     const geodeId = brawlState.geodeId;
     const isSpecial = brawlState.isSpecial;
 
-    if (playerState.geodes[geodeId] > 0) {
-        playerState.geodes[geodeId] = playerState.geodes[geodeId] - 1;
+    if (state.geodes[geodeId] > 0) {
+        state.geodes[geodeId] = state.geodes[geodeId] - 1;
     }
-    playerState.player.totalOpened = playerState.player.totalOpened + 1;
+    state.player.totalOpened = state.player.totalOpened + 1;
 
     let droppedIngot = null;
     let xpGained = 0;
@@ -1781,26 +1792,26 @@ function finishBrawlOpening() {
         const g = CONFIG_GEODES[geodeId];
         const loc = g.location;
         const available = g.possibleIngots.filter(function(ingId) {
-            return !playerState.collectedArtifacts[loc].includes(ingId);
+            return !state.collectedArtifacts[loc].includes(ingId);
         });
         const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0];
         droppedIngot = CONFIG_ITEMS[picked];
 
-        playerState.ingots[picked] = (playerState.ingots[picked] || 0) + 1;
-        playerState.minedStats[picked] = (playerState.minedStats[picked] || 0) + 1;
-        if (!playerState.collectedArtifacts[loc].includes(picked)) {
-            playerState.collectedArtifacts[loc].push(picked);
-            playerState.player.totalArtifacts = playerState.player.totalArtifacts + 1;
+        state.ingots[picked] = (state.ingots[picked] || 0) + 1;
+        state.minedStats[picked] = (state.minedStats[picked] || 0) + 1;
+        if (!state.collectedArtifacts[loc].includes(picked)) {
+            state.collectedArtifacts[loc].push(picked);
+            state.player.totalArtifacts = state.player.totalArtifacts + 1;
         }
-        if (!playerState.discoveredSpecialGeodes[loc]) {
-            playerState.discoveredSpecialGeodes[loc] = true;
+        if (!state.discoveredSpecialGeodes[loc]) {
+            state.discoveredSpecialGeodes[loc] = true;
         }
         xpGained = droppedIngot.xpValue;
 
         addXP(xpGained);
         saveGame();
 
-        const isFirstCollectible = droppedIngot.isCollectible && playerState.ingots[droppedIngot.id] === 1;
+        const isFirstCollectible = droppedIngot.isCollectible && state.ingots[droppedIngot.id] === 1;
         if (droppedIngot.isCollectible && isFirstCollectible) {
             showCollectibleAnimation(droppedIngot);
         }
@@ -2137,6 +2148,7 @@ function forceEndMeteorStorm() {
 }
 
 export function claimMeteorStormRewards() {
+    const state = getPlayerState();
     const cfg = EVENTS_CONFIG.meteor_storm;
     const captured = meteorStormState.captured;
 
@@ -2145,14 +2157,14 @@ export function claimMeteorStormRewards() {
     const commonGeodes = Math.floor(captured.common / cfg.meteorTypes.common.requiredForGeode);
 
     if (legendaryGeodes > 0) {
-        playerState.geodes[cfg.rewards.legendary.geodeId] = (playerState.geodes[cfg.rewards.legendary.geodeId] || 0) + legendaryGeodes;
+        state.geodes[cfg.rewards.legendary.geodeId] = (state.geodes[cfg.rewards.legendary.geodeId] || 0) + legendaryGeodes;
         sendBotNotification('☄️ Игрок получил ' + legendaryGeodes + 'x ' + CONFIG_GEODES[cfg.rewards.legendary.geodeId].name + ' из Метеоритного Шторма!');
     }
     if (rareGeodes > 0) {
-        playerState.geodes[cfg.rewards.rare.geodeId] = (playerState.geodes[cfg.rewards.rare.geodeId] || 0) + rareGeodes;
+        state.geodes[cfg.rewards.rare.geodeId] = (state.geodes[cfg.rewards.rare.geodeId] || 0) + rareGeodes;
     }
     if (commonGeodes > 0) {
-        playerState.geodes[cfg.rewards.common.geodeId] = (playerState.geodes[cfg.rewards.common.geodeId] || 0) + commonGeodes;
+        state.geodes[cfg.rewards.common.geodeId] = (state.geodes[cfg.rewards.common.geodeId] || 0) + commonGeodes;
     }
 
     const totalXP = legendaryGeodes * cfg.rewards.legendary.xpBonus +
@@ -2180,6 +2192,7 @@ export function claimMeteorStormRewards() {
 }
 
 export function exitMeteorStormEarly() {
+    const state = getPlayerState();
     const cfg = EVENTS_CONFIG.meteor_storm;
     const captured = meteorStormState.captured;
 
@@ -2188,13 +2201,13 @@ export function exitMeteorStormEarly() {
     const commonGeodes = Math.floor(captured.common / cfg.meteorTypes.common.requiredForGeode);
 
     if (legendaryGeodes > 0) {
-        playerState.geodes[cfg.rewards.legendary.geodeId] = (playerState.geodes[cfg.rewards.legendary.geodeId] || 0) + legendaryGeodes;
+        state.geodes[cfg.rewards.legendary.geodeId] = (state.geodes[cfg.rewards.legendary.geodeId] || 0) + legendaryGeodes;
     }
     if (rareGeodes > 0) {
-        playerState.geodes[cfg.rewards.rare.geodeId] = (playerState.geodes[cfg.rewards.rare.geodeId] || 0) + rareGeodes;
+        state.geodes[cfg.rewards.rare.geodeId] = (state.geodes[cfg.rewards.rare.geodeId] || 0) + rareGeodes;
     }
     if (commonGeodes > 0) {
-        playerState.geodes[cfg.rewards.common.geodeId] = (playerState.geodes[cfg.rewards.common.geodeId] || 0) + commonGeodes;
+        state.geodes[cfg.rewards.common.geodeId] = (state.geodes[cfg.rewards.common.geodeId] || 0) + commonGeodes;
     }
 
     const totalXP = legendaryGeodes * cfg.rewards.legendary.xpBonus +
