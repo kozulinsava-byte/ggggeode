@@ -64,40 +64,27 @@ export const DEFAULT_STATE = {
     player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 }
 };
 
-// ========== КОНФИГУРАЦИЯ ИВЕНТОВ (РОТАЦИЯ) ==========
+// ========== КОНФИГУРАЦИЯ ИВЕНТОВ ==========
 export const EVENTS_CONFIG = {
     rotationInterval: 30 * 60 * 1000,
     eventDuration: 15 * 60 * 1000,
     events: ['great_smelt', 'meteor_storm'],
     
     great_smelt: {
-        id: 'great_smelt',
-        name: 'Великая Переплавка',
-        icon: '🔥',
+        id: 'great_smelt', name: 'Великая Переплавка', icon: '🔥',
         description: 'Древние кузни остывают!',
         longDescription: 'Собери ресурсы и создай крафтовые предметы в Плавильне!'
     },
     
     meteor_storm: {
-        id: 'meteor_storm',
-        name: 'Метеоритный Шторм',
-        icon: '☄️',
+        id: 'meteor_storm', name: 'Метеоритный Шторм', icon: '☄️',
         description: 'Небо пылает! Лови падающие метеориты!',
         longDescription: 'Метеориты падают с небес! Тапай по ним, чтобы собрать. Обменяй осколки на жеоды!',
         stormDuration: 30,
         meteorTypes: {
-            legendary: {
-                icon: '✨', emoji: '✨', color: '#FFD700', glowColor: 'rgba(255, 215, 0, 0.8)',
-                speed: 2.2, size: 55, spawnWeight: 0.08, pointsPerUnit: 1, requiredForGeode: 2
-            },
-            rare: {
-                icon: '🔥', emoji: '🔥', color: '#FF8C00', glowColor: 'rgba(255, 140, 0, 0.7)',
-                speed: 3.0, size: 48, spawnWeight: 0.27, pointsPerUnit: 1, requiredForGeode: 4
-            },
-            common: {
-                icon: '☄️', emoji: '☄️', color: '#A0A0A0', glowColor: 'rgba(160, 160, 160, 0.6)',
-                speed: 3.8, size: 40, spawnWeight: 0.65, pointsPerUnit: 1, requiredForGeode: 6
-            }
+            legendary: { icon: '✨', emoji: '✨', color: '#FFD700', glowColor: 'rgba(255, 215, 0, 0.8)', speed: 2.2, size: 55, spawnWeight: 0.08, pointsPerUnit: 1, requiredForGeode: 2 },
+            rare: { icon: '🔥', emoji: '🔥', color: '#FF8C00', glowColor: 'rgba(255, 140, 0, 0.7)', speed: 3.0, size: 48, spawnWeight: 0.27, pointsPerUnit: 1, requiredForGeode: 4 },
+            common: { icon: '☄️', emoji: '☄️', color: '#A0A0A0', glowColor: 'rgba(160, 160, 160, 0.6)', speed: 3.8, size: 40, spawnWeight: 0.65, pointsPerUnit: 1, requiredForGeode: 6 }
         },
         spawnInterval: 400,
         maxMeteorsOnScreen: 12,
