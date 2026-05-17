@@ -1,6 +1,35 @@
-// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
+// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ · Alpha 0.01 СТАБИЛИЗАЦИЯ ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
 import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup } from './ui.js';
+
+// ========== ВРЕМЕННЫЙ МОДУЛЬ ОТЛАДКИ (БУДЕТ ВЫРЕЗАН ПОСЛЕ ФИКСА) ==========
+export const AppDebugger = {
+  enabled: true,
+  log: function(tag, message, data) {
+    if (!this.enabled) return;
+    if (data !== undefined) {
+      console.log(`[Debug:${tag}] ${message}`, data);
+    } else {
+      console.log(`[Debug:${tag}] ${message}`);
+    }
+  },
+  error: function(tag, message, data) {
+    if (!this.enabled) return;
+    if (data !== undefined) {
+      console.error(`[Debug:${tag}] ${message}`, data);
+    } else {
+      console.error(`[Debug:${tag}] ${message}`);
+    }
+  },
+  warn: function(tag, message, data) {
+    if (!this.enabled) return;
+    if (data !== undefined) {
+      console.warn(`[Debug:${tag}] ${message}`, data);
+    } else {
+      console.warn(`[Debug:${tag}] ${message}`);
+    }
+  }
+};
 
 const isTelegram = !!window.Telegram?.WebApp;
 const tg = window.Telegram?.WebApp;
@@ -11,8 +40,9 @@ if (tg) {
     tg.expand();
     try { tg.setHeaderColor('#000000'); } catch(e) {}
     try { tg.setBackgroundColor('#000000'); } catch(e) {}
+    AppDebugger.log('TG', 'Telegram WebApp инициализирован');
   } catch(e) {
-    console.warn('[StarForge] Telegram init error:', e);
+    AppDebugger.warn('TG', 'Telegram init error:', e);
   }
 }
 
@@ -79,11 +109,16 @@ export const eventsManager = {
   },
   
   startEventCycle() {
-    if (this.eventInterval) clearInterval(this.eventInterval);
+    AppDebugger.log('Event', 'Запуск цикла ивентов');
+    if (this.eventInterval) {
+      AppDebugger.log('Event', 'Сброс старого интервала ивентов', this.eventInterval);
+      clearInterval(this.eventInterval);
+    }
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
       this.triggerGreatSmelt();
     }, 30 * 60 * 1000);
+    AppDebugger.log('Event', 'Интервал ивентов создан', this.eventInterval);
   },
   
   triggerGreatSmelt() {
@@ -97,12 +132,15 @@ export const eventsManager = {
     this.eventEndTime = Date.now() + 15 * 60 * 1000;
     this.eventPhase = 'active';
     
+    AppDebugger.log('Event', 'Великая Переплавка запущена', { endTime: new Date(this.eventEndTime).toLocaleTimeString() });
+    
     showToast('🔥 Великая Переплавка началась!', '🔥');
     sendBotNotification('🚀 Кузня открыта! 15 минут для переплавки!');
     saveGame();
   },
   
   endEvent() {
+    AppDebugger.log('Event', 'Ивент завершён');
     this.eventPhase = 'ending';
     showToast('❄️ Переплавка завершена!', '❄️');
     sendBotNotification('❄️ Кузни остыли.');
@@ -201,7 +239,6 @@ function renderForgeInterface(container) {
   
   container.innerHTML = html;
   
-  // Обработчики выбора рецепта
   container.querySelectorAll('.recipe-card:not(.disabled)').forEach((el) => {
     el.addEventListener('click', () => {
       const recipeId = el.dataset.recipe;
@@ -213,7 +250,6 @@ function renderForgeInterface(container) {
     });
   });
   
-  // Кнопка сплавить
   const smeltBtn = container.querySelector('#forgeSmeltBtn');
   if (smeltBtn) {
     smeltBtn.addEventListener('click', () => {
@@ -223,7 +259,6 @@ function renderForgeInterface(container) {
     });
   }
   
-  // Кнопка выхода
   const exitBtn = container.querySelector('#forgeExitBtn');
   if (exitBtn) {
     exitBtn.addEventListener('click', () => {
@@ -261,7 +296,10 @@ function startSmeltProcess(recipe) {
   moltenEl.style.height = '0%';
   progressOverlay.classList.add('active');
   
-  if (forgeState.smeltInterval) clearInterval(forgeState.smeltInterval);
+  if (forgeState.smeltInterval) {
+    clearInterval(forgeState.smeltInterval);
+    AppDebugger.log('Forge', 'Сброс старого интервала переплавки');
+  }
   
   forgeState.smeltInterval = setInterval(() => {
     forgeState.smeltSeconds--;
@@ -277,6 +315,7 @@ function startSmeltProcess(recipe) {
       finishSmeltProcess(recipe);
     }
   }, 1000);
+  AppDebugger.log('Forge', 'Интервал переплавки создан', forgeState.smeltInterval);
 }
 
 function finishSmeltProcess(recipe) {
@@ -287,12 +326,10 @@ function finishSmeltProcess(recipe) {
   
   document.getElementById('forgeProgressOverlay').classList.remove('active');
   
-  // Списываем ресурсы
   for (let ingId in recipe.ingredients) {
     playerState.ingots[ingId] -= recipe.ingredients[ingId];
   }
   
-  // Добавляем результат
   playerState.ingots[recipe.resultIngotId] = (playerState.ingots[recipe.resultIngotId] || 0) + 1;
   playerState.minedStats[recipe.resultIngotId] = (playerState.minedStats[recipe.resultIngotId] || 0) + 1;
   playerState.player.totalIngots++;
@@ -697,11 +734,29 @@ function applySaveData(data) {
 export const saveToLocalStorage = saveGame;
 
 export function initializeState() {
+  AppDebugger.log('State', 'Инициализация состояния...');
+  
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
+  
+  AppDebugger.log('State', 'DEFAULT_STATE применён', {
+    level: playerState.player.level,
+    xp: playerState.player.xp,
+    expeditions: Object.keys(playerState.expeditions)
+  });
+  
   loadGame();
+  
+  AppDebugger.log('State', 'Сохранения загружены', {
+    level: playerState.player.level,
+    xp: playerState.player.xp,
+    expeditions: Object.keys(playerState.expeditions)
+  });
+  
   eventsManager.startEventCycle();
+  
+  AppDebugger.log('State', 'Инициализация завершена');
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
@@ -733,6 +788,8 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
+      AppDebugger.log('Expedition', 'Экспедиция завершена', { id: k, endTime: new Date(exp.endTime).toLocaleTimeString() });
+      
       exp.active = false;
       exp.endTime = null;
       exp.scanUsed = false;
@@ -764,12 +821,16 @@ function checkCompletedExpeditions() {
 let globalTimerInterval = null;
 
 export function startGlobalTimer() {
-  if (globalTimerInterval) clearInterval(globalTimerInterval);
+  if (globalTimerInterval) {
+    AppDebugger.log('Timer', 'Сброс старого глобального таймера', globalTimerInterval);
+    clearInterval(globalTimerInterval);
+  }
   globalTimerInterval = setInterval(() => {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
   }, 500);
+  AppDebugger.log('Timer', 'Глобальный таймер создан', globalTimerInterval);
 }
 
 function updateExpeditionTimers() {
@@ -800,14 +861,33 @@ function updateEventTimer() {
 }
 
 export function startExpedition(expId) {
+  AppDebugger.log('Expedition', 'Вызван startExpedition', { expId, playerStateExists: !!playerState });
+  
   const exp = playerState.expeditions[expId];
-  if (!exp || exp.active) return;
+  if (!exp) {
+    AppDebugger.error('Expedition', 'Экспедиция не найдена в playerState', { 
+      expId, 
+      availableExpeditions: Object.keys(playerState.expeditions) 
+    });
+    return;
+  }
+  
+  if (exp.active) {
+    AppDebugger.warn('Expedition', 'Экспедиция уже активна', { expId });
+    return;
+  }
   
   exp.active = true;
   exp.endTime = Date.now() + CONFIG_EXPEDITIONS[expId].timer * 1000;
   exp.scanUsed = false;
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
+  
+  AppDebugger.log('Expedition', 'Экспедиция запущена', { 
+    expId, 
+    endTime: new Date(exp.endTime).toLocaleTimeString(),
+    duration: CONFIG_EXPEDITIONS[expId].timer + 's'
+  });
   
   saveGame();
   renderExpeditionsTab();
