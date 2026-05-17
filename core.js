@@ -1,35 +1,6 @@
-// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ · Alpha 0.01 СТАБИЛИЗАЦИЯ ==========
+// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
 import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup } from './ui.js';
-
-// ========== ВРЕМЕННЫЙ МОДУЛЬ ОТЛАДКИ ==========
-const AppDebugger = {
-  enabled: true,
-  log: function(tag, message, data) {
-    if (!this.enabled) return;
-    if (data !== undefined) {
-      console.log('[Debug:' + tag + '] ' + message, data);
-    } else {
-      console.log('[Debug:' + tag + '] ' + message);
-    }
-  },
-  warn: function(tag, message, data) {
-    if (!this.enabled) return;
-    if (data !== undefined) {
-      console.warn('[Debug:' + tag + '] ' + message, data);
-    } else {
-      console.warn('[Debug:' + tag + '] ' + message);
-    }
-  },
-  error: function(tag, message, data) {
-    if (!this.enabled) return;
-    if (data !== undefined) {
-      console.error('[Debug:' + tag + '] ' + message, data);
-    } else {
-      console.error('[Debug:' + tag + '] ' + message);
-    }
-  }
-};
 
 const isTelegram = !!window.Telegram?.WebApp;
 const tg = window.Telegram?.WebApp;
@@ -705,166 +676,82 @@ function loadGame() {
   }
 }
 
-// ========== ИСПРАВЛЕННАЯ applySaveData ==========
+// ========== ИСПРАВЛЕННАЯ applySaveData (НЕ ИСПОЛЬЗУЕТ Object.assign ДЛЯ ВСЕГО) ==========
 function applySaveData(data) {
   if (!data || !data.playerState) {
-    AppDebugger.warn('State', 'applySaveData: нет данных');
     return;
   }
   
   const saved = data.playerState;
   
-  // Сохраняем эталонные значения из DEFAULT_STATE на случай если сохранение их убьёт
-  const defaultExpeditions = JSON.parse(JSON.stringify(DEFAULT_STATE.expeditions));
-  const defaultPlayer = JSON.parse(JSON.stringify(DEFAULT_STATE.player));
-  const defaultCollectedArtifacts = JSON.parse(JSON.stringify(DEFAULT_STATE.collectedArtifacts));
-  const defaultDiscoveredSpecialGeodes = JSON.parse(JSON.stringify(DEFAULT_STATE.discoveredSpecialGeodes));
-  
-  // Применяем сохранение
-  Object.assign(playerState, saved);
-  
-  // Проверяем expeditions — если сохранение их убило, восстанавливаем
-  if (!playerState.expeditions || 
-      typeof playerState.expeditions !== 'object' ||
-      Object.keys(playerState.expeditions).length === 0 ||
-      playerState.expeditions.mine === undefined ||
-      playerState.expeditions.jungle === undefined ||
-      playerState.expeditions.asteroid === undefined) {
-    AppDebugger.warn('State', 'Сохранённые expeditions повреждены — восстановление из DEFAULT_STATE');
-    playerState.expeditions = defaultExpeditions;
+  // Безопасные поля — копируем через Object.assign (простые словари)
+  if (saved.geodes && typeof saved.geodes === 'object') {
+    Object.assign(playerState.geodes, saved.geodes);
+  }
+  if (saved.ingots && typeof saved.ingots === 'object') {
+    Object.assign(playerState.ingots, saved.ingots);
+  }
+  if (saved.minedStats && typeof saved.minedStats === 'object') {
+    Object.assign(playerState.minedStats, saved.minedStats);
+  }
+  if (saved.echoCooldowns && typeof saved.echoCooldowns === 'object') {
+    Object.assign(playerState.echoCooldowns, saved.echoCooldowns);
+  }
+  if (saved.expeditionBonuses && typeof saved.expeditionBonuses === 'object') {
+    Object.assign(playerState.expeditionBonuses, saved.expeditionBonuses);
   }
   
-  // Проверяем player — если сохранение убило, восстанавливаем
-  if (!playerState.player || 
-      typeof playerState.player !== 'object' ||
-      playerState.player.level === undefined || 
-      playerState.player.level === null ||
-      playerState.player.xp === undefined || 
-      playerState.player.xp === null) {
-    AppDebugger.warn('State', 'Сохранённый player повреждён — восстановление из DEFAULT_STATE');
-    playerState.player = defaultPlayer;
+  // expeditions — копируем ТОЛЬКО если сохранение валидно
+  if (saved.expeditions && 
+      typeof saved.expeditions === 'object' &&
+      saved.expeditions.mine !== undefined &&
+      saved.expeditions.jungle !== undefined &&
+      saved.expeditions.asteroid !== undefined) {
+    playerState.expeditions.mine = Object.assign({}, saved.expeditions.mine);
+    playerState.expeditions.jungle = Object.assign({}, saved.expeditions.jungle);
+    playerState.expeditions.asteroid = Object.assign({}, saved.expeditions.asteroid);
   }
   
-  // Гарантируем что все числовые поля player на месте
-  if (playerState.player.level === undefined || playerState.player.level === null) {
-    playerState.player.level = 1;
-  }
-  if (playerState.player.xp === undefined || playerState.player.xp === null) {
-    playerState.player.xp = 0;
-  }
-  if (playerState.player.totalOpened === undefined || playerState.player.totalOpened === null) {
-    playerState.player.totalOpened = 0;
-  }
-  if (playerState.player.totalIngots === undefined || playerState.player.totalIngots === null) {
-    playerState.player.totalIngots = 0;
-  }
-  if (playerState.player.totalArtifacts === undefined || playerState.player.totalArtifacts === null) {
-    playerState.player.totalArtifacts = 0;
+  // player — копируем ТОЛЬКО если сохранение валидно
+  if (saved.player && 
+      typeof saved.player === 'object' &&
+      typeof saved.player.level === 'number' &&
+      typeof saved.player.xp === 'number') {
+    Object.assign(playerState.player, saved.player);
   }
   
-  // Проверяем collectedArtifacts
-  if (!playerState.collectedArtifacts || typeof playerState.collectedArtifacts !== 'object') {
-    playerState.collectedArtifacts = defaultCollectedArtifacts;
-  } else {
-    if (!Array.isArray(playerState.collectedArtifacts.mine)) {
-      playerState.collectedArtifacts.mine = [];
-    }
-    if (!Array.isArray(playerState.collectedArtifacts.jungle)) {
-      playerState.collectedArtifacts.jungle = [];
-    }
-    if (!Array.isArray(playerState.collectedArtifacts.asteroid)) {
-      playerState.collectedArtifacts.asteroid = [];
-    }
+  // collectedArtifacts — копируем ТОЛЬКО если сохранение валидно
+  if (saved.collectedArtifacts && 
+      typeof saved.collectedArtifacts === 'object' &&
+      Array.isArray(saved.collectedArtifacts.mine) &&
+      Array.isArray(saved.collectedArtifacts.jungle) &&
+      Array.isArray(saved.collectedArtifacts.asteroid)) {
+    playerState.collectedArtifacts.mine = [...saved.collectedArtifacts.mine];
+    playerState.collectedArtifacts.jungle = [...saved.collectedArtifacts.jungle];
+    playerState.collectedArtifacts.asteroid = [...saved.collectedArtifacts.asteroid];
   }
   
-  // Проверяем discoveredSpecialGeodes
-  if (!playerState.discoveredSpecialGeodes || typeof playerState.discoveredSpecialGeodes !== 'object') {
-    playerState.discoveredSpecialGeodes = defaultDiscoveredSpecialGeodes;
-  } else {
-    if (playerState.discoveredSpecialGeodes.mine === undefined) {
-      playerState.discoveredSpecialGeodes.mine = false;
-    }
-    if (playerState.discoveredSpecialGeodes.jungle === undefined) {
-      playerState.discoveredSpecialGeodes.jungle = false;
-    }
-    if (playerState.discoveredSpecialGeodes.asteroid === undefined) {
-      playerState.discoveredSpecialGeodes.asteroid = false;
-    }
+  // discoveredSpecialGeodes — копируем ТОЛЬКО если сохранение валидно
+  if (saved.discoveredSpecialGeodes && typeof saved.discoveredSpecialGeodes === 'object') {
+    Object.assign(playerState.discoveredSpecialGeodes, saved.discoveredSpecialGeodes);
   }
   
-  // Проверяем geodes
-  for (let gId in CONFIG_GEODES) {
-    if (playerState.geodes[gId] === undefined) {
-      playerState.geodes[gId] = DEFAULT_STATE.geodes[gId] !== undefined ? DEFAULT_STATE.geodes[gId] : 0;
-    }
-  }
-  
-  // Проверяем ingots и minedStats
-  for (let iId in CONFIG_ITEMS) {
-    if (playerState.ingots[iId] === undefined) {
-      playerState.ingots[iId] = 0;
-    }
-    if (playerState.minedStats[iId] === undefined) {
-      playerState.minedStats[iId] = 0;
-    }
-  }
-  
-  if (!playerState.echoCooldowns) {
-    playerState.echoCooldowns = {};
-  }
-  if (!playerState.expeditionBonuses) {
-    playerState.expeditionBonuses = {};
-  }
-  
-  if (data.collectibleSerials) {
-    Object.assign(collectibleSerials, data.collectibleSerials);
-  }
-  if (data.nextSerial) {
-    nextSerial = data.nextSerial;
-  }
-  if (data.activeEvent) {
-    eventsManager.activeEvent = data.activeEvent;
-  }
-  if (data.eventEndTime) {
-    eventsManager.eventEndTime = data.eventEndTime;
-  }
-  if (data.eventPhase) {
-    eventsManager.eventPhase = data.eventPhase;
-  }
-  
-  AppDebugger.log('State', 'Сохранение применено и проверено', {
-    level: playerState.player.level,
-    xp: playerState.player.xp,
-    expeditions: Object.keys(playerState.expeditions)
-  });
+  // Серийные номера и прочее
+  if (data.collectibleSerials) Object.assign(collectibleSerials, data.collectibleSerials);
+  if (data.nextSerial) nextSerial = data.nextSerial;
+  if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
+  if (data.eventEndTime) eventsManager.eventEndTime = data.eventEndTime;
+  if (data.eventPhase) eventsManager.eventPhase = data.eventPhase;
 }
 
 export const saveToLocalStorage = saveGame;
 
 export function initializeState() {
-  AppDebugger.log('State', 'Инициализация состояния...');
-  
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
-  
-  AppDebugger.log('State', 'DEFAULT_STATE применён', {
-    level: playerState.player.level,
-    xp: playerState.player.xp,
-    expeditions: Object.keys(playerState.expeditions)
-  });
-  
   loadGame();
-  
-  AppDebugger.log('State', 'Сохранения загружены', {
-    level: playerState.player.level,
-    xp: playerState.player.xp,
-    expeditions: Object.keys(playerState.expeditions)
-  });
-  
   eventsManager.startEventCycle();
-  
-  AppDebugger.log('State', 'Инициализация завершена');
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
@@ -896,8 +783,6 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
-      AppDebugger.log('Expedition', 'Экспедиция завершена', { id: k });
-      
       exp.active = false;
       exp.endTime = null;
       exp.scanUsed = false;
@@ -929,16 +814,12 @@ function checkCompletedExpeditions() {
 let globalTimerInterval = null;
 
 export function startGlobalTimer() {
-  if (globalTimerInterval) {
-    AppDebugger.log('Timer', 'Сброс старого глобального таймера');
-    clearInterval(globalTimerInterval);
-  }
+  if (globalTimerInterval) clearInterval(globalTimerInterval);
   globalTimerInterval = setInterval(() => {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
   }, 500);
-  AppDebugger.log('Timer', 'Глобальный таймер создан');
 }
 
 function updateExpeditionTimers() {
@@ -969,42 +850,14 @@ function updateEventTimer() {
 }
 
 export function startExpedition(expId) {
-  AppDebugger.log('Expedition', 'Вызван startExpedition', { 
-    expId: expId, 
-    playerStateExists: !!playerState 
-  });
-  
-  if (!playerState) {
-    AppDebugger.error('Expedition', 'playerState is NULL');
-    return;
-  }
-  
-  AppDebugger.log('Expedition', 'Доступные экспедиции', Object.keys(playerState.expeditions));
-  
   const exp = playerState.expeditions[expId];
-  if (!exp) {
-    AppDebugger.error('Expedition', 'Экспедиция не найдена в playerState', { 
-      expId: expId, 
-      available: Object.keys(playerState.expeditions) 
-    });
-    return;
-  }
-  
-  if (exp.active) {
-    AppDebugger.warn('Expedition', 'Экспедиция уже активна', { expId: expId });
-    return;
-  }
+  if (!exp || exp.active) return;
   
   exp.active = true;
   exp.endTime = Date.now() + CONFIG_EXPEDITIONS[expId].timer * 1000;
   exp.scanUsed = false;
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
-  
-  AppDebugger.log('Expedition', 'Экспедиция запущена', { 
-    expId: expId, 
-    endTime: new Date(exp.endTime).toLocaleTimeString() 
-  });
   
   saveGame();
   renderExpeditionsTab();
