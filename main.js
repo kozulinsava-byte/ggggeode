@@ -1,5 +1,5 @@
-// ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · ALPHA 0.01 ==========
-import { initializeState, startGlobalTimer, showSkeleton } from './core.js?v=001';
+// ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · Alpha 0.01 СТАБИЛИЗАЦИЯ ==========
+import { initializeState, startGlobalTimer, showSkeleton, AppDebugger } from './core.js?v=001';
 import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=001';
 
 // Тихая инициализация Telegram
@@ -30,14 +30,21 @@ const preloaderBar = document.getElementById('preloaderBar');
 const preloaderPercent = document.getElementById('preloaderPercent');
 const preloaderText = document.getElementById('preloaderText');
 
+function updatePreloader(percent, text) {
+  if (preloaderBar) preloaderBar.style.width = percent + '%';
+  if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+  if (preloaderText) preloaderText.textContent = text;
+}
+
 function hidePreloader() {
+  AppDebugger.log('Preload', 'Скрытие прелоадера');
   if (preloader) {
     preloader.classList.add('hidden');
     setTimeout(() => { preloader.style.display = 'none'; }, 500);
   }
 }
 
-// ---------- ASSET MANAGER ----------
+// ---------- ASSET MANAGER (ИСПРАВЛЕН — АСИНХРОННЫЙ СБОР ПУТЕЙ) ----------
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
@@ -45,10 +52,13 @@ class AssetManager {
     this.maxRetries = 3;
   }
 
-  collectPaths() {
+  async collectPaths() {
     const paths = new Set();
     
-    import('./config.js?v=001').then(({ CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS }) => {
+    try {
+      const module = await import('./config.js?v=001');
+      const { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS } = module;
+      
       Object.values(CONFIG_ITEMS).forEach(item => {
         if (item.imagePath) paths.add(item.imagePath);
       });
@@ -64,16 +74,21 @@ class AssetManager {
       Object.values(CONFIG_EXPEDITIONS).forEach(exp => {
         if (exp.imagePath) paths.add(exp.imagePath);
       });
-    });
+      
+      AppDebugger.log('Assets', 'Пути собраны', { count: paths.size });
+    } catch(e) {
+      AppDebugger.error('Assets', 'Ошибка сбора путей', e);
+    }
     
     return [...paths];
   }
 
   updateProgress() {
     this.loadedCount++;
-    const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
-    if (preloaderBar) preloaderBar.style.width = percent + '%';
-    if (preloaderPercent) preloaderPercent.textContent = percent + '%';
+    if (this.totalAssets > 0) {
+      const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
+      updatePreloader(percent, 'Загрузка ресурсов...');
+    }
   }
 
   async loadAsset(src, retryCount = 0) {
@@ -103,16 +118,20 @@ class AssetManager {
   }
 
   async start() {
-    const paths = this.collectPaths();
+    AppDebugger.log('Assets', 'Начало загрузки ассетов');
+    updatePreloader(5, 'Сбор ресурсов...');
+    
+    const paths = await this.collectPaths();
     this.totalAssets = paths.length;
     
     if (this.totalAssets === 0) {
-      hidePreloader();
-      initializeGame();
+      AppDebugger.warn('Assets', 'Нет ассетов для загрузки');
+      updatePreloader(100, 'Пропуск загрузки...');
       return;
     }
     
-    if (preloaderText) preloaderText.textContent = 'Загрузка ресурсов...';
+    updatePreloader(10, 'Загрузка ресурсов...');
+    AppDebugger.log('Assets', 'Загрузка файлов', { total: this.totalAssets });
     
     const loadPromises = paths.map(src => this.loadAsset(src));
     const results = await Promise.all(loadPromises);
@@ -131,37 +150,57 @@ class AssetManager {
     
     document.body.appendChild(cacheContainer);
     
-    if (preloaderText) preloaderText.textContent = 'Запуск...';
+    updatePreloader(90, 'Запуск...');
+    AppDebugger.log('Assets', 'Загрузка завершена');
     
     setTimeout(() => {
       cacheContainer.remove();
     }, 2000);
-    
-    setTimeout(() => {
-      initializeGame();
-      hidePreloader();
-    }, 100);
   }
 }
 
+// ---------- ИНИЦИАЛИЗАЦИЯ ИГРЫ (ИСПРАВЛЕН ПОРЯДОК) ----------
 function initializeGame() {
-  hidePreloader();
+  AppDebugger.log('Init', 'Запуск initializeGame');
+  
+  // 1. Сначала инициализируем состояние
   initializeState();
+  
+  // 2. Запускаем глобальный таймер
   startGlobalTimer();
-
+  
+  // 3. Привязываем табы
   document.querySelectorAll('.tab-item').forEach((t) =>
     t.addEventListener('click', () => setActiveTab(t.dataset.tab))
   );
-
+  
+  // 4. Только теперь рендерим UI
+  AppDebugger.log('Init', 'Запуск рендеринга UI');
   setActiveTab('expeditions');
+  
+  // 5. Скрываем прелоадер
+  hidePreloader();
+  
+  AppDebugger.log('Init', 'Игра полностью загружена');
 }
 
-showSkeleton();
-
-const assetManager = new AssetManager();
+// ---------- ТОЧКА ВХОДА ----------
+async function boot() {
+  AppDebugger.log('Boot', 'Старт загрузки');
+  
+  // 1. Показываем скелетон в mainContent
+  showSkeleton();
+  
+  // 2. Загружаем ассеты
+  const assetManager = new AssetManager();
+  await assetManager.start();
+  
+  // 3. Инициализируем игру
+  initializeGame();
+}
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => assetManager.start());
+  document.addEventListener('DOMContentLoaded', boot);
 } else {
-  assetManager.start();
+  boot();
 }
