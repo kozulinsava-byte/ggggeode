@@ -2,6 +2,35 @@
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
 import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup } from './ui.js';
 
+// ========== ВРЕМЕННЫЙ МОДУЛЬ ОТЛАДКИ ==========
+const AppDebugger = {
+  enabled: true,
+  log: function(tag, message, data) {
+    if (!this.enabled) return;
+    if (data !== undefined) {
+      console.log('[Debug:' + tag + '] ' + message, data);
+    } else {
+      console.log('[Debug:' + tag + '] ' + message);
+    }
+  },
+  warn: function(tag, message, data) {
+    if (!this.enabled) return;
+    if (data !== undefined) {
+      console.warn('[Debug:' + tag + '] ' + message, data);
+    } else {
+      console.warn('[Debug:' + tag + '] ' + message);
+    }
+  },
+  error: function(tag, message, data) {
+    if (!this.enabled) return;
+    if (data !== undefined) {
+      console.error('[Debug:' + tag + '] ' + message, data);
+    } else {
+      console.error('[Debug:' + tag + '] ' + message);
+    }
+  }
+};
+
 const isTelegram = !!window.Telegram?.WebApp;
 const tg = window.Telegram?.WebApp;
 
@@ -679,6 +708,7 @@ function loadGame() {
 // ========== ИСПРАВЛЕННАЯ applySaveData ==========
 function applySaveData(data) {
   if (!data || !data.playerState) {
+    AppDebugger.warn('State', 'applySaveData: нет данных');
     return;
   }
   
@@ -700,7 +730,7 @@ function applySaveData(data) {
       playerState.expeditions.mine === undefined ||
       playerState.expeditions.jungle === undefined ||
       playerState.expeditions.asteroid === undefined) {
-    console.warn('[StarForge] Сохранённые expeditions повреждены — восстановление из DEFAULT_STATE');
+    AppDebugger.warn('State', 'Сохранённые expeditions повреждены — восстановление из DEFAULT_STATE');
     playerState.expeditions = defaultExpeditions;
   }
   
@@ -711,7 +741,7 @@ function applySaveData(data) {
       playerState.player.level === null ||
       playerState.player.xp === undefined || 
       playerState.player.xp === null) {
-    console.warn('[StarForge] Сохранённый player повреждён — восстановление из DEFAULT_STATE');
+    AppDebugger.warn('State', 'Сохранённый player повреждён — восстановление из DEFAULT_STATE');
     playerState.player = defaultPlayer;
   }
   
@@ -802,7 +832,7 @@ function applySaveData(data) {
     eventsManager.eventPhase = data.eventPhase;
   }
   
-  console.log('[StarForge] Сохранение применено и проверено:', {
+  AppDebugger.log('State', 'Сохранение применено и проверено', {
     level: playerState.player.level,
     xp: playerState.player.xp,
     expeditions: Object.keys(playerState.expeditions)
@@ -812,13 +842,13 @@ function applySaveData(data) {
 export const saveToLocalStorage = saveGame;
 
 export function initializeState() {
-  console.log('[StarForge] Инициализация состояния...');
+  AppDebugger.log('State', 'Инициализация состояния...');
   
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
-  console.log('[StarForge] DEFAULT_STATE применён:', {
+  AppDebugger.log('State', 'DEFAULT_STATE применён', {
     level: playerState.player.level,
     xp: playerState.player.xp,
     expeditions: Object.keys(playerState.expeditions)
@@ -826,7 +856,7 @@ export function initializeState() {
   
   loadGame();
   
-  console.log('[StarForge] Сохранения загружены:', {
+  AppDebugger.log('State', 'Сохранения загружены', {
     level: playerState.player.level,
     xp: playerState.player.xp,
     expeditions: Object.keys(playerState.expeditions)
@@ -834,7 +864,7 @@ export function initializeState() {
   
   eventsManager.startEventCycle();
   
-  console.log('[StarForge] Инициализация завершена');
+  AppDebugger.log('State', 'Инициализация завершена');
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
@@ -866,7 +896,7 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
-      console.log('[StarForge] Экспедиция завершена:', k);
+      AppDebugger.log('Expedition', 'Экспедиция завершена', { id: k });
       
       exp.active = false;
       exp.endTime = null;
@@ -900,6 +930,7 @@ let globalTimerInterval = null;
 
 export function startGlobalTimer() {
   if (globalTimerInterval) {
+    AppDebugger.log('Timer', 'Сброс старого глобального таймера');
     clearInterval(globalTimerInterval);
   }
   globalTimerInterval = setInterval(() => {
@@ -907,6 +938,7 @@ export function startGlobalTimer() {
     updateExpeditionTimers();
     updateEventTimer();
   }, 500);
+  AppDebugger.log('Timer', 'Глобальный таймер создан');
 }
 
 function updateExpeditionTimers() {
@@ -937,18 +969,29 @@ function updateEventTimer() {
 }
 
 export function startExpedition(expId) {
-  console.log('[StarForge] startExpedition вызван:', expId);
-  console.log('[StarForge] playerState.expeditions:', Object.keys(playerState.expeditions));
+  AppDebugger.log('Expedition', 'Вызван startExpedition', { 
+    expId: expId, 
+    playerStateExists: !!playerState 
+  });
+  
+  if (!playerState) {
+    AppDebugger.error('Expedition', 'playerState is NULL');
+    return;
+  }
+  
+  AppDebugger.log('Expedition', 'Доступные экспедиции', Object.keys(playerState.expeditions));
   
   const exp = playerState.expeditions[expId];
   if (!exp) {
-    console.error('[StarForge] Экспедиция не найдена:', expId);
-    console.error('[StarForge] Доступные экспедиции:', Object.keys(playerState.expeditions));
+    AppDebugger.error('Expedition', 'Экспедиция не найдена в playerState', { 
+      expId: expId, 
+      available: Object.keys(playerState.expeditions) 
+    });
     return;
   }
   
   if (exp.active) {
-    console.warn('[StarForge] Экспедиция уже активна:', expId);
+    AppDebugger.warn('Expedition', 'Экспедиция уже активна', { expId: expId });
     return;
   }
   
@@ -958,7 +1001,10 @@ export function startExpedition(expId) {
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
   
-  console.log('[StarForge] Экспедиция запущена:', expId, 'Завершится:', new Date(exp.endTime).toLocaleTimeString());
+  AppDebugger.log('Expedition', 'Экспедиция запущена', { 
+    expId: expId, 
+    endTime: new Date(exp.endTime).toLocaleTimeString() 
+  });
   
   saveGame();
   renderExpeditionsTab();
