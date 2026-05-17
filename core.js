@@ -914,10 +914,12 @@ function applyScanBonus(expId) {
 export function initializeState() {
     console.log('[StarForge] ФАЗА 1: PRELOAD — создание состояния');
 
+    // Создаём состояние из DEFAULT_STATE
     playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
     playerState.echoCooldowns = {};
     playerState.expeditionBonuses = {};
 
+    // Инициализируем ingots и minedStats из конфига
     Object.keys(CONFIG_ITEMS).forEach(function(k) {
         if (playerState.ingots[k] === undefined) {
             playerState.ingots[k] = 0;
@@ -927,6 +929,7 @@ export function initializeState() {
         }
     });
 
+    // Загружаем сохранения из localStorage
     try {
         const localData = localStorage.getItem('starforge_v1');
         if (localData) {
@@ -940,6 +943,7 @@ export function initializeState() {
         console.warn('[StarForge] Failed to load local save:', e);
     }
 
+    // Загружаем из Telegram CloudStorage (асинхронно)
     if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
         try {
             tg.CloudStorage.getItem('starforge_save', function(error, cloudData) {
@@ -980,12 +984,24 @@ export function validateState() {
         return true;
     }
 
+    // ========== ВОССТАНОВЛЕНИЕ СТРУКТУРЫ ЭКСПЕДИЦИЙ ==========
+    const defaultExpeditions = DEFAULT_STATE.expeditions;
+    for (let expId in defaultExpeditions) {
+        if (!playerState.expeditions[expId]) {
+            console.log('[StarForge] Fixing missing expedition:', expId);
+            playerState.expeditions[expId] = {
+                active: false,
+                endTime: null
+            };
+        }
+    }
+
     const now = Date.now();
 
     for (let expId in playerState.expeditions) {
         const exp = playerState.expeditions[expId];
         if (!exp) {
-            console.log('[StarForge] Fixing missing expedition state for:', expId);
+            console.log('[StarForge] Fixing null expedition state for:', expId);
             playerState.expeditions[expId] = {
                 active: false,
                 endTime: null
@@ -1014,6 +1030,7 @@ export function validateState() {
         }
     }
 
+    // Проверяем жеоды
     for (let geodeId in CONFIG_GEODES) {
         if (playerState.geodes[geodeId] === undefined) {
             console.log('[StarForge] Fixing missing geode:', geodeId);
@@ -1021,6 +1038,7 @@ export function validateState() {
         }
     }
 
+    // Проверяем слитки
     for (let ingotId in CONFIG_ITEMS) {
         if (playerState.ingots[ingotId] === undefined) {
             playerState.ingots[ingotId] = 0;
@@ -1030,6 +1048,7 @@ export function validateState() {
         }
     }
 
+    // Проверяем коллекционные артефакты
     for (let locId in playerState.collectedArtifacts) {
         if (!Array.isArray(playerState.collectedArtifacts[locId])) {
             console.log('[StarForge] Fixing collectedArtifacts for:', locId);
@@ -1037,12 +1056,14 @@ export function validateState() {
         }
     }
 
+    // Проверяем открытые специальные жеоды
     for (let locId in playerState.discoveredSpecialGeodes) {
         if (playerState.discoveredSpecialGeodes[locId] === undefined) {
             playerState.discoveredSpecialGeodes[locId] = false;
         }
     }
 
+    // Проверяем игрока
     if (!playerState.player) {
         console.log('[StarForge] Fixing missing player object');
         playerState.player = {
@@ -1073,6 +1094,7 @@ export function validateState() {
         p.totalArtifacts = 0;
     }
 
+    // Проверяем echoCooldowns и expeditionBonuses
     if (!playerState.echoCooldowns) {
         playerState.echoCooldowns = {};
     }
@@ -1086,7 +1108,8 @@ export function validateState() {
         xp: p.xp,
         totalOpened: p.totalOpened,
         totalIngots: p.totalIngots,
-        totalArtifacts: p.totalArtifacts
+        totalArtifacts: p.totalArtifacts,
+        expeditions: Object.keys(playerState.expeditions)
     });
 
     return true;
@@ -1139,6 +1162,9 @@ function applySaveData(data) {
         return;
     }
 
+    // Сохраняем эталонную структуру экспедиций из DEFAULT_STATE
+    const defaultExpeditions = JSON.parse(JSON.stringify(DEFAULT_STATE.expeditions));
+
     if (data.playerState) {
         Object.assign(playerState, data.playerState);
         if (!playerState.echoCooldowns) {
@@ -1146,6 +1172,24 @@ function applySaveData(data) {
         }
         if (!playerState.expeditionBonuses) {
             playerState.expeditionBonuses = {};
+        }
+    }
+
+    // ========== ВОССТАНАВЛИВАЕМ СТРУКТУРУ ЭКСПЕДИЦИЙ ==========
+    for (let expId in defaultExpeditions) {
+        if (!playerState.expeditions[expId]) {
+            console.log('[StarForge] Restoring expedition structure for:', expId);
+            playerState.expeditions[expId] = {
+                active: false,
+                endTime: null
+            };
+        }
+    }
+    // Удаляем лишние ключи которых нет в DEFAULT_STATE
+    for (let expId in playerState.expeditions) {
+        if (!defaultExpeditions[expId]) {
+            console.log('[StarForge] Removing unknown expedition:', expId);
+            delete playerState.expeditions[expId];
         }
     }
 
@@ -1333,6 +1377,7 @@ export function startExpedition(expId) {
         return false;
     }
 
+    // ЗАПУСКАЕМ ЭКСПЕДИЦИЮ
     const now = Date.now();
     exp.active = true;
     exp.endTime = now + config.timer * 1000;
@@ -1345,12 +1390,15 @@ export function startExpedition(expId) {
     console.log('[StarForge] End time:', new Date(exp.endTime).toLocaleTimeString());
     console.log('[StarForge] Duration:', config.timer, 'seconds');
 
+    // Сохраняем НЕМЕДЛЕННО
     saveGame();
 
+    // Обновляем UI
     if (_renderExpeditionsTab) {
         _renderExpeditionsTab();
     }
 
+    // Показываем уведомление
     if (_showToast) {
         _showToast('Экспедиция «' + config.name + '» началась! (' + config.timer + 'с)', config.fallbackIcon);
     }
