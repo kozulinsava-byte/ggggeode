@@ -2,35 +2,6 @@
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
 import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup } from './ui.js';
 
-// ========== ВРЕМЕННЫЙ МОДУЛЬ ОТЛАДКИ (БУДЕТ ВЫРЕЗАН ПОСЛЕ ФИКСА) ==========
-export const AppDebugger = {
-  enabled: true,
-  log: function(tag, message, data) {
-    if (!this.enabled) return;
-    if (data !== undefined) {
-      console.log(`[Debug:${tag}] ${message}`, data);
-    } else {
-      console.log(`[Debug:${tag}] ${message}`);
-    }
-  },
-  error: function(tag, message, data) {
-    if (!this.enabled) return;
-    if (data !== undefined) {
-      console.error(`[Debug:${tag}] ${message}`, data);
-    } else {
-      console.error(`[Debug:${tag}] ${message}`);
-    }
-  },
-  warn: function(tag, message, data) {
-    if (!this.enabled) return;
-    if (data !== undefined) {
-      console.warn(`[Debug:${tag}] ${message}`, data);
-    } else {
-      console.warn(`[Debug:${tag}] ${message}`);
-    }
-  }
-};
-
 const isTelegram = !!window.Telegram?.WebApp;
 const tg = window.Telegram?.WebApp;
 
@@ -40,9 +11,8 @@ if (tg) {
     tg.expand();
     try { tg.setHeaderColor('#000000'); } catch(e) {}
     try { tg.setBackgroundColor('#000000'); } catch(e) {}
-    AppDebugger.log('TG', 'Telegram WebApp инициализирован');
   } catch(e) {
-    AppDebugger.warn('TG', 'Telegram init error:', e);
+    console.warn('[StarForge] Telegram init error:', e);
   }
 }
 
@@ -109,16 +79,11 @@ export const eventsManager = {
   },
   
   startEventCycle() {
-    AppDebugger.log('Event', 'Запуск цикла ивентов');
-    if (this.eventInterval) {
-      AppDebugger.log('Event', 'Сброс старого интервала ивентов', this.eventInterval);
-      clearInterval(this.eventInterval);
-    }
+    if (this.eventInterval) clearInterval(this.eventInterval);
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
       this.triggerGreatSmelt();
     }, 30 * 60 * 1000);
-    AppDebugger.log('Event', 'Интервал ивентов создан', this.eventInterval);
   },
   
   triggerGreatSmelt() {
@@ -132,15 +97,12 @@ export const eventsManager = {
     this.eventEndTime = Date.now() + 15 * 60 * 1000;
     this.eventPhase = 'active';
     
-    AppDebugger.log('Event', 'Великая Переплавка запущена', { endTime: new Date(this.eventEndTime).toLocaleTimeString() });
-    
     showToast('🔥 Великая Переплавка началась!', '🔥');
     sendBotNotification('🚀 Кузня открыта! 15 минут для переплавки!');
     saveGame();
   },
   
   endEvent() {
-    AppDebugger.log('Event', 'Ивент завершён');
     this.eventPhase = 'ending';
     showToast('❄️ Переплавка завершена!', '❄️');
     sendBotNotification('❄️ Кузни остыли.');
@@ -296,10 +258,7 @@ function startSmeltProcess(recipe) {
   moltenEl.style.height = '0%';
   progressOverlay.classList.add('active');
   
-  if (forgeState.smeltInterval) {
-    clearInterval(forgeState.smeltInterval);
-    AppDebugger.log('Forge', 'Сброс старого интервала переплавки');
-  }
+  if (forgeState.smeltInterval) clearInterval(forgeState.smeltInterval);
   
   forgeState.smeltInterval = setInterval(() => {
     forgeState.smeltSeconds--;
@@ -315,7 +274,6 @@ function startSmeltProcess(recipe) {
       finishSmeltProcess(recipe);
     }
   }, 1000);
-  AppDebugger.log('Forge', 'Интервал переплавки создан', forgeState.smeltInterval);
 }
 
 function finishSmeltProcess(recipe) {
@@ -718,29 +676,149 @@ function loadGame() {
   }
 }
 
+// ========== ИСПРАВЛЕННАЯ applySaveData ==========
 function applySaveData(data) {
-  if (data.playerState) {
-    Object.assign(playerState, data.playerState);
-    if (!playerState.echoCooldowns) playerState.echoCooldowns = {};
-    if (!playerState.expeditionBonuses) playerState.expeditionBonuses = {};
+  if (!data || !data.playerState) {
+    return;
   }
-  if (data.collectibleSerials) Object.assign(collectibleSerials, data.collectibleSerials);
-  if (data.nextSerial) nextSerial = data.nextSerial;
-  if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
-  if (data.eventEndTime) eventsManager.eventEndTime = data.eventEndTime;
-  if (data.eventPhase) eventsManager.eventPhase = data.eventPhase;
+  
+  const saved = data.playerState;
+  
+  // Сохраняем эталонные значения из DEFAULT_STATE на случай если сохранение их убьёт
+  const defaultExpeditions = JSON.parse(JSON.stringify(DEFAULT_STATE.expeditions));
+  const defaultPlayer = JSON.parse(JSON.stringify(DEFAULT_STATE.player));
+  const defaultCollectedArtifacts = JSON.parse(JSON.stringify(DEFAULT_STATE.collectedArtifacts));
+  const defaultDiscoveredSpecialGeodes = JSON.parse(JSON.stringify(DEFAULT_STATE.discoveredSpecialGeodes));
+  
+  // Применяем сохранение
+  Object.assign(playerState, saved);
+  
+  // Проверяем expeditions — если сохранение их убило, восстанавливаем
+  if (!playerState.expeditions || 
+      typeof playerState.expeditions !== 'object' ||
+      Object.keys(playerState.expeditions).length === 0 ||
+      playerState.expeditions.mine === undefined ||
+      playerState.expeditions.jungle === undefined ||
+      playerState.expeditions.asteroid === undefined) {
+    console.warn('[StarForge] Сохранённые expeditions повреждены — восстановление из DEFAULT_STATE');
+    playerState.expeditions = defaultExpeditions;
+  }
+  
+  // Проверяем player — если сохранение убило, восстанавливаем
+  if (!playerState.player || 
+      typeof playerState.player !== 'object' ||
+      playerState.player.level === undefined || 
+      playerState.player.level === null ||
+      playerState.player.xp === undefined || 
+      playerState.player.xp === null) {
+    console.warn('[StarForge] Сохранённый player повреждён — восстановление из DEFAULT_STATE');
+    playerState.player = defaultPlayer;
+  }
+  
+  // Гарантируем что все числовые поля player на месте
+  if (playerState.player.level === undefined || playerState.player.level === null) {
+    playerState.player.level = 1;
+  }
+  if (playerState.player.xp === undefined || playerState.player.xp === null) {
+    playerState.player.xp = 0;
+  }
+  if (playerState.player.totalOpened === undefined || playerState.player.totalOpened === null) {
+    playerState.player.totalOpened = 0;
+  }
+  if (playerState.player.totalIngots === undefined || playerState.player.totalIngots === null) {
+    playerState.player.totalIngots = 0;
+  }
+  if (playerState.player.totalArtifacts === undefined || playerState.player.totalArtifacts === null) {
+    playerState.player.totalArtifacts = 0;
+  }
+  
+  // Проверяем collectedArtifacts
+  if (!playerState.collectedArtifacts || typeof playerState.collectedArtifacts !== 'object') {
+    playerState.collectedArtifacts = defaultCollectedArtifacts;
+  } else {
+    if (!Array.isArray(playerState.collectedArtifacts.mine)) {
+      playerState.collectedArtifacts.mine = [];
+    }
+    if (!Array.isArray(playerState.collectedArtifacts.jungle)) {
+      playerState.collectedArtifacts.jungle = [];
+    }
+    if (!Array.isArray(playerState.collectedArtifacts.asteroid)) {
+      playerState.collectedArtifacts.asteroid = [];
+    }
+  }
+  
+  // Проверяем discoveredSpecialGeodes
+  if (!playerState.discoveredSpecialGeodes || typeof playerState.discoveredSpecialGeodes !== 'object') {
+    playerState.discoveredSpecialGeodes = defaultDiscoveredSpecialGeodes;
+  } else {
+    if (playerState.discoveredSpecialGeodes.mine === undefined) {
+      playerState.discoveredSpecialGeodes.mine = false;
+    }
+    if (playerState.discoveredSpecialGeodes.jungle === undefined) {
+      playerState.discoveredSpecialGeodes.jungle = false;
+    }
+    if (playerState.discoveredSpecialGeodes.asteroid === undefined) {
+      playerState.discoveredSpecialGeodes.asteroid = false;
+    }
+  }
+  
+  // Проверяем geodes
+  for (let gId in CONFIG_GEODES) {
+    if (playerState.geodes[gId] === undefined) {
+      playerState.geodes[gId] = DEFAULT_STATE.geodes[gId] !== undefined ? DEFAULT_STATE.geodes[gId] : 0;
+    }
+  }
+  
+  // Проверяем ingots и minedStats
+  for (let iId in CONFIG_ITEMS) {
+    if (playerState.ingots[iId] === undefined) {
+      playerState.ingots[iId] = 0;
+    }
+    if (playerState.minedStats[iId] === undefined) {
+      playerState.minedStats[iId] = 0;
+    }
+  }
+  
+  if (!playerState.echoCooldowns) {
+    playerState.echoCooldowns = {};
+  }
+  if (!playerState.expeditionBonuses) {
+    playerState.expeditionBonuses = {};
+  }
+  
+  if (data.collectibleSerials) {
+    Object.assign(collectibleSerials, data.collectibleSerials);
+  }
+  if (data.nextSerial) {
+    nextSerial = data.nextSerial;
+  }
+  if (data.activeEvent) {
+    eventsManager.activeEvent = data.activeEvent;
+  }
+  if (data.eventEndTime) {
+    eventsManager.eventEndTime = data.eventEndTime;
+  }
+  if (data.eventPhase) {
+    eventsManager.eventPhase = data.eventPhase;
+  }
+  
+  console.log('[StarForge] Сохранение применено и проверено:', {
+    level: playerState.player.level,
+    xp: playerState.player.xp,
+    expeditions: Object.keys(playerState.expeditions)
+  });
 }
 
 export const saveToLocalStorage = saveGame;
 
 export function initializeState() {
-  AppDebugger.log('State', 'Инициализация состояния...');
+  console.log('[StarForge] Инициализация состояния...');
   
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
-  AppDebugger.log('State', 'DEFAULT_STATE применён', {
+  console.log('[StarForge] DEFAULT_STATE применён:', {
     level: playerState.player.level,
     xp: playerState.player.xp,
     expeditions: Object.keys(playerState.expeditions)
@@ -748,7 +826,7 @@ export function initializeState() {
   
   loadGame();
   
-  AppDebugger.log('State', 'Сохранения загружены', {
+  console.log('[StarForge] Сохранения загружены:', {
     level: playerState.player.level,
     xp: playerState.player.xp,
     expeditions: Object.keys(playerState.expeditions)
@@ -756,7 +834,7 @@ export function initializeState() {
   
   eventsManager.startEventCycle();
   
-  AppDebugger.log('State', 'Инициализация завершена');
+  console.log('[StarForge] Инициализация завершена');
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
@@ -788,7 +866,7 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
-      AppDebugger.log('Expedition', 'Экспедиция завершена', { id: k, endTime: new Date(exp.endTime).toLocaleTimeString() });
+      console.log('[StarForge] Экспедиция завершена:', k);
       
       exp.active = false;
       exp.endTime = null;
@@ -822,7 +900,6 @@ let globalTimerInterval = null;
 
 export function startGlobalTimer() {
   if (globalTimerInterval) {
-    AppDebugger.log('Timer', 'Сброс старого глобального таймера', globalTimerInterval);
     clearInterval(globalTimerInterval);
   }
   globalTimerInterval = setInterval(() => {
@@ -830,7 +907,6 @@ export function startGlobalTimer() {
     updateExpeditionTimers();
     updateEventTimer();
   }, 500);
-  AppDebugger.log('Timer', 'Глобальный таймер создан', globalTimerInterval);
 }
 
 function updateExpeditionTimers() {
@@ -861,19 +937,18 @@ function updateEventTimer() {
 }
 
 export function startExpedition(expId) {
-  AppDebugger.log('Expedition', 'Вызван startExpedition', { expId, playerStateExists: !!playerState });
+  console.log('[StarForge] startExpedition вызван:', expId);
+  console.log('[StarForge] playerState.expeditions:', Object.keys(playerState.expeditions));
   
   const exp = playerState.expeditions[expId];
   if (!exp) {
-    AppDebugger.error('Expedition', 'Экспедиция не найдена в playerState', { 
-      expId, 
-      availableExpeditions: Object.keys(playerState.expeditions) 
-    });
+    console.error('[StarForge] Экспедиция не найдена:', expId);
+    console.error('[StarForge] Доступные экспедиции:', Object.keys(playerState.expeditions));
     return;
   }
   
   if (exp.active) {
-    AppDebugger.warn('Expedition', 'Экспедиция уже активна', { expId });
+    console.warn('[StarForge] Экспедиция уже активна:', expId);
     return;
   }
   
@@ -883,11 +958,7 @@ export function startExpedition(expId) {
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
   
-  AppDebugger.log('Expedition', 'Экспедиция запущена', { 
-    expId, 
-    endTime: new Date(exp.endTime).toLocaleTimeString(),
-    duration: CONFIG_EXPEDITIONS[expId].timer + 's'
-  });
+  console.log('[StarForge] Экспедиция запущена:', expId, 'Завершится:', new Date(exp.endTime).toLocaleTimeString());
   
   saveGame();
   renderExpeditionsTab();
