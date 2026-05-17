@@ -1,6 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES } from './config.js';
-import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, AppDebugger } from './core.js';
+import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification } from './core.js';
 
 // DOM-элементы
 export const mainContent = document.getElementById('mainContent');
@@ -431,7 +431,6 @@ function updateModalExpeditionTimer(expId) {
   if (!exp || !exp.active || !exp.endTime) {
     actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button>`;
     document.getElementById('modalStartExpedition')?.addEventListener('click', function () {
-      AppDebugger.log('UI', 'Клик по кнопке экспедиции (модалка)', { expId });
       startExpedition(this.dataset.expedition);
       closeModal();
     });
@@ -444,7 +443,6 @@ function updateModalExpeditionTimer(expId) {
   if (diff <= 0) {
     actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button>`;
     document.getElementById('modalStartExpedition')?.addEventListener('click', function () {
-      AppDebugger.log('UI', 'Клик по кнопке экспедиции (модалка, завершена)', { expId });
       startExpedition(this.dataset.expedition);
       closeModal();
     });
@@ -576,7 +574,6 @@ export function showExpeditionInfoModal(expId) {
     const startBtn = document.getElementById('modalStartExpedition');
     if (startBtn) {
       startBtn.addEventListener('click', function () {
-        AppDebugger.log('UI', 'Клик по кнопке экспедиции', { expId: this.dataset.expedition });
         startExpedition(this.dataset.expedition);
         closeModal();
       });
@@ -1014,30 +1011,38 @@ export function renderEventsTab() {
 let eventTimerInterval = null;
 
 function updateEventTimerInterval() {
-  // ВАЖНО: чистим старый интервал перед созданием нового
+  // Чистим старый интервал перед созданием нового
   if (eventTimerInterval) {
-    AppDebugger.log('Timer', 'Сброс старого интервала вкладки ивентов', eventTimerInterval);
     clearInterval(eventTimerInterval);
     eventTimerInterval = null;
   }
   
+  // Не создаём новый если мы не на вкладке events
+  if (currentTab !== 'events') {
+    return;
+  }
+  
   eventTimerInterval = setInterval(() => {
-    const timerEl = document.getElementById('eventTimer');
-    if (timerEl && currentTab === 'events') {
-      const event = eventsManager.getActiveEvent();
-      if (event) {
-        timerEl.textContent = eventsManager.getTimeLeft();
-      } else {
-        clearInterval(eventTimerInterval);
-        eventTimerInterval = null;
-        renderEventsTab();
-      }
-    } else if (currentTab !== 'events') {
+    if (currentTab !== 'events') {
       clearInterval(eventTimerInterval);
       eventTimerInterval = null;
+      return;
+    }
+    
+    const timerEl = document.getElementById('eventTimer');
+    if (timerEl) {
+      const event = eventsManager.getActiveEvent();
+      if (event && eventsManager.eventPhase === 'active') {
+        timerEl.textContent = eventsManager.getTimeLeft();
+      }
+    }
+    
+    const event = eventsManager.getActiveEvent();
+    if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime && eventsManager.eventPhase === 'active') {
+      eventsManager.endEvent();
+      renderCurrentTab();
     }
   }, 1000);
-  AppDebugger.log('Timer', 'Интервал вкладки ивентов создан', eventTimerInterval);
 }
 
 export function renderCurrentTab() {
@@ -1049,6 +1054,14 @@ export function renderCurrentTab() {
 }
 
 export function setActiveTab(tabId) {
+  // При уходе с вкладки events — чистим интервал
+  if (currentTab === 'events' && tabId !== 'events') {
+    if (eventTimerInterval) {
+      clearInterval(eventTimerInterval);
+      eventTimerInterval = null;
+    }
+  }
+  
   currentTab = tabId;
   document.querySelectorAll('.tab-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tabId));
   renderCurrentTab();
