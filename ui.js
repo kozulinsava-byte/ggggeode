@@ -1,6 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES } from './config.js';
-import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification } from './core.js';
+import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, AppDebugger } from './core.js';
 
 // DOM-элементы
 export const mainContent = document.getElementById('mainContent');
@@ -431,6 +431,7 @@ function updateModalExpeditionTimer(expId) {
   if (!exp || !exp.active || !exp.endTime) {
     actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button>`;
     document.getElementById('modalStartExpedition')?.addEventListener('click', function () {
+      AppDebugger.log('UI', 'Клик по кнопке экспедиции (модалка)', { expId });
       startExpedition(this.dataset.expedition);
       closeModal();
     });
@@ -443,6 +444,7 @@ function updateModalExpeditionTimer(expId) {
   if (diff <= 0) {
     actionBtnEl.innerHTML = `<button class="btn" id="modalStartExpedition" data-expedition="${expId}">⛏️ ОТПРАВИТЬСЯ</button>`;
     document.getElementById('modalStartExpedition')?.addEventListener('click', function () {
+      AppDebugger.log('UI', 'Клик по кнопке экспедиции (модалка, завершена)', { expId });
       startExpedition(this.dataset.expedition);
       closeModal();
     });
@@ -560,6 +562,9 @@ export function showExpeditionInfoModal(expId) {
   openModal(html);
   
   if (isActive) {
+    if (modalTimerInterval) {
+      clearInterval(modalTimerInterval);
+    }
     modalTimerInterval = setInterval(() => {
       updateModalExpeditionTimer(expId);
     }, 500);
@@ -571,6 +576,7 @@ export function showExpeditionInfoModal(expId) {
     const startBtn = document.getElementById('modalStartExpedition');
     if (startBtn) {
       startBtn.addEventListener('click', function () {
+        AppDebugger.log('UI', 'Клик по кнопке экспедиции', { expId: this.dataset.expedition });
         startExpedition(this.dataset.expedition);
         closeModal();
       });
@@ -1008,7 +1014,12 @@ export function renderEventsTab() {
 let eventTimerInterval = null;
 
 function updateEventTimerInterval() {
-  if (eventTimerInterval) clearInterval(eventTimerInterval);
+  // ВАЖНО: чистим старый интервал перед созданием нового
+  if (eventTimerInterval) {
+    AppDebugger.log('Timer', 'Сброс старого интервала вкладки ивентов', eventTimerInterval);
+    clearInterval(eventTimerInterval);
+    eventTimerInterval = null;
+  }
   
   eventTimerInterval = setInterval(() => {
     const timerEl = document.getElementById('eventTimer');
@@ -1026,6 +1037,7 @@ function updateEventTimerInterval() {
       eventTimerInterval = null;
     }
   }, 1000);
+  AppDebugger.log('Timer', 'Интервал вкладки ивентов создан', eventTimerInterval);
 }
 
 export function renderCurrentTab() {
