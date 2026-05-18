@@ -676,7 +676,7 @@ function loadGame() {
   }
 }
 
-// ========== ИСПРАВЛЕННАЯ applySaveData (НЕ ИСПОЛЬЗУЕТ Object.assign ДЛЯ ВСЕГО) ==========
+// ========== ИСПРАВЛЕННАЯ applySaveData ==========
 function applySaveData(data) {
   if (!data || !data.playerState) {
     return;
@@ -750,6 +750,27 @@ export function initializeState() {
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
+  
+  // ЯВНАЯ проверка collectedArtifacts при создании состояния
+  if (!playerState.collectedArtifacts) {
+    playerState.collectedArtifacts = { mine: [], jungle: [], asteroid: [] };
+  } else {
+    if (!Array.isArray(playerState.collectedArtifacts.mine)) {
+      playerState.collectedArtifacts.mine = [];
+    }
+    if (!Array.isArray(playerState.collectedArtifacts.jungle)) {
+      playerState.collectedArtifacts.jungle = [];
+    }
+    if (!Array.isArray(playerState.collectedArtifacts.asteroid)) {
+      playerState.collectedArtifacts.asteroid = [];
+    }
+  }
+  
+  // ЯВНАЯ проверка discoveredSpecialGeodes
+  if (!playerState.discoveredSpecialGeodes) {
+    playerState.discoveredSpecialGeodes = { mine: false, jungle: false, asteroid: false };
+  }
+  
   loadGame();
   eventsManager.startEventCycle();
 }
