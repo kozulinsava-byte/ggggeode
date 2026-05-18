@@ -1,6 +1,18 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES } from './config.js';
-import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification } from './core.js';
+import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions } from './core.js';
+
+// Регистрируем UI функции в core.js (разрываем циклический импорт)
+registerUIFunctions({
+    showToast: showToast,
+    getGeodeStageImage: getGeodeStageImage,
+    updateProfileUI: updateProfileUI,
+    updateCollectionProgress: updateCollectionProgress,
+    renderCurrentTab: renderCurrentTab,
+    renderExpeditionsTab: renderExpeditionsTab,
+    renderImageToElement: renderImageToElement,
+    showRewardPopup: showRewardPopup
+});
 
 // DOM-элементы
 export const mainContent = document.getElementById('mainContent');
