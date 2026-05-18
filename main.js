@@ -1,6 +1,6 @@
 // ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · ALPHA 0.01 ==========
-import { initializeState, startGlobalTimer, showSkeleton, injectUI } from './core.js?v=001';
-import { setActiveTab, closeShowcase, closeModal, showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup } from './ui.js?v=001';
+import { initializeState, startGlobalTimer, showSkeleton } from './core.js?v=001';
+import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=001';
 
 // Тихая инициализация Telegram
 const tg = window.Telegram?.WebApp;
@@ -146,19 +146,6 @@ class AssetManager {
 
 function initializeGame() {
   hidePreloader();
-  
-  // Инжектим UI функции в core (разрываем циклический импорт)
-  injectUI({
-    showToast: showToast,
-    getGeodeStageImage: getGeodeStageImage,
-    updateProfileUI: updateProfileUI,
-    updateCollectionProgress: updateCollectionProgress,
-    renderCurrentTab: renderCurrentTab,
-    renderExpeditionsTab: renderExpeditionsTab,
-    renderImageToElement: renderImageToElement,
-    showRewardPopup: showRewardPopup
-  });
-  
   initializeState();
   startGlobalTimer();
 
