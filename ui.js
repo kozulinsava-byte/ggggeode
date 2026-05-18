@@ -560,9 +560,6 @@ export function showExpeditionInfoModal(expId) {
   openModal(html);
   
   if (isActive) {
-    if (modalTimerInterval) {
-      clearInterval(modalTimerInterval);
-    }
     modalTimerInterval = setInterval(() => {
       updateModalExpeditionTimer(expId);
     }, 500);
@@ -1011,36 +1008,22 @@ export function renderEventsTab() {
 let eventTimerInterval = null;
 
 function updateEventTimerInterval() {
-  // Чистим старый интервал перед созданием нового
-  if (eventTimerInterval) {
-    clearInterval(eventTimerInterval);
-    eventTimerInterval = null;
-  }
-  
-  // Не создаём новый если мы не на вкладке events
-  if (currentTab !== 'events') {
-    return;
-  }
+  if (eventTimerInterval) clearInterval(eventTimerInterval);
   
   eventTimerInterval = setInterval(() => {
-    if (currentTab !== 'events') {
+    const timerEl = document.getElementById('eventTimer');
+    if (timerEl && currentTab === 'events') {
+      const event = eventsManager.getActiveEvent();
+      if (event) {
+        timerEl.textContent = eventsManager.getTimeLeft();
+      } else {
+        clearInterval(eventTimerInterval);
+        eventTimerInterval = null;
+        renderEventsTab();
+      }
+    } else if (currentTab !== 'events') {
       clearInterval(eventTimerInterval);
       eventTimerInterval = null;
-      return;
-    }
-    
-    const timerEl = document.getElementById('eventTimer');
-    if (timerEl) {
-      const event = eventsManager.getActiveEvent();
-      if (event && eventsManager.eventPhase === 'active') {
-        timerEl.textContent = eventsManager.getTimeLeft();
-      }
-    }
-    
-    const event = eventsManager.getActiveEvent();
-    if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime && eventsManager.eventPhase === 'active') {
-      eventsManager.endEvent();
-      renderCurrentTab();
     }
   }, 1000);
 }
@@ -1054,14 +1037,6 @@ export function renderCurrentTab() {
 }
 
 export function setActiveTab(tabId) {
-  // При уходе с вкладки events — чистим интервал
-  if (currentTab === 'events' && tabId !== 'events') {
-    if (eventTimerInterval) {
-      clearInterval(eventTimerInterval);
-      eventTimerInterval = null;
-    }
-  }
-  
   currentTab = tabId;
   document.querySelectorAll('.tab-item').forEach((b) => b.classList.toggle('active', b.dataset.tab === tabId));
   renderCurrentTab();
