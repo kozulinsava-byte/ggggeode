@@ -1,4 +1,4 @@
-// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
+// ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ · С ОТЛАДКОЙ ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
 
 // ========== UI функции будут записаны сюда после загрузки ui.js ==========
@@ -21,6 +21,7 @@ export function registerUIFunctions(functions) {
     _renderExpeditionsTab = functions.renderExpeditionsTab;
     _renderImageToElement = functions.renderImageToElement;
     _showRewardPopup = functions.showRewardPopup;
+    console.log('[DEBUG] registerUIFunctions called. _showToast:', !!_showToast, '_renderCurrentTab:', !!_renderCurrentTab);
 }
 
 const isTelegram = !!window.Telegram?.WebApp;
@@ -33,9 +34,11 @@ if (tg) {
     try { tg.setHeaderColor('#000000'); } catch(e) {}
     try { tg.setBackgroundColor('#000000'); } catch(e) {}
   } catch(e) {
-    console.warn('[StarForge] Telegram init error:', e);
+    console.warn('[DEBUG] Telegram init error:', e);
   }
 }
+
+console.log('[DEBUG] Core module loaded. isTelegram:', isTelegram);
 
 export let playerState = {
   expeditions: {},
@@ -49,6 +52,12 @@ export let playerState = {
   expeditionBonuses: {}
 };
 
+console.log('[DEBUG] Initial playerState created:', {
+  expeditions: Object.keys(playerState.expeditions),
+  player: playerState.player,
+  collectedArtifacts: playerState.collectedArtifacts
+});
+
 const collectibleSerials = {};
 let nextSerial = 1;
 
@@ -60,15 +69,17 @@ Object.keys(CONFIG_ITEMS).forEach((k) => {
 let isOpeningGeode = false;
 
 export function sendBotNotification(message) {
-  console.log('[StarForge Bot Notification]', message);
+  console.log('[DEBUG] sendBotNotification:', message);
 }
 
 export function showSkeleton() {
+  console.log('[DEBUG] showSkeleton called');
   const mainContent = document.getElementById('mainContent');
+  console.log('[DEBUG] mainContent element:', !!mainContent);
   if (mainContent) {
     mainContent.innerHTML = `
       <div style="padding:20px;">
-        <div style="height:40px; background:rgba(255,255,255,0.05); border-radius:20px; margin-bottom:16px; animation:pulse 1.5s infinite;"></div>
+        <div style="height:40px; background:rgba(255,255,255,0.05); border-radius:20px; margin-bottom:16px;"></div>
         <div style="height:120px; background:rgba(255,255,255,0.03); border-radius:28px; margin-bottom:16px;"></div>
         <div style="height:120px; background:rgba(255,255,255,0.03); border-radius:28px; margin-bottom:16px;"></div>
         <div style="height:120px; background:rgba(255,255,255,0.03); border-radius:28px;"></div>
@@ -85,10 +96,8 @@ export const eventsManager = {
   eventPhase: 'idle',
   
   getActiveEvent() {
-    if (this.activeEvent && this.eventEndTime && Date.now() < this.eventEndTime) {
-      return this.activeEvent;
-    }
-    return null;
+    const result = this.activeEvent && this.eventEndTime && Date.now() < this.eventEndTime ? this.activeEvent : null;
+    return result;
   },
   
   getTimeLeft() {
@@ -100,6 +109,7 @@ export const eventsManager = {
   },
   
   startEventCycle() {
+    console.log('[DEBUG] startEventCycle called');
     if (this.eventInterval) clearInterval(this.eventInterval);
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
@@ -108,6 +118,7 @@ export const eventsManager = {
   },
   
   triggerGreatSmelt() {
+    console.log('[DEBUG] triggerGreatSmelt called');
     this.activeEvent = {
       id: 'great_smelt',
       name: '🔥 Великая Переплавка',
@@ -124,6 +135,7 @@ export const eventsManager = {
   },
   
   endEvent() {
+    console.log('[DEBUG] endEvent called');
     this.eventPhase = 'ending';
     if (_showToast) _showToast('❄️ Переплавка завершена!', '❄️');
     sendBotNotification('❄️ Кузни остыли.');
@@ -141,7 +153,9 @@ let forgeState = {
 };
 
 export function openForge() {
+  console.log('[DEBUG] openForge called. forgeState.active:', forgeState.active);
   const event = eventsManager.getActiveEvent();
+  console.log('[DEBUG] openForge - activeEvent:', event);
   if (!event || event.id !== 'great_smelt') {
     if (_showToast) _showToast('Плавильня закрыта! Дождитесь Великой Переплавки.', '❄️');
     return;
@@ -159,6 +173,7 @@ export function openForge() {
 }
 
 function renderForgeInterface(container) {
+  console.log('[DEBUG] renderForgeInterface called');
   const recipes = getCraftableRecipes();
   
   let html = `
@@ -251,6 +266,7 @@ function renderForgeInterface(container) {
 }
 
 function closeForge() {
+  console.log('[DEBUG] closeForge called');
   const overlay = document.getElementById('forgeOverlay');
   const content = document.getElementById('forgeContent');
   
@@ -261,6 +277,7 @@ function closeForge() {
 }
 
 function startSmeltProcess(recipe) {
+  console.log('[DEBUG] startSmeltProcess called. recipe:', recipe.name);
   document.getElementById('forgeOverlay').classList.remove('active');
   document.getElementById('forgeContent').innerHTML = '';
   
@@ -298,6 +315,7 @@ function startSmeltProcess(recipe) {
 }
 
 function finishSmeltProcess(recipe) {
+  console.log('[DEBUG] finishSmeltProcess called. recipe:', recipe.name);
   if (forgeState.smeltInterval) {
     clearInterval(forgeState.smeltInterval);
     forgeState.smeltInterval = null;
@@ -654,6 +672,7 @@ function applyScanBonus(expId) {
 
 // ---------- СИСТЕМА СОХРАНЕНИЙ ----------
 export function saveGame() {
+  console.log('[DEBUG] saveGame called. playerState.expeditions keys:', Object.keys(playerState.expeditions));
   const saveData = JSON.stringify({
     playerState,
     collectibleSerials,
@@ -665,7 +684,10 @@ export function saveGame() {
   
   try {
     localStorage.setItem('starforge_v1', saveData);
-  } catch (e) {}
+    console.log('[DEBUG] saveGame - localStorage saved successfully');
+  } catch (e) {
+    console.error('[DEBUG] saveGame - localStorage error:', e);
+  }
   
   if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.setItem === 'function') {
     try {
@@ -675,12 +697,23 @@ export function saveGame() {
 }
 
 function loadGame() {
+  console.log('[DEBUG] loadGame called');
   try {
     const localData = localStorage.getItem('starforge_v1');
+    console.log('[DEBUG] loadGame - localStorage data exists:', !!localData);
     if (localData) {
-      applySaveData(JSON.parse(localData));
+      const parsed = JSON.parse(localData);
+      console.log('[DEBUG] loadGame - parsed data:', {
+        hasPlayerState: !!parsed.playerState,
+        expeditions: parsed.playerState?.expeditions ? Object.keys(parsed.playerState.expeditions) : 'none',
+        player: parsed.playerState?.player,
+        collectedArtifacts: parsed.playerState?.collectedArtifacts
+      });
+      applySaveData(parsed);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('[DEBUG] loadGame - error:', e);
+  }
   
   if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
     try {
@@ -699,11 +732,16 @@ function loadGame() {
 
 // ========== ИСПРАВЛЕННАЯ applySaveData ==========
 function applySaveData(data) {
+  console.log('[DEBUG] applySaveData called');
   if (!data || !data.playerState) {
+    console.warn('[DEBUG] applySaveData - no data or playerState');
     return;
   }
   
   const saved = data.playerState;
+  console.log('[DEBUG] applySaveData - saved expeditions:', saved.expeditions ? Object.keys(saved.expeditions) : 'none');
+  console.log('[DEBUG] applySaveData - saved player:', saved.player);
+  console.log('[DEBUG] applySaveData - saved collectedArtifacts:', saved.collectedArtifacts);
   
   // Безопасные поля — копируем через Object.assign
   if (saved.geodes && typeof saved.geodes === 'object') {
@@ -728,9 +766,12 @@ function applySaveData(data) {
       saved.expeditions.mine !== undefined &&
       saved.expeditions.jungle !== undefined &&
       saved.expeditions.asteroid !== undefined) {
+    console.log('[DEBUG] applySaveData - expeditions valid, copying');
     playerState.expeditions.mine = Object.assign({}, saved.expeditions.mine);
     playerState.expeditions.jungle = Object.assign({}, saved.expeditions.jungle);
     playerState.expeditions.asteroid = Object.assign({}, saved.expeditions.asteroid);
+  } else {
+    console.warn('[DEBUG] applySaveData - expeditions NOT valid, skipping copy');
   }
   
   // player — копируем ТОЛЬКО если сохранение валидно
@@ -738,7 +779,10 @@ function applySaveData(data) {
       typeof saved.player === 'object' &&
       typeof saved.player.level === 'number' &&
       typeof saved.player.xp === 'number') {
+    console.log('[DEBUG] applySaveData - player valid, copying');
     Object.assign(playerState.player, saved.player);
+  } else {
+    console.warn('[DEBUG] applySaveData - player NOT valid, skipping copy');
   }
   
   // collectedArtifacts — копируем ТОЛЬКО если сохранение валидно
@@ -747,9 +791,12 @@ function applySaveData(data) {
       Array.isArray(saved.collectedArtifacts.mine) &&
       Array.isArray(saved.collectedArtifacts.jungle) &&
       Array.isArray(saved.collectedArtifacts.asteroid)) {
+    console.log('[DEBUG] applySaveData - collectedArtifacts valid, copying');
     playerState.collectedArtifacts.mine = [...saved.collectedArtifacts.mine];
     playerState.collectedArtifacts.jungle = [...saved.collectedArtifacts.jungle];
     playerState.collectedArtifacts.asteroid = [...saved.collectedArtifacts.asteroid];
+  } else {
+    console.warn('[DEBUG] applySaveData - collectedArtifacts NOT valid, skipping copy');
   }
   
   // discoveredSpecialGeodes — копируем ТОЛЬКО если сохранение валидно
@@ -762,30 +809,64 @@ function applySaveData(data) {
   if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
   if (data.eventEndTime) eventsManager.eventEndTime = data.eventEndTime;
   if (data.eventPhase) eventsManager.eventPhase = data.eventPhase;
+  
+  console.log('[DEBUG] applySaveData DONE. playerState.expeditions keys:', Object.keys(playerState.expeditions));
+  console.log('[DEBUG] applySaveData DONE. playerState.player:', playerState.player);
+  console.log('[DEBUG] applySaveData DONE. playerState.collectedArtifacts:', playerState.collectedArtifacts);
 }
 
 export const saveToLocalStorage = saveGame;
 
 export function initializeState() {
+  console.log('[DEBUG] ========== initializeState START ==========');
+  
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
+  console.log('[DEBUG] initializeState - after DEFAULT_STATE copy:', {
+    expeditions: Object.keys(playerState.expeditions),
+    player: playerState.player,
+    collectedArtifacts: playerState.collectedArtifacts
+  });
+  
   // ЯВНАЯ проверка collectedArtifacts при создании состояния
   if (!playerState.collectedArtifacts) {
+    console.warn('[DEBUG] initializeState - collectedArtifacts is null/undefined, fixing');
     playerState.collectedArtifacts = { mine: [], jungle: [], asteroid: [] };
   } else {
-    if (!Array.isArray(playerState.collectedArtifacts.mine)) playerState.collectedArtifacts.mine = [];
-    if (!Array.isArray(playerState.collectedArtifacts.jungle)) playerState.collectedArtifacts.jungle = [];
-    if (!Array.isArray(playerState.collectedArtifacts.asteroid)) playerState.collectedArtifacts.asteroid = [];
+    if (!Array.isArray(playerState.collectedArtifacts.mine)) {
+      console.warn('[DEBUG] initializeState - collectedArtifacts.mine is not array, fixing');
+      playerState.collectedArtifacts.mine = [];
+    }
+    if (!Array.isArray(playerState.collectedArtifacts.jungle)) {
+      console.warn('[DEBUG] initializeState - collectedArtifacts.jungle is not array, fixing');
+      playerState.collectedArtifacts.jungle = [];
+    }
+    if (!Array.isArray(playerState.collectedArtifacts.asteroid)) {
+      console.warn('[DEBUG] initializeState - collectedArtifacts.asteroid is not array, fixing');
+      playerState.collectedArtifacts.asteroid = [];
+    }
   }
   
   if (!playerState.discoveredSpecialGeodes) {
+    console.warn('[DEBUG] initializeState - discoveredSpecialGeodes is null/undefined, fixing');
     playerState.discoveredSpecialGeodes = { mine: false, jungle: false, asteroid: false };
   }
   
+  console.log('[DEBUG] initializeState - calling loadGame');
   loadGame();
+  
+  console.log('[DEBUG] initializeState - after loadGame:', {
+    expeditions: Object.keys(playerState.expeditions),
+    player: playerState.player,
+    collectedArtifacts: playerState.collectedArtifacts
+  });
+  
+  console.log('[DEBUG] initializeState - calling startEventCycle');
   eventsManager.startEventCycle();
+  
+  console.log('[DEBUG] ========== initializeState END ==========');
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
@@ -817,6 +898,7 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
+      console.log('[DEBUG] Expedition completed:', k);
       exp.active = false;
       exp.endTime = null;
       exp.scanUsed = false;
@@ -848,6 +930,7 @@ function checkCompletedExpeditions() {
 let globalTimerInterval = null;
 
 export function startGlobalTimer() {
+  console.log('[DEBUG] startGlobalTimer called');
   if (globalTimerInterval) clearInterval(globalTimerInterval);
   globalTimerInterval = setInterval(() => {
     checkCompletedExpeditions();
@@ -884,8 +967,22 @@ function updateEventTimer() {
 }
 
 export function startExpedition(expId) {
+  console.log('[DEBUG] ========== startExpedition CALLED ==========');
+  console.log('[DEBUG] expId:', expId);
+  console.log('[DEBUG] playerState exists:', !!playerState);
+  console.log('[DEBUG] playerState.expeditions:', JSON.parse(JSON.stringify(playerState.expeditions)));
+  
   const exp = playerState.expeditions[expId];
-  if (!exp || exp.active) return;
+  if (!exp) {
+    console.error('[DEBUG] Expedition NOT FOUND:', expId);
+    console.error('[DEBUG] Available keys:', Object.keys(playerState.expeditions));
+    return;
+  }
+  
+  if (exp.active) {
+    console.warn('[DEBUG] Expedition already active:', expId);
+    return;
+  }
   
   exp.active = true;
   exp.endTime = Date.now() + CONFIG_EXPEDITIONS[expId].timer * 1000;
@@ -893,8 +990,13 @@ export function startExpedition(expId) {
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
   
+  console.log('[DEBUG] Expedition STARTED:', expId, 'endTime:', new Date(exp.endTime).toLocaleTimeString());
+  
   saveGame();
-  if (_renderExpeditionsTab) _renderExpeditionsTab();
+  if (_renderExpeditionsTab) {
+    console.log('[DEBUG] Calling _renderExpeditionsTab');
+    _renderExpeditionsTab();
+  }
   if (_showToast) _showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
   sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${CONFIG_EXPEDITIONS[expId].name}`);
 }
@@ -1186,6 +1288,9 @@ const brawlResultRarity = document.getElementById('brawlResultRarity');
 const brawlCloseBtn = document.getElementById('brawlCloseBtn');
 
 export function openBrawlOverlay(geodeId, isSpecial) {
+  console.log('[DEBUG] openBrawlOverlay called. geodeId:', geodeId, 'isSpecial:', isSpecial);
+  console.log('[DEBUG] openBrawlOverlay - playerState.collectedArtifacts:', JSON.parse(JSON.stringify(playerState.collectedArtifacts)));
+  
   if (isOpeningGeode) return;
   
   if (playerState.geodes[geodeId] <= 0) {
@@ -1195,6 +1300,8 @@ export function openBrawlOverlay(geodeId, isSpecial) {
   
   if (isSpecial) {
     const g = CONFIG_GEODES[geodeId];
+    console.log('[DEBUG] openBrawlOverlay - special geode location:', g.location);
+    console.log('[DEBUG] openBrawlOverlay - collectedArtifacts for location:', playerState.collectedArtifacts[g.location]);
     const completed = isLocationCompleted(g.location);
     if (completed) {
       if (_showToast) _showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚');
@@ -1262,6 +1369,7 @@ function handleBrawlTap(e) {
 }
 
 function finishBrawlOpening() {
+  console.log('[DEBUG] finishBrawlOpening called');
   const geodeId = brawlState.geodeId;
   const isSpecial = brawlState.isSpecial;
   
@@ -1276,6 +1384,15 @@ function finishBrawlOpening() {
   if (isSpecial) {
     const g = CONFIG_GEODES[geodeId];
     const loc = g.location;
+    console.log('[DEBUG] finishBrawlOpening - special geode. loc:', loc);
+    console.log('[DEBUG] finishBrawlOpening - playerState.collectedArtifacts:', JSON.parse(JSON.stringify(playerState.collectedArtifacts)));
+    console.log('[DEBUG] finishBrawlOpening - playerState.collectedArtifacts[loc]:', playerState.collectedArtifacts[loc]);
+    
+    if (!playerState.collectedArtifacts[loc]) {
+      console.error('[DEBUG] finishBrawlOpening - collectedArtifacts[loc] is UNDEFINED! Fixing...');
+      playerState.collectedArtifacts[loc] = [];
+    }
+    
     const available = g.possibleIngots.filter((ingId) => !playerState.collectedArtifacts[loc].includes(ingId));
     const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0];
     droppedIngot = CONFIG_ITEMS[picked];
