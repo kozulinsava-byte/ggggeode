@@ -728,6 +728,11 @@ export function renderProfileTab() {
 }
 
 export function renderExpeditionsTab() {
+  console.log('[DEBUG UI] renderExpeditionsTab called');
+  console.log('[DEBUG UI] playerState === window.playerState?', playerState === window.__ps);
+  console.log('[DEBUG UI] playerState.expeditions:', JSON.parse(JSON.stringify(playerState.expeditions)));
+  console.log('[DEBUG UI] playerState.expeditions keys:', Object.keys(playerState.expeditions));
+  
   let html = '<div class="section-title">⛏️ Экспедиции</div>';
   
   for (let k in CONFIG_EXPEDITIONS) {
