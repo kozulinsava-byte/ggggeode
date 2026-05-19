@@ -48,7 +48,7 @@ export let playerState = {
   echoCooldowns: {},
   expeditionBonuses: {}
 };
-
+window.__ps = playerState;
 const collectibleSerials = {};
 let nextSerial = 1;
 
