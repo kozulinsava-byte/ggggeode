@@ -1,7 +1,7 @@
 // ========== MAIN МОДУЛЬ: ИНИЦИАЛИЗАЦИЯ · ALPHA 0.01 ==========
 import { initializeState, startGlobalTimer, showSkeleton } from './core.js?v=001';
 import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=001';
-
+window.__ps = playerState;
 // Тихая инициализация Telegram
 const tg = window.Telegram?.WebApp;
 if (tg) {
