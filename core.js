@@ -1,27 +1,6 @@
 // ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
-
-// ========== UI функции будут записаны сюда после загрузки ui.js ==========
-let _showToast = null;
-let _getGeodeStageImage = null;
-let _updateProfileUI = null;
-let _updateCollectionProgress = null;
-let _renderCurrentTab = null;
-let _renderExpeditionsTab = null;
-let _renderImageToElement = null;
-let _showRewardPopup = null;
-
-// ui.js вызовет эту функцию после своей инициализации
-export function registerUIFunctions(functions) {
-    _showToast = functions.showToast;
-    _getGeodeStageImage = functions.getGeodeStageImage;
-    _updateProfileUI = functions.updateProfileUI;
-    _updateCollectionProgress = functions.updateCollectionProgress;
-    _renderCurrentTab = functions.renderCurrentTab;
-    _renderExpeditionsTab = functions.renderExpeditionsTab;
-    _renderImageToElement = functions.renderImageToElement;
-    _showRewardPopup = functions.showRewardPopup;
-}
+import { showToast, getGeodeStageImage, updateProfileUI, updateCollectionProgress, renderCurrentTab, renderExpeditionsTab, renderImageToElement, showRewardPopup } from './ui.js';
 
 const isTelegram = !!window.Telegram?.WebApp;
 const tg = window.Telegram?.WebApp;
@@ -37,18 +16,8 @@ if (tg) {
   }
 }
 
-export let playerState = {
-  expeditions: {},
-  geodes: {},
-  ingots: {},
-  discoveredSpecialGeodes: {},
-  collectedArtifacts: {},
-  minedStats: {},
-  player: {},
-  echoCooldowns: {},
-  expeditionBonuses: {}
-};
-window.__ps = playerState;
+export let playerState = null;
+
 const collectibleSerials = {};
 let nextSerial = 1;
 
@@ -118,14 +87,14 @@ export const eventsManager = {
     this.eventEndTime = Date.now() + 15 * 60 * 1000;
     this.eventPhase = 'active';
     
-    if (_showToast) _showToast('🔥 Великая Переплавка началась!', '🔥');
+    showToast('🔥 Великая Переплавка началась!', '🔥');
     sendBotNotification('🚀 Кузня открыта! 15 минут для переплавки!');
     saveGame();
   },
   
   endEvent() {
     this.eventPhase = 'ending';
-    if (_showToast) _showToast('❄️ Переплавка завершена!', '❄️');
+    showToast('❄️ Переплавка завершена!', '❄️');
     sendBotNotification('❄️ Кузни остыли.');
     saveGame();
   }
@@ -143,7 +112,7 @@ let forgeState = {
 export function openForge() {
   const event = eventsManager.getActiveEvent();
   if (!event || event.id !== 'great_smelt') {
-    if (_showToast) _showToast('Плавильня закрыта! Дождитесь Великой Переплавки.', '❄️');
+    showToast('Плавильня закрыта! Дождитесь Великой Переплавки.', '❄️');
     return;
   }
   
@@ -317,12 +286,12 @@ function finishSmeltProcess(recipe) {
   saveGame();
   
   const resultItem = CONFIG_ITEMS[recipe.resultIngotId];
-  if (_showToast) _showToast(`Создано: ${resultItem?.name || recipe.name}! +${recipe.xpReward} XP`, recipe.icon);
+  showToast(`Создано: ${resultItem?.name || recipe.name}! +${recipe.xpReward} XP`, recipe.icon);
   sendBotNotification(`⚡ Игрок создал ${resultItem?.name || recipe.name} в Плавильне!`);
   
   forgeState.active = false;
   forgeState.selectedRecipe = null;
-  if (_renderCurrentTab) _renderCurrentTab();
+  renderCurrentTab();
 }
 
 // ---------- СИСТЕМА КРАФТА ----------
@@ -351,14 +320,14 @@ export function getCraftableRecipes() {
 export function craftItem(recipeId) {
   const recipe = CRAFT_RECIPES[recipeId];
   if (!recipe) {
-    if (_showToast) _showToast('Рецепт не найден!', '⚠️');
+    showToast('Рецепт не найден!', '⚠️');
     return false;
   }
   
   const recipes = getCraftableRecipes();
   const found = recipes.find(r => r.id === recipeId);
   if (!found || !found.canCraft) {
-    if (_showToast) _showToast('Недостаточно ресурсов!', '⚠️');
+    showToast('Недостаточно ресурсов!', '⚠️');
     return false;
   }
   
@@ -387,8 +356,8 @@ export function devGiveXP() {
   while (playerState.player.level < LEVELS.length - 1 && playerState.player.xp >= LEVELS[playerState.player.level]) {
     playerState.player.level++;
   }
-  if (_updateProfileUI) _updateProfileUI();
-  if (_updateCollectionProgress) _updateCollectionProgress();
+  updateProfileUI();
+  updateCollectionProgress();
 }
 
 export function devGiveGeodes() {
@@ -399,7 +368,7 @@ export function devGiveGeodes() {
 
 export function devUnlockLocations() {
   playerState.player.level = Math.max(playerState.player.level, 10);
-  if (_updateProfileUI) _updateProfileUI();
+  updateProfileUI();
 }
 
 export function devResetGeodes() {
@@ -432,12 +401,12 @@ export function addXP(amount) {
   
   while (playerState.player.level < LEVELS.length - 1 && playerState.player.xp >= LEVELS[playerState.player.level]) {
     playerState.player.level++;
-    if (_showToast) _showToast(`🎉 Уровень ${playerState.player.level}!`, '⬆️');
+    showToast(`🎉 Уровень ${playerState.player.level}!`, '⬆️');
     sendBotNotification(`⭐ Игрок достиг ${playerState.player.level} уровня!`);
   }
   
-  if (_updateProfileUI) _updateProfileUI();
-  if (_updateCollectionProgress) _updateCollectionProgress();
+  updateProfileUI();
+  updateCollectionProgress();
   saveGame();
 }
 
@@ -445,12 +414,12 @@ export function sellIngot(ingotId) {
   const ingot = CONFIG_ITEMS[ingotId];
   
   if (ingot.isCollectible) {
-    if (_showToast) _showToast('Коллекционные артефакты нельзя сдавать!', '⚠️');
+    showToast('Коллекционные артефакты нельзя сдавать!', '⚠️');
     return;
   }
   
   if (playerState.ingots[ingotId] <= 0) {
-    if (_showToast) _showToast('Нет слитков для сдачи!', '⚠️');
+    showToast('Нет слитков для сдачи!', '⚠️');
     return;
   }
   
@@ -461,13 +430,13 @@ export function sellIngot(ingotId) {
   addXP(xpEarned);
   saveGame();
   
-  if (_showToast) _showToast(`Сдано ${count} ${ingot.name}! +${xpEarned} XP`, '💰');
-  if (_renderCurrentTab) _renderCurrentTab();
+  showToast(`Сдано ${count} ${ingot.name}! +${xpEarned} XP`, '💰');
+  renderCurrentTab();
 }
 
 export function exchangeSpecialGeodeForXP(geodeId) {
   if (playerState.geodes[geodeId] <= 0) {
-    if (_showToast) _showToast('Нет такой жеоды!', '⚠️');
+    showToast('Нет такой жеоды!', '⚠️');
     return;
   }
   
@@ -477,7 +446,7 @@ export function exchangeSpecialGeodeForXP(geodeId) {
   const loc = g.location;
   const completed = isLocationCompleted(loc);
   if (!completed) {
-    if (_showToast) _showToast('Сначала соберите все артефакты локации!', '⚠️');
+    showToast('Сначала соберите все артефакты локации!', '⚠️');
     return;
   }
   
@@ -486,8 +455,8 @@ export function exchangeSpecialGeodeForXP(geodeId) {
   addXP(xpGained);
   saveGame();
   
-  if (_showToast) _showToast(`Жеода изучена! +${xpGained} XP`, '📚');
-  if (_renderCurrentTab) _renderCurrentTab();
+  showToast(`Жеода изучена! +${xpGained} XP`, '📚');
+  renderCurrentTab();
 }
 
 // ---------- МИНИ-ИГРА "АКТИВНАЯ РАЗВЕДКА" ----------
@@ -596,7 +565,7 @@ function signalGameSuccess() {
   
   cleanupSignalGame();
   document.getElementById('signalGameOverlay').classList.remove('active');
-  if (_showToast) _showToast('✅ Все сигналы пойманы! Бонус применён!', '📡');
+  showToast('✅ Все сигналы пойманы! Бонус применён!', '📡');
 }
 
 function signalGameFail() {
@@ -609,7 +578,7 @@ function signalGameFail() {
   
   cleanupSignalGame();
   document.getElementById('signalGameOverlay').classList.remove('active');
-  if (_showToast) _showToast('❌ Сбой системы... Разведка ушла на перезарядку', '📡');
+  showToast('❌ Сбой системы... Разведка ушла на перезарядку', '📡');
 }
 
 function cleanupSignalGame() {
@@ -637,7 +606,7 @@ function applyEchoBonus(expId) {
   playerState.expeditionBonuses[expId] = 'echo';
   
   saveGame();
-  if (_showToast) _showToast(`Время экспедиции сокращено на ${Math.floor(reduction / 1000)}с!`, '📡');
+  showToast(`Время экспедиции сокращено на ${Math.floor(reduction / 1000)}с!`, '📡');
 }
 
 function applyScanBonus(expId) {
@@ -649,11 +618,13 @@ function applyScanBonus(expId) {
   playerState.expeditionBonuses[expId] = 'scan';
   
   saveGame();
-  if (_showToast) _showToast('Глубинное сканирование активировано! +20% к шансу особой жеоды', '🔬');
+  showToast('Глубинное сканирование активировано! +20% к шансу особой жеоды', '🔬');
 }
 
 // ---------- СИСТЕМА СОХРАНЕНИЙ ----------
 export function saveGame() {
+  if (!playerState) return;
+  
   const saveData = JSON.stringify({
     playerState,
     collectibleSerials,
@@ -675,6 +646,8 @@ export function saveGame() {
 }
 
 function loadGame() {
+  if (!playerState) return;
+  
   try {
     const localData = localStorage.getItem('starforge_v1');
     if (localData) {
@@ -689,7 +662,7 @@ function loadGame() {
           try {
             applySaveData(JSON.parse(cloudData));
             localStorage.setItem('starforge_v1', cloudData);
-            if (_renderCurrentTab) _renderCurrentTab();
+            renderCurrentTab();
           } catch (e) {}
         }
       });
@@ -697,47 +670,14 @@ function loadGame() {
   }
 }
 
-// ========== applySaveData — копирует только валидные поля ==========
 function applySaveData(data) {
-  if (!data || !data.playerState) {
-    return;
+  if (!playerState) return;
+  
+  if (data.playerState) {
+    Object.assign(playerState, data.playerState);
+    if (!playerState.echoCooldowns) playerState.echoCooldowns = {};
+    if (!playerState.expeditionBonuses) playerState.expeditionBonuses = {};
   }
-  
-  const saved = data.playerState;
-  
-  // Безопасные поля
-  if (saved.geodes && typeof saved.geodes === 'object') Object.assign(playerState.geodes, saved.geodes);
-  if (saved.ingots && typeof saved.ingots === 'object') Object.assign(playerState.ingots, saved.ingots);
-  if (saved.minedStats && typeof saved.minedStats === 'object') Object.assign(playerState.minedStats, saved.minedStats);
-  if (saved.echoCooldowns && typeof saved.echoCooldowns === 'object') Object.assign(playerState.echoCooldowns, saved.echoCooldowns);
-  if (saved.expeditionBonuses && typeof saved.expeditionBonuses === 'object') Object.assign(playerState.expeditionBonuses, saved.expeditionBonuses);
-  
-  // expeditions — копируем ТОЛЬКО если сохранение валидно
-  if (saved.expeditions && typeof saved.expeditions === 'object' &&
-      saved.expeditions.mine !== undefined && saved.expeditions.jungle !== undefined && saved.expeditions.asteroid !== undefined) {
-    playerState.expeditions.mine = Object.assign({}, saved.expeditions.mine);
-    playerState.expeditions.jungle = Object.assign({}, saved.expeditions.jungle);
-    playerState.expeditions.asteroid = Object.assign({}, saved.expeditions.asteroid);
-  }
-  
-  // player — копируем ТОЛЬКО если сохранение валидно
-  if (saved.player && typeof saved.player === 'object' && typeof saved.player.level === 'number' && typeof saved.player.xp === 'number') {
-    Object.assign(playerState.player, saved.player);
-  }
-  
-  // collectedArtifacts — копируем ТОЛЬКО если сохранение валидно
-  if (saved.collectedArtifacts && typeof saved.collectedArtifacts === 'object' &&
-      Array.isArray(saved.collectedArtifacts.mine) && Array.isArray(saved.collectedArtifacts.jungle) && Array.isArray(saved.collectedArtifacts.asteroid)) {
-    playerState.collectedArtifacts.mine = [...saved.collectedArtifacts.mine];
-    playerState.collectedArtifacts.jungle = [...saved.collectedArtifacts.jungle];
-    playerState.collectedArtifacts.asteroid = [...saved.collectedArtifacts.asteroid];
-  }
-  
-  // discoveredSpecialGeodes
-  if (saved.discoveredSpecialGeodes && typeof saved.discoveredSpecialGeodes === 'object') {
-    Object.assign(playerState.discoveredSpecialGeodes, saved.discoveredSpecialGeodes);
-  }
-  
   if (data.collectibleSerials) Object.assign(collectibleSerials, data.collectibleSerials);
   if (data.nextSerial) nextSerial = data.nextSerial;
   if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
@@ -747,28 +687,72 @@ function applySaveData(data) {
 
 export const saveToLocalStorage = saveGame;
 
-// ========== ГЛАВНАЯ ПРАВКА: НЕ ПЕРЕСОЗДАЁМ playerState, А МУТИРУЕМ ==========
-export function initializeState() {
-  // Мутируем существующий объект, а не создаём новый
-  Object.assign(playerState, JSON.parse(JSON.stringify(DEFAULT_STATE)));
+// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (BOOT SEQUENCE) ==========
+export async function initializeState() {
+  console.log('[Boot] ШАГ 1: Создание состояния из DEFAULT_STATE');
+  
+  // Создаём состояние ОДИН раз
+  playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
-  // ЯВНАЯ проверка collectedArtifacts
-  if (!playerState.collectedArtifacts) {
-    playerState.collectedArtifacts = { mine: [], jungle: [], asteroid: [] };
-  } else {
-    if (!Array.isArray(playerState.collectedArtifacts.mine)) playerState.collectedArtifacts.mine = [];
-    if (!Array.isArray(playerState.collectedArtifacts.jungle)) playerState.collectedArtifacts.jungle = [];
-    if (!Array.isArray(playerState.collectedArtifacts.asteroid)) playerState.collectedArtifacts.asteroid = [];
+  console.log('[Boot] ШАГ 1 завершён. playerState:', {
+    level: playerState.player.level,
+    xp: playerState.player.xp,
+    expeditions: Object.keys(playerState.expeditions)
+  });
+  
+  console.log('[Boot] ШАГ 2: Загрузка сохранений из localStorage');
+  
+  // Загружаем сохранения
+  try {
+    const localData = localStorage.getItem('starforge_v1');
+    if (localData) {
+      const data = JSON.parse(localData);
+      applySaveData(data);
+      console.log('[Boot] ШАГ 2 завершён. Local save loaded.');
+    } else {
+      console.log('[Boot] ШАГ 2 завершён. No local save found.');
+    }
+  } catch (e) {
+    console.warn('[Boot] ШАГ 2 ошибка:', e);
   }
   
-  if (!playerState.discoveredSpecialGeodes) {
-    playerState.discoveredSpecialGeodes = { mine: false, jungle: false, asteroid: false };
+  // Загружаем из CloudStorage (асинхронно)
+  if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
+    console.log('[Boot] ШАГ 2.5: Загрузка из Telegram CloudStorage...');
+    try {
+      await new Promise((resolve) => {
+        tg.CloudStorage.getItem('starforge_save', (error, cloudData) => {
+          if (!error && cloudData) {
+            try {
+              applySaveData(JSON.parse(cloudData));
+              localStorage.setItem('starforge_v1', cloudData);
+              console.log('[Boot] ШАГ 2.5 завершён. Cloud save loaded.');
+            } catch (e) {
+              console.warn('[Boot] ШАГ 2.5 ошибка парсинга:', e);
+            }
+          }
+          resolve();
+        });
+      });
+    } catch(e) {
+      console.warn('[Boot] ШАГ 2.5 ошибка:', e);
+    }
   }
   
-  loadGame();
+  console.log('[Boot] ШАГ 3: Валидация состояния');
+  console.log('[Boot] Итоговый playerState:', {
+    level: playerState.player.level,
+    xp: playerState.player.xp,
+    expeditions: Object.keys(playerState.expeditions)
+  });
+  
+  console.log('[Boot] ШАГ 4: Запуск игровых систем');
   eventsManager.startEventCycle();
+  
+  console.log('[Boot] Инициализация ЗАВЕРШЕНА. Игра готова к запуску UI.');
+  return true;
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
@@ -794,6 +778,8 @@ function getRandomDropFromExpedition(expId) {
 }
 
 function checkCompletedExpeditions() {
+  if (!playerState) return;
+  
   let changed = false;
   const now = Date.now();
   
@@ -812,11 +798,11 @@ function checkCompletedExpeditions() {
           playerState.discoveredSpecialGeodes[k] = true;
         }
         playerState.geodes[drop.geodeId] = (playerState.geodes[drop.geodeId] || 0) + 1;
-        if (_showToast) _showToast(`Найдена особая жеода: ${CONFIG_GEODES[drop.geodeId].name}!`, CONFIG_GEODES[drop.geodeId].icon);
+        showToast(`Найдена особая жеода: ${CONFIG_GEODES[drop.geodeId].name}!`, CONFIG_GEODES[drop.geodeId].icon);
         sendBotNotification(`💎 Игрок нашёл особую жеоду: ${CONFIG_GEODES[drop.geodeId].name}!`);
       } else {
         playerState.geodes[drop.geodeId] = (playerState.geodes[drop.geodeId] || 0) + 1;
-        if (_showToast) _showToast(`Экспедиция завершена! +1 ${CONFIG_GEODES[drop.geodeId].name}`, CONFIG_GEODES[drop.geodeId].icon);
+        showToast(`Экспедиция завершена! +1 ${CONFIG_GEODES[drop.geodeId].name}`, CONFIG_GEODES[drop.geodeId].icon);
       }
       changed = true;
     }
@@ -824,7 +810,7 @@ function checkCompletedExpeditions() {
   
   if (changed) {
     saveGame();
-    if (_renderCurrentTab) _renderCurrentTab();
+    renderCurrentTab();
   }
 }
 
@@ -840,6 +826,8 @@ export function startGlobalTimer() {
 }
 
 function updateExpeditionTimers() {
+  if (!playerState) return;
+  
   const now = Date.now();
   for (let k in CONFIG_EXPEDITIONS) {
     const exp = playerState.expeditions[k];
@@ -862,11 +850,13 @@ function updateEventTimer() {
   
   if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime && eventsManager.eventPhase === 'active') {
     eventsManager.endEvent();
-    if (_renderCurrentTab) _renderCurrentTab();
+    renderCurrentTab();
   }
 }
 
 export function startExpedition(expId) {
+  if (!playerState) return;
+  
   const exp = playerState.expeditions[expId];
   if (!exp || exp.active) return;
   
@@ -877,8 +867,8 @@ export function startExpedition(expId) {
   delete playerState.expeditionBonuses[expId];
   
   saveGame();
-  if (_renderExpeditionsTab) _renderExpeditionsTab();
-  if (_showToast) _showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
+  renderExpeditionsTab();
+  showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
   sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${CONFIG_EXPEDITIONS[expId].name}`);
 }
 
@@ -971,11 +961,9 @@ function showCollectibleAnimation(ingot) {
 }
 
 // ---------- ЛИДЕРБОРД (ТЕСТОВЫЙ РЕЖИМ) ----------
-const LEADERBOARD_URL = 'https://ТВОЙ-ДОМЕН/api/leaderboard';
-
 export async function updateLeaderboard() {
   if (!isTelegram || !tg.initData) {
-    if (_showToast) _showToast('Лидерборд доступен только в Telegram', '⚠️');
+    showToast('Лидерборд доступен только в Telegram', '⚠️');
     return;
   }
   
@@ -1051,6 +1039,8 @@ function cleanupConveyor() {
 }
 
 export function initRoulette(geodeId) {
+  if (!playerState) return;
+  
   const g = CONFIG_GEODES[geodeId];
   if (!g || g.isSpecial) return;
   
@@ -1097,7 +1087,7 @@ export function initRoulette(geodeId) {
   trackItems.forEach((item, index) => {
     const el = document.getElementById(`conv-${index}`);
     if (el) {
-      if (_renderImageToElement) _renderImageToElement(el, item.imagePath, item.icon, item.fallbackColor);
+      renderImageToElement(el, item.imagePath, item.icon, item.fallbackColor);
     }
   });
   
@@ -1121,7 +1111,7 @@ export function initRoulette(geodeId) {
 }
 
 function stopRoulette() {
-  if (!conveyorState.isOpen) return;
+  if (!conveyorState.isOpen || !playerState) return;
   
   const resultIngot = conveyorState.resultIngot;
   const g = CONFIG_GEODES[conveyorState.geodeId];
@@ -1132,7 +1122,7 @@ function stopRoulette() {
   if (playerState.minedStats[resultIngot.id] === 0) {
     isFirstDiscovery = true;
     xpGained = Math.floor(xpGained * 3);
-    if (_showToast) _showToast(`🎉 ПЕРВОЕ ОТКРЫТИЕ! +${xpGained} XP`, '🌟');
+    showToast(`🎉 ПЕРВОЕ ОТКРЫТИЕ! +${xpGained} XP`, '🌟');
   }
   
   playerState.ingots[resultIngot.id] = (playerState.ingots[resultIngot.id] || 0) + 1;
@@ -1146,8 +1136,8 @@ function stopRoulette() {
   isOpeningGeode = false;
   
   setTimeout(() => {
-    if (_showRewardPopup) _showRewardPopup(resultIngot);
-    if (_renderCurrentTab) _renderCurrentTab();
+    showRewardPopup(resultIngot);
+    renderCurrentTab();
   }, 100);
 }
 
@@ -1169,10 +1159,11 @@ const brawlResultRarity = document.getElementById('brawlResultRarity');
 const brawlCloseBtn = document.getElementById('brawlCloseBtn');
 
 export function openBrawlOverlay(geodeId, isSpecial) {
+  if (!playerState) return;
   if (isOpeningGeode) return;
   
   if (playerState.geodes[geodeId] <= 0) {
-    if (_showToast) _showToast('Нет такой жеоды!', '⚠️');
+    showToast('Нет такой жеоды!', '⚠️');
     return;
   }
   
@@ -1180,7 +1171,7 @@ export function openBrawlOverlay(geodeId, isSpecial) {
     const g = CONFIG_GEODES[geodeId];
     const completed = isLocationCompleted(g.location);
     if (completed) {
-      if (_showToast) _showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚');
+      showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚');
       return;
     }
   }
@@ -1207,10 +1198,8 @@ export function openBrawlOverlay(geodeId, isSpecial) {
   document.querySelector('.brawl-hint').style.display = 'block';
   brawlCounter.style.display = 'block';
 
-  if (_getGeodeStageImage && _renderImageToElement) {
-    const stage = _getGeodeStageImage(geodeId, 10);
-    _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
-  }
+  const stage = getGeodeStageImage(geodeId, 10);
+  renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
   brawlOverlay.classList.add('active');
 }
 
@@ -1218,7 +1207,7 @@ function closeBrawlOverlay() {
   brawlOverlay.classList.remove('active');
   brawlState.isOpen = false;
   isOpeningGeode = false;
-  if (_renderCurrentTab) _renderCurrentTab();
+  renderCurrentTab();
 }
 
 function handleBrawlTap(e) {
@@ -1235,16 +1224,15 @@ function handleBrawlTap(e) {
   
   brawlState.tapsRemaining--;
   brawlCounter.textContent = brawlState.tapsRemaining;
-  
-  if (_getGeodeStageImage && _renderImageToElement) {
-    const stage = _getGeodeStageImage(brawlState.geodeId, brawlState.tapsRemaining);
-    _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
-  }
+  const stage = getGeodeStageImage(brawlState.geodeId, brawlState.tapsRemaining);
+  renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
   
   if (brawlState.tapsRemaining <= 0) finishBrawlOpening();
 }
 
 function finishBrawlOpening() {
+  if (!playerState) return;
+  
   const geodeId = brawlState.geodeId;
   const isSpecial = brawlState.isSpecial;
   
@@ -1259,11 +1247,6 @@ function finishBrawlOpening() {
   if (isSpecial) {
     const g = CONFIG_GEODES[geodeId];
     const loc = g.location;
-    
-    if (!playerState.collectedArtifacts[loc]) {
-      playerState.collectedArtifacts[loc] = [];
-    }
-    
     const available = g.possibleIngots.filter((ingId) => !playerState.collectedArtifacts[loc].includes(ingId));
     const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0];
     droppedIngot = CONFIG_ITEMS[picked];
@@ -1292,7 +1275,7 @@ function finishBrawlOpening() {
     
     setTimeout(() => {
       brawlGeode.style.display = 'none';
-      if (_renderImageToElement) _renderImageToElement(brawlResultIcon, droppedIngot.imagePath, droppedIngot.icon, droppedIngot.fallbackColor);
+      renderImageToElement(brawlResultIcon, droppedIngot.imagePath, droppedIngot.icon, droppedIngot.fallbackColor);
       brawlResultName.textContent = droppedIngot.name;
       brawlResultRarity.textContent = droppedIngot.rarity;
       brawlResultRarity.style.color = droppedIngot.rarityClass === 'collectible' ? '#FF64FF' : 
@@ -1300,7 +1283,7 @@ function finishBrawlOpening() {
       brawlResult.classList.add('show');
       brawlCloseBtn.style.display = 'block';
       isOpeningGeode = false;
-      if (_renderCurrentTab) _renderCurrentTab();
+      renderCurrentTab();
     }, 500);
     
   } else {
