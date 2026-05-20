@@ -1,18 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES } from './config.js';
-import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions } from './core.js';
-
-// Регистрируем UI функции в core.js (разрываем циклический импорт)
-registerUIFunctions({
-    showToast: showToast,
-    getGeodeStageImage: getGeodeStageImage,
-    updateProfileUI: updateProfileUI,
-    updateCollectionProgress: updateCollectionProgress,
-    renderCurrentTab: renderCurrentTab,
-    renderExpeditionsTab: renderExpeditionsTab,
-    renderImageToElement: renderImageToElement,
-    showRewardPopup: showRewardPopup
-});
+import { playerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification } from './core.js';
 
 // DOM-элементы
 export const mainContent = document.getElementById('mainContent');
@@ -728,11 +716,6 @@ export function renderProfileTab() {
 }
 
 export function renderExpeditionsTab() {
-  console.log('[DEBUG UI] renderExpeditionsTab called');
-  console.log('[DEBUG UI] playerState === window.playerState?', playerState === window.__ps);
-  console.log('[DEBUG UI] playerState.expeditions:', JSON.parse(JSON.stringify(playerState.expeditions)));
-  console.log('[DEBUG UI] playerState.expeditions keys:', Object.keys(playerState.expeditions));
-  
   let html = '<div class="section-title">⛏️ Экспедиции</div>';
   
   for (let k in CONFIG_EXPEDITIONS) {
