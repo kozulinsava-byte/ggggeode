@@ -771,7 +771,7 @@ export const saveToLocalStorage = saveGame;
 export async function initializeState() {
   console.log('[Boot] Инициализация состояния...');
   
-  // ПЕРЕСОЗДАЁМ объект — getPlayerState() вернёт новую ссылку
+  // ПЕРЕСОЗДАЁМ объект
   playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
@@ -1363,5 +1363,10 @@ function finishBrawlOpening() {
   }
 }
 
-brawlGeode.addEventListener('click', handleBrawlTap);
-brawlCloseBtn.addEventListener('click', closeBrawlOverlay);
+// Привязка событий — с проверкой что DOM готов
+if (brawlGeode) {
+  brawlGeode.addEventListener('click', handleBrawlTap);
+}
+if (brawlCloseBtn) {
+  brawlCloseBtn.addEventListener('click', closeBrawlOverlay);
+}
