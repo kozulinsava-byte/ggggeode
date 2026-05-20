@@ -691,8 +691,11 @@ export const saveToLocalStorage = saveGame;
 export async function initializeState() {
   console.log('[Boot] ШАГ 1: Создание состояния из DEFAULT_STATE');
   
-  // Создаём состояние ОДИН раз
-  playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  // НЕ пересоздаём playerState, а мутируем существующий объект
+  if (!playerState) {
+    playerState = {};
+  }
+  Object.assign(playerState, JSON.parse(JSON.stringify(DEFAULT_STATE)));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
@@ -704,7 +707,6 @@ export async function initializeState() {
   
   console.log('[Boot] ШАГ 2: Загрузка сохранений из localStorage');
   
-  // Загружаем сохранения
   try {
     const localData = localStorage.getItem('starforge_v1');
     if (localData) {
@@ -718,7 +720,6 @@ export async function initializeState() {
     console.warn('[Boot] ШАГ 2 ошибка:', e);
   }
   
-  // Загружаем из CloudStorage (асинхронно)
   if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
     console.log('[Boot] ШАГ 2.5: Загрузка из Telegram CloudStorage...');
     try {
