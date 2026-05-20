@@ -771,7 +771,8 @@ export const saveToLocalStorage = saveGame;
 export async function initializeState() {
   console.log('[Boot] Инициализация состояния...');
   
-  Object.assign(playerState, JSON.parse(JSON.stringify(DEFAULT_STATE)));
+  // ПЕРЕСОЗДАЁМ объект — getPlayerState() вернёт новую ссылку
+  playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
