@@ -871,6 +871,9 @@ function getRandomDropFromExpedition(expId) {
   return { geodeId: expId, isSpecial: false };
 }
 
+// 🩹 ФИКС БАГА №2: Добавляем флаг чтобы избежать повторной обработки завершённой экспедиции
+let expeditionCompletionInProgress = {};
+
 function checkCompletedExpeditions() {
   if (!playerState) return;
   
@@ -880,6 +883,10 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
+      // 🩹 ФИКС: Если уже обрабатываем завершение этой экспедиции — пропускаем
+      if (expeditionCompletionInProgress[k]) continue;
+      expeditionCompletionInProgress[k] = true;
+      
       exp.active = false;
       exp.endTime = null;
       exp.scanUsed = false;
@@ -899,11 +906,17 @@ function checkCompletedExpeditions() {
         if (_showToast) _showToast(`Экспедиция завершена! +1 ${CONFIG_GEODES[drop.geodeId].name}`, CONFIG_GEODES[drop.geodeId].icon);
       }
       changed = true;
+      
+      // 🩹 ФИКС: Снимаем флаг через 1 секунду (на случай повторного входа)
+      setTimeout(() => { expeditionCompletionInProgress[k] = false; }, 1000);
     }
   }
   
   if (changed) {
     saveGame();
+    // 🩹 ФИКС БАГА №1: Принудительно обновляем таймеры на месте, не дожидаясь ререндера
+    updateExpeditionTimers();
+    // Затем вызываем полный ререндер текущей вкладки
     if (_renderCurrentTab) _renderCurrentTab();
   }
 }
@@ -919,6 +932,7 @@ export function startGlobalTimer() {
   }, 500);
 }
 
+// 🩹 ФИКС БАГА №1: updateExpeditionTimers теперь всегда ищет актуальные DOM-элементы
 function updateExpeditionTimers() {
   if (!playerState) return;
   
@@ -926,11 +940,22 @@ function updateExpeditionTimers() {
   for (let k in CONFIG_EXPEDITIONS) {
     const exp = playerState.expeditions[k];
     const el = document.getElementById(`timer-${k}`);
-    if (el && exp && exp.active && exp.endTime) {
+    if (!el) continue; // Элемента нет в DOM — пропускаем
+    
+    if (exp && exp.active && exp.endTime) {
       const diff = Math.max(0, exp.endTime - now);
-      const m = Math.floor(diff / 60000);
-      const s = Math.ceil((diff % 60000) / 1000);
-      el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
+      if (diff <= 0) {
+        // 🩹 ФИКС БАГА №2: Если время вышло — сразу показываем завершение
+        el.textContent = '✅ Завершено';
+        el.className = 'timer-badge completed';
+      } else {
+        const m = Math.floor(diff / 60000);
+        const s = Math.ceil((diff % 60000) / 1000);
+        el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
+      }
+    } else if (exp && !exp.active) {
+      // Экспедиция не активна — очищаем таймер
+      el.textContent = '';
     }
   }
 }
@@ -961,6 +986,10 @@ export function startExpedition(expId) {
   delete playerState.expeditionBonuses[expId];
   
   saveGame();
+  
+  // 🩹 ФИКС БАГА №1: Обновляем таймер немедленно после старта
+  updateExpeditionTimers();
+  
   if (_renderExpeditionsTab) _renderExpeditionsTab();
   if (_showToast) _showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
   sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${CONFIG_EXPEDITIONS[expId].name}`);
