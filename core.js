@@ -36,7 +36,7 @@ if (tg) {
   }
 }
 
-// ========== СОСТОЯНИЕ ИГРОКА ==========
+// ========== СОСТОЯНИЕ ИГРОКА (НЕ МЕНЯЕМ ССЫЛКУ НИКОГДА) ==========
 export let playerState = {
   expeditions: {},
   geodes: {},
@@ -260,6 +260,12 @@ function closeForge() {
   
   overlay.classList.remove('active');
   content.innerHTML = '';
+  
+  if (forgeState.smeltInterval) {
+    clearInterval(forgeState.smeltInterval);
+    forgeState.smeltInterval = null;
+  }
+  
   forgeState.active = false;
   forgeState.selectedRecipe = null;
 }
@@ -661,7 +667,17 @@ export function saveGame() {
   if (!playerState) return;
   
   const saveData = JSON.stringify({
-    playerState,
+    playerState: {
+      expeditions: playerState.expeditions,
+      geodes: playerState.geodes,
+      ingots: playerState.ingots,
+      discoveredSpecialGeodes: playerState.discoveredSpecialGeodes,
+      collectedArtifacts: playerState.collectedArtifacts,
+      minedStats: playerState.minedStats,
+      player: playerState.player,
+      echoCooldowns: playerState.echoCooldowns,
+      expeditionBonuses: playerState.expeditionBonuses
+    },
     collectibleSerials,
     nextSerial,
     activeEvent: eventsManager.activeEvent,
@@ -680,31 +696,6 @@ export function saveGame() {
   }
 }
 
-function loadGame() {
-  if (!playerState) return;
-  
-  try {
-    const localData = localStorage.getItem('starforge_v1');
-    if (localData) {
-      applySaveData(JSON.parse(localData));
-    }
-  } catch (e) {}
-  
-  if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
-    try {
-      tg.CloudStorage.getItem('starforge_save', (error, cloudData) => {
-        if (!error && cloudData) {
-          try {
-            applySaveData(JSON.parse(cloudData));
-            localStorage.setItem('starforge_v1', cloudData);
-            if (_renderCurrentTab) _renderCurrentTab();
-          } catch (e) {}
-        }
-      });
-    } catch(e) {}
-  }
-}
-
 function applySaveData(data) {
   if (!playerState) return;
   if (!data || !data.playerState) return;
@@ -712,53 +703,73 @@ function applySaveData(data) {
   const saved = data.playerState;
   
   if (saved.geodes && typeof saved.geodes === 'object') {
-    Object.assign(playerState.geodes, saved.geodes);
+    for (let k in saved.geodes) {
+      playerState.geodes[k] = saved.geodes[k];
+    }
   }
   if (saved.ingots && typeof saved.ingots === 'object') {
-    Object.assign(playerState.ingots, saved.ingots);
+    for (let k in saved.ingots) {
+      playerState.ingots[k] = saved.ingots[k];
+    }
   }
   if (saved.minedStats && typeof saved.minedStats === 'object') {
-    Object.assign(playerState.minedStats, saved.minedStats);
+    for (let k in saved.minedStats) {
+      playerState.minedStats[k] = saved.minedStats[k];
+    }
   }
   if (saved.echoCooldowns && typeof saved.echoCooldowns === 'object') {
-    Object.assign(playerState.echoCooldowns, saved.echoCooldowns);
+    for (let k in saved.echoCooldowns) {
+      playerState.echoCooldowns[k] = saved.echoCooldowns[k];
+    }
   }
   if (saved.expeditionBonuses && typeof saved.expeditionBonuses === 'object') {
-    Object.assign(playerState.expeditionBonuses, saved.expeditionBonuses);
+    for (let k in saved.expeditionBonuses) {
+      playerState.expeditionBonuses[k] = saved.expeditionBonuses[k];
+    }
   }
   
-  if (saved.expeditions && 
-      typeof saved.expeditions === 'object' &&
-      saved.expeditions.mine !== undefined &&
-      saved.expeditions.jungle !== undefined &&
-      saved.expeditions.asteroid !== undefined) {
-    playerState.expeditions.mine = Object.assign({}, saved.expeditions.mine);
-    playerState.expeditions.jungle = Object.assign({}, saved.expeditions.jungle);
-    playerState.expeditions.asteroid = Object.assign({}, saved.expeditions.asteroid);
+  if (saved.expeditions && typeof saved.expeditions === 'object') {
+    for (let k in saved.expeditions) {
+      if (playerState.expeditions[k] && saved.expeditions[k]) {
+        playerState.expeditions[k].active = saved.expeditions[k].active;
+        playerState.expeditions[k].endTime = saved.expeditions[k].endTime;
+        playerState.expeditions[k].scanUsed = saved.expeditions[k].scanUsed || false;
+        playerState.expeditions[k].specialChanceBoost = saved.expeditions[k].specialChanceBoost || null;
+      }
+    }
   }
   
-  if (saved.player && 
-      typeof saved.player === 'object' &&
-      typeof saved.player.level === 'number' &&
-      typeof saved.player.xp === 'number') {
-    Object.assign(playerState.player, saved.player);
+  if (saved.player && typeof saved.player === 'object' && typeof saved.player.level === 'number' && typeof saved.player.xp === 'number') {
+    playerState.player.level = saved.player.level;
+    playerState.player.xp = saved.player.xp;
+    playerState.player.totalOpened = saved.player.totalOpened || 0;
+    playerState.player.totalIngots = saved.player.totalIngots || 0;
+    playerState.player.totalArtifacts = saved.player.totalArtifacts || 0;
   }
   
-  if (saved.collectedArtifacts && 
-      typeof saved.collectedArtifacts === 'object' &&
-      Array.isArray(saved.collectedArtifacts.mine) &&
-      Array.isArray(saved.collectedArtifacts.jungle) &&
-      Array.isArray(saved.collectedArtifacts.asteroid)) {
-    playerState.collectedArtifacts.mine = [...saved.collectedArtifacts.mine];
-    playerState.collectedArtifacts.jungle = [...saved.collectedArtifacts.jungle];
-    playerState.collectedArtifacts.asteroid = [...saved.collectedArtifacts.asteroid];
+  if (saved.collectedArtifacts && typeof saved.collectedArtifacts === 'object') {
+    if (Array.isArray(saved.collectedArtifacts.mine)) {
+      playerState.collectedArtifacts.mine = [...saved.collectedArtifacts.mine];
+    }
+    if (Array.isArray(saved.collectedArtifacts.jungle)) {
+      playerState.collectedArtifacts.jungle = [...saved.collectedArtifacts.jungle];
+    }
+    if (Array.isArray(saved.collectedArtifacts.asteroid)) {
+      playerState.collectedArtifacts.asteroid = [...saved.collectedArtifacts.asteroid];
+    }
   }
   
   if (saved.discoveredSpecialGeodes && typeof saved.discoveredSpecialGeodes === 'object') {
-    Object.assign(playerState.discoveredSpecialGeodes, saved.discoveredSpecialGeodes);
+    for (let k in saved.discoveredSpecialGeodes) {
+      playerState.discoveredSpecialGeodes[k] = saved.discoveredSpecialGeodes[k];
+    }
   }
   
-  if (data.collectibleSerials) Object.assign(collectibleSerials, data.collectibleSerials);
+  if (data.collectibleSerials) {
+    for (let k in data.collectibleSerials) {
+      collectibleSerials[k] = data.collectibleSerials[k];
+    }
+  }
   if (data.nextSerial) nextSerial = data.nextSerial;
   if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
   if (data.eventEndTime) eventsManager.eventEndTime = data.eventEndTime;
@@ -767,12 +778,36 @@ function applySaveData(data) {
 
 export const saveToLocalStorage = saveGame;
 
-// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ ==========
+// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИКС: НЕ МЕНЯЕМ ССЫЛКУ) ==========
 export async function initializeState() {
   console.log('[Boot] Инициализация состояния...');
   
-  // ПЕРЕСОЗДАЁМ объект
-  playerState = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  // НЕ ПЕРЕСОЗДАЁМ ОБЪЕКТ — ОБНОВЛЯЕМ ПО ССЫЛКЕ
+  const defaultClone = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  
+  for (let k in defaultClone.expeditions) {
+    playerState.expeditions[k] = { ...defaultClone.expeditions[k] };
+  }
+  for (let k in defaultClone.geodes) {
+    playerState.geodes[k] = defaultClone.geodes[k];
+  }
+  for (let k in defaultClone.ingots) {
+    playerState.ingots[k] = defaultClone.ingots[k];
+  }
+  for (let k in defaultClone.minedStats) {
+    playerState.minedStats[k] = defaultClone.minedStats[k];
+  }
+  for (let k in defaultClone.discoveredSpecialGeodes) {
+    playerState.discoveredSpecialGeodes[k] = defaultClone.discoveredSpecialGeodes[k];
+  }
+  for (let k in defaultClone.collectedArtifacts) {
+    playerState.collectedArtifacts[k] = [...defaultClone.collectedArtifacts[k]];
+  }
+  playerState.player.level = defaultClone.player.level;
+  playerState.player.xp = defaultClone.player.xp;
+  playerState.player.totalOpened = defaultClone.player.totalOpened;
+  playerState.player.totalIngots = defaultClone.player.totalIngots;
+  playerState.player.totalArtifacts = defaultClone.player.totalArtifacts;
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
   
@@ -1013,8 +1048,6 @@ function showCollectibleAnimation(ingot) {
 }
 
 // ---------- ЛИДЕРБОРД (ТЕСТОВЫЙ РЕЖИМ) ----------
-const LEADERBOARD_URL = 'https://ТВОЙ-ДОМЕН/api/leaderboard';
-
 export async function updateLeaderboard() {
   if (!isTelegram || !tg.initData) {
     if (_showToast) _showToast('Лидерборд доступен только в Telegram', '⚠️');
