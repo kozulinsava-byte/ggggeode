@@ -55,13 +55,15 @@ export const LEVELS = [0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700, 3300
 export const STATUSES = ['Новичок', 'Старатель', 'Геолог', 'Шахтёр', 'Исследователь', 'Космопроходец', 'Мастер Жеод', 'Хранитель', 'Легенда'];
 
 export const DEFAULT_STATE = {
-    expeditions: { mine: { active: false, endTime: null }, jungle: { active: false, endTime: null }, asteroid: { active: false, endTime: null } },
+    expeditions: { mine: { active: false, endTime: null, scanUsed: false, specialChanceBoost: null }, jungle: { active: false, endTime: null, scanUsed: false, specialChanceBoost: null }, asteroid: { active: false, endTime: null, scanUsed: false, specialChanceBoost: null } },
     geodes: { mine: 2, jungle: 1, asteroid: 0, special_mine: 0, special_jungle: 0, special_asteroid: 0 },
     ingots: {},
     discoveredSpecialGeodes: { mine: false, jungle: false, asteroid: false },
     collectedArtifacts: { mine: [], jungle: [], asteroid: [] },
     minedStats: {},
-    player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 }
+    player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 },
+    echoCooldowns: {},
+    expeditionBonuses: {}
 };
 
 // ========== КОНФИГУРАЦИЯ ИВЕНТОВ (РОТАЦИЯ) ==========
