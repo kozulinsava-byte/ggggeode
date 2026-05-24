@@ -81,6 +81,45 @@ export function showSkeleton() {
   }
 }
 
+// ========== ГЛОБАЛЬНАЯ СИСТЕМА УПРАВЛЕНИЯ ТАЙМЕРАМИ ==========
+// Все активные интервалы хранятся здесь для гарантированной очистки
+const activeTimers = {
+  global: null,        // Основной таймер игры (checkCompletedExpeditions)
+  event: null,         // Таймер ивента на UI
+  forge: null,         // Таймер переплавки
+  signal: null,        // Таймер мини-игры
+  signalTimeout: null  // Таймаут мини-игры
+};
+
+function clearTimer(timerName) {
+  if (activeTimers[timerName]) {
+    clearInterval(activeTimers[timerName]);
+    activeTimers[timerName] = null;
+  }
+}
+
+function clearTimeoutTimer(timerName) {
+  if (activeTimers[timerName]) {
+    clearTimeout(activeTimers[timerName]);
+    activeTimers[timerName] = null;
+  }
+}
+
+function setTimerInterval(timerName, callback, interval) {
+  clearTimer(timerName); // ЖЁСТКИЙ СБРОС перед созданием нового
+  activeTimers[timerName] = setInterval(callback, interval);
+  return activeTimers[timerName];
+}
+
+function setTimerTimeout(timerName, callback, delay) {
+  clearTimeoutTimer(timerName); // ЖЁСТКИЙ СБРОС перед созданием нового
+  activeTimers[timerName] = setTimeout(() => {
+    activeTimers[timerName] = null;
+    callback();
+  }, delay);
+  return activeTimers[timerName];
+}
+
 // ---------- МЕНЕДЖЕР ИВЕНТОВ ----------
 export const eventsManager = {
   activeEvent: null,
@@ -104,7 +143,7 @@ export const eventsManager = {
   },
   
   startEventCycle() {
-    if (this.eventInterval) clearInterval(this.eventInterval);
+    clearTimer('event'); // Очищаем старый интервал ивентов
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
       this.triggerGreatSmelt();
@@ -261,10 +300,7 @@ function closeForge() {
   overlay.classList.remove('active');
   content.innerHTML = '';
   
-  if (forgeState.smeltInterval) {
-    clearInterval(forgeState.smeltInterval);
-    forgeState.smeltInterval = null;
-  }
+  clearTimer('forge'); // Очищаем таймер переплавки
   
   forgeState.active = false;
   forgeState.selectedRecipe = null;
@@ -289,9 +325,7 @@ function startSmeltProcess(recipe) {
   moltenEl.style.height = '0%';
   progressOverlay.classList.add('active');
   
-  if (forgeState.smeltInterval) clearInterval(forgeState.smeltInterval);
-  
-  forgeState.smeltInterval = setInterval(() => {
+  setTimerInterval('forge', () => {
     forgeState.smeltSeconds--;
     
     const elapsed = forgeState.smeltMaxSeconds - forgeState.smeltSeconds;
@@ -302,16 +336,14 @@ function startSmeltProcess(recipe) {
     moltenEl.style.height = progress + '%';
     
     if (forgeState.smeltSeconds <= 0) {
+      clearTimer('forge');
       finishSmeltProcess(recipe);
     }
   }, 1000);
 }
 
 function finishSmeltProcess(recipe) {
-  if (forgeState.smeltInterval) {
-    clearInterval(forgeState.smeltInterval);
-    forgeState.smeltInterval = null;
-  }
+  clearTimer('forge'); // Гарантированная очистка
   
   document.getElementById('forgeProgressOverlay').classList.remove('active');
   
@@ -508,9 +540,7 @@ let activeSignalGame = {
   points: [],
   collected: 0,
   totalPoints: 8,
-  timer: 10,
-  timerInterval: null,
-  timeoutId: null
+  timer: 10
 };
 
 export function startSignalGame(expId, bonusType) {
@@ -542,7 +572,7 @@ export function startSignalGame(expId, bonusType) {
     }, i * 480);
   }
   
-  activeSignalGame.timerInterval = setInterval(() => {
+  setTimerInterval('signal', () => {
     if (!activeSignalGame.active) return;
     activeSignalGame.timer--;
     timerEl.textContent = activeSignalGame.timer;
@@ -552,7 +582,7 @@ export function startSignalGame(expId, bonusType) {
     }
   }, 1000);
   
-  activeSignalGame.timeoutId = setTimeout(() => {
+  setTimerTimeout('signalTimeout', () => {
     if (activeSignalGame.active) {
       signalGameFail();
     }
@@ -623,14 +653,8 @@ function signalGameFail() {
 }
 
 function cleanupSignalGame() {
-  if (activeSignalGame.timerInterval) {
-    clearInterval(activeSignalGame.timerInterval);
-    activeSignalGame.timerInterval = null;
-  }
-  if (activeSignalGame.timeoutId) {
-    clearTimeout(activeSignalGame.timeoutId);
-    activeSignalGame.timeoutId = null;
-  }
+  clearTimer('signal');
+  clearTimeoutTimer('signalTimeout');
   activeSignalGame.points.forEach(p => p.remove());
   activeSignalGame.active = false;
   activeSignalGame.expId = null;
@@ -816,7 +840,6 @@ export async function initializeState() {
   initPromise = (async () => {
     console.log('[Boot] Инициализация состояния (загрузка сохранений)...');
     
-    // Загружаем сохранения поверх уже применённого DEFAULT_STATE
     try {
       const localData = localStorage.getItem('starforge_v1');
       if (localData) {
@@ -871,9 +894,6 @@ function getRandomDropFromExpedition(expId) {
   return { geodeId: expId, isSpecial: false };
 }
 
-// 🩹 ФИКС БАГА №2: Добавляем флаг чтобы избежать повторной обработки завершённой экспедиции
-let expeditionCompletionInProgress = {};
-
 function checkCompletedExpeditions() {
   if (!playerState) return;
   
@@ -883,10 +903,6 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
-      // 🩹 ФИКС: Если уже обрабатываем завершение этой экспедиции — пропускаем
-      if (expeditionCompletionInProgress[k]) continue;
-      expeditionCompletionInProgress[k] = true;
-      
       exp.active = false;
       exp.endTime = null;
       exp.scanUsed = false;
@@ -906,33 +922,27 @@ function checkCompletedExpeditions() {
         if (_showToast) _showToast(`Экспедиция завершена! +1 ${CONFIG_GEODES[drop.geodeId].name}`, CONFIG_GEODES[drop.geodeId].icon);
       }
       changed = true;
-      
-      // 🩹 ФИКС: Снимаем флаг через 1 секунду (на случай повторного входа)
-      setTimeout(() => { expeditionCompletionInProgress[k] = false; }, 1000);
     }
   }
   
   if (changed) {
     saveGame();
-    // 🩹 ФИКС БАГА №1: Принудительно обновляем таймеры на месте, не дожидаясь ререндера
+    // Обновляем таймеры немедленно
     updateExpeditionTimers();
-    // Затем вызываем полный ререндер текущей вкладки
     if (_renderCurrentTab) _renderCurrentTab();
   }
 }
 
-let globalTimerInterval = null;
-
+// ГЛОБАЛЬНЫЙ ТАЙМЕР ИГРЫ — один на всё
 export function startGlobalTimer() {
-  if (globalTimerInterval) clearInterval(globalTimerInterval);
-  globalTimerInterval = setInterval(() => {
+  clearTimer('global');
+  setTimerInterval('global', () => {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
   }, 500);
 }
 
-// 🩹 ФИКС БАГА №1: updateExpeditionTimers теперь всегда ищет актуальные DOM-элементы
 function updateExpeditionTimers() {
   if (!playerState) return;
   
@@ -940,21 +950,18 @@ function updateExpeditionTimers() {
   for (let k in CONFIG_EXPEDITIONS) {
     const exp = playerState.expeditions[k];
     const el = document.getElementById(`timer-${k}`);
-    if (!el) continue; // Элемента нет в DOM — пропускаем
+    if (!el) continue;
     
     if (exp && exp.active && exp.endTime) {
       const diff = Math.max(0, exp.endTime - now);
       if (diff <= 0) {
-        // 🩹 ФИКС БАГА №2: Если время вышло — сразу показываем завершение
         el.textContent = '✅ Завершено';
-        el.className = 'timer-badge completed';
       } else {
         const m = Math.floor(diff / 60000);
         const s = Math.ceil((diff % 60000) / 1000);
         el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
       }
     } else if (exp && !exp.active) {
-      // Экспедиция не активна — очищаем таймер
       el.textContent = '';
     }
   }
@@ -987,7 +994,7 @@ export function startExpedition(expId) {
   
   saveGame();
   
-  // 🩹 ФИКС БАГА №1: Обновляем таймер немедленно после старта
+  // Немедленно обновляем таймер
   updateExpeditionTimers();
   
   if (_renderExpeditionsTab) _renderExpeditionsTab();
