@@ -778,68 +778,82 @@ function applySaveData(data) {
 
 export const saveToLocalStorage = saveGame;
 
-// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИКС: НЕ МЕНЯЕМ ССЫЛКУ) ==========
+// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИНАЛЬНЫЙ ФИКС) ==========
+let initialized = false;
+let initPromise = null;
+
 export async function initializeState() {
-  console.log('[Boot] Инициализация состояния...');
+  if (initialized) return true;
+  if (initPromise) return initPromise;
   
-  // НЕ ПЕРЕСОЗДАЁМ ОБЪЕКТ — ОБНОВЛЯЕМ ПО ССЫЛКЕ
-  const defaultClone = JSON.parse(JSON.stringify(DEFAULT_STATE));
-  
-  for (let k in defaultClone.expeditions) {
-    playerState.expeditions[k] = { ...defaultClone.expeditions[k] };
-  }
-  for (let k in defaultClone.geodes) {
-    playerState.geodes[k] = defaultClone.geodes[k];
-  }
-  for (let k in defaultClone.ingots) {
-    playerState.ingots[k] = defaultClone.ingots[k];
-  }
-  for (let k in defaultClone.minedStats) {
-    playerState.minedStats[k] = defaultClone.minedStats[k];
-  }
-  for (let k in defaultClone.discoveredSpecialGeodes) {
-    playerState.discoveredSpecialGeodes[k] = defaultClone.discoveredSpecialGeodes[k];
-  }
-  for (let k in defaultClone.collectedArtifacts) {
-    playerState.collectedArtifacts[k] = [...defaultClone.collectedArtifacts[k]];
-  }
-  playerState.player.level = defaultClone.player.level;
-  playerState.player.xp = defaultClone.player.xp;
-  playerState.player.totalOpened = defaultClone.player.totalOpened;
-  playerState.player.totalIngots = defaultClone.player.totalIngots;
-  playerState.player.totalArtifacts = defaultClone.player.totalArtifacts;
-  playerState.echoCooldowns = {};
-  playerState.expeditionBonuses = {};
-  
-  console.log('[Boot] DEFAULT_STATE применён');
-  
-  try {
-    const localData = localStorage.getItem('starforge_v1');
-    if (localData) {
-      applySaveData(JSON.parse(localData));
-      console.log('[Boot] Local save loaded');
+  initPromise = (async () => {
+    console.log('[Boot] Инициализация состояния...');
+    
+    // Загружаем DEFAULT_STATE в существующий объект
+    const defaultClone = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    
+    for (let k in defaultClone.expeditions) {
+      playerState.expeditions[k] = { ...defaultClone.expeditions[k] };
     }
-  } catch (e) {}
-  
-  if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
+    for (let k in defaultClone.geodes) {
+      playerState.geodes[k] = defaultClone.geodes[k];
+    }
+    for (let k in defaultClone.ingots) {
+      playerState.ingots[k] = defaultClone.ingots[k];
+    }
+    for (let k in defaultClone.minedStats) {
+      playerState.minedStats[k] = defaultClone.minedStats[k];
+    }
+    for (let k in defaultClone.discoveredSpecialGeodes) {
+      playerState.discoveredSpecialGeodes[k] = defaultClone.discoveredSpecialGeodes[k];
+    }
+    playerState.collectedArtifacts = {
+      mine: [...defaultClone.collectedArtifacts.mine],
+      jungle: [...defaultClone.collectedArtifacts.jungle],
+      asteroid: [...defaultClone.collectedArtifacts.asteroid]
+    };
+    playerState.player.level = defaultClone.player.level;
+    playerState.player.xp = defaultClone.player.xp;
+    playerState.player.totalOpened = defaultClone.player.totalOpened;
+    playerState.player.totalIngots = defaultClone.player.totalIngots;
+    playerState.player.totalArtifacts = defaultClone.player.totalArtifacts;
+    playerState.echoCooldowns = {};
+    playerState.expeditionBonuses = {};
+    
+    console.log('[Boot] DEFAULT_STATE применён');
+    
+    // Загружаем сохранения
     try {
-      await new Promise((resolve) => {
-        tg.CloudStorage.getItem('starforge_save', (error, cloudData) => {
-          if (!error && cloudData) {
-            try {
-              applySaveData(JSON.parse(cloudData));
-              localStorage.setItem('starforge_v1', cloudData);
-            } catch (e) {}
-          }
-          resolve();
+      const localData = localStorage.getItem('starforge_v1');
+      if (localData) {
+        applySaveData(JSON.parse(localData));
+        console.log('[Boot] Local save loaded');
+      }
+    } catch (e) {}
+    
+    if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
+      try {
+        await new Promise((resolve) => {
+          tg.CloudStorage.getItem('starforge_save', (error, cloudData) => {
+            if (!error && cloudData) {
+              try {
+                applySaveData(JSON.parse(cloudData));
+                localStorage.setItem('starforge_v1', cloudData);
+              } catch (e) {}
+            }
+            resolve();
+          });
         });
-      });
-    } catch(e) {}
-  }
+      } catch(e) {}
+    }
+    
+    initialized = true;
+    console.log('[Boot] Инициализация завершена');
+    eventsManager.startEventCycle();
+    return true;
+  })();
   
-  console.log('[Boot] Инициализация завершена');
-  eventsManager.startEventCycle();
-  return true;
+  return initPromise;
 }
 
 // ---------- ЭКСПЕДИЦИИ ----------
