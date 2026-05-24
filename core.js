@@ -778,51 +778,45 @@ function applySaveData(data) {
 
 export const saveToLocalStorage = saveGame;
 
-// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИНАЛЬНЫЙ ФИКС) ==========
-let initialized = false;
+// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИНАЛЬНЫЙ ФИКС v2) ==========
+// СНАЧАЛА применяем DEFAULT_STATE к playerState СРАЗУ, синхронно
+(function applyDefaultStateImmediately() {
+  const d = DEFAULT_STATE;
+  
+  playerState.expeditions = {
+    mine: { ...d.expeditions.mine },
+    jungle: { ...d.expeditions.jungle },
+    asteroid: { ...d.expeditions.asteroid }
+  };
+  playerState.geodes = { ...d.geodes };
+  for (let k in d.ingots) playerState.ingots[k] = d.ingots[k];
+  for (let k in d.minedStats) playerState.minedStats[k] = d.minedStats[k];
+  playerState.discoveredSpecialGeodes = { ...d.discoveredSpecialGeodes };
+  playerState.collectedArtifacts = {
+    mine: [...d.collectedArtifacts.mine],
+    jungle: [...d.collectedArtifacts.jungle],
+    asteroid: [...d.collectedArtifacts.asteroid]
+  };
+  playerState.player.level = d.player.level;
+  playerState.player.xp = d.player.xp;
+  playerState.player.totalOpened = d.player.totalOpened;
+  playerState.player.totalIngots = d.player.totalIngots;
+  playerState.player.totalArtifacts = d.player.totalArtifacts;
+  playerState.echoCooldowns = {};
+  playerState.expeditionBonuses = {};
+  
+  console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
+})();
+
 let initPromise = null;
 
 export async function initializeState() {
-  if (initialized) return true;
   if (initPromise) return initPromise;
   
   initPromise = (async () => {
-    console.log('[Boot] Инициализация состояния...');
+    console.log('[Boot] Инициализация состояния (загрузка сохранений)...');
     
-    // Загружаем DEFAULT_STATE в существующий объект
-    const defaultClone = JSON.parse(JSON.stringify(DEFAULT_STATE));
-    
-    for (let k in defaultClone.expeditions) {
-      playerState.expeditions[k] = { ...defaultClone.expeditions[k] };
-    }
-    for (let k in defaultClone.geodes) {
-      playerState.geodes[k] = defaultClone.geodes[k];
-    }
-    for (let k in defaultClone.ingots) {
-      playerState.ingots[k] = defaultClone.ingots[k];
-    }
-    for (let k in defaultClone.minedStats) {
-      playerState.minedStats[k] = defaultClone.minedStats[k];
-    }
-    for (let k in defaultClone.discoveredSpecialGeodes) {
-      playerState.discoveredSpecialGeodes[k] = defaultClone.discoveredSpecialGeodes[k];
-    }
-    playerState.collectedArtifacts = {
-      mine: [...defaultClone.collectedArtifacts.mine],
-      jungle: [...defaultClone.collectedArtifacts.jungle],
-      asteroid: [...defaultClone.collectedArtifacts.asteroid]
-    };
-    playerState.player.level = defaultClone.player.level;
-    playerState.player.xp = defaultClone.player.xp;
-    playerState.player.totalOpened = defaultClone.player.totalOpened;
-    playerState.player.totalIngots = defaultClone.player.totalIngots;
-    playerState.player.totalArtifacts = defaultClone.player.totalArtifacts;
-    playerState.echoCooldowns = {};
-    playerState.expeditionBonuses = {};
-    
-    console.log('[Boot] DEFAULT_STATE применён');
-    
-    // Загружаем сохранения
+    // Загружаем сохранения поверх уже применённого DEFAULT_STATE
     try {
       const localData = localStorage.getItem('starforge_v1');
       if (localData) {
@@ -847,7 +841,6 @@ export async function initializeState() {
       } catch(e) {}
     }
     
-    initialized = true;
     console.log('[Boot] Инициализация завершена');
     eventsManager.startEventCycle();
     return true;
