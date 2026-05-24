@@ -1028,10 +1028,15 @@ export function renderEventsTab() {
   updateEventTimerInterval();
 }
 
+// 🩹 ФИКС БАГА №3: Гарантированная очистка старого интервала перед созданием нового
 let eventTimerInterval = null;
 
 function updateEventTimerInterval() {
-  if (eventTimerInterval) clearInterval(eventTimerInterval);
+  // Всегда сначала убиваем старый интервал
+  if (eventTimerInterval) {
+    clearInterval(eventTimerInterval);
+    eventTimerInterval = null;
+  }
   
   eventTimerInterval = setInterval(() => {
     const timerEl = document.getElementById('eventTimer');
