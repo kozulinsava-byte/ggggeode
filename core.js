@@ -84,11 +84,11 @@ export function showSkeleton() {
 // ========== ГЛОБАЛЬНАЯ СИСТЕМА УПРАВЛЕНИЯ ТАЙМЕРАМИ ==========
 // Все активные интервалы хранятся здесь для гарантированной очистки
 const activeTimers = {
-  global: null,        // Основной таймер игры (checkCompletedExpeditions)
-  event: null,         // Таймер ивента на UI
-  forge: null,         // Таймер переплавки
-  signal: null,        // Таймер мини-игры
-  signalTimeout: null  // Таймаут мини-игры
+  global: null,
+  event: null,
+  forge: null,
+  signal: null,
+  signalTimeout: null
 };
 
 function clearTimer(timerName) {
@@ -106,13 +106,13 @@ function clearTimeoutTimer(timerName) {
 }
 
 function setTimerInterval(timerName, callback, interval) {
-  clearTimer(timerName); // ЖЁСТКИЙ СБРОС перед созданием нового
+  clearTimer(timerName);
   activeTimers[timerName] = setInterval(callback, interval);
   return activeTimers[timerName];
 }
 
 function setTimerTimeout(timerName, callback, delay) {
-  clearTimeoutTimer(timerName); // ЖЁСТКИЙ СБРОС перед созданием нового
+  clearTimeoutTimer(timerName);
   activeTimers[timerName] = setTimeout(() => {
     activeTimers[timerName] = null;
     callback();
@@ -143,7 +143,7 @@ export const eventsManager = {
   },
   
   startEventCycle() {
-    clearTimer('event'); // Очищаем старый интервал ивентов
+    clearTimer('event');
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
       this.triggerGreatSmelt();
@@ -300,7 +300,7 @@ function closeForge() {
   overlay.classList.remove('active');
   content.innerHTML = '';
   
-  clearTimer('forge'); // Очищаем таймер переплавки
+  clearTimer('forge');
   
   forgeState.active = false;
   forgeState.selectedRecipe = null;
@@ -343,7 +343,7 @@ function startSmeltProcess(recipe) {
 }
 
 function finishSmeltProcess(recipe) {
-  clearTimer('forge'); // Гарантированная очистка
+  clearTimer('forge');
   
   document.getElementById('forgeProgressOverlay').classList.remove('active');
   
@@ -480,7 +480,7 @@ export function addXP(amount) {
   
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
-  saveGame();
+  // УБИРАЕМ saveGame отсюда — будет вызываться явно после всех изменений
 }
 
 export function sellIngot(ingotId) {
@@ -903,6 +903,7 @@ function checkCompletedExpeditions() {
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
+      // 🩹 ФИКС: СНАЧАЛА сбрасываем состояние, ПОТОМ всё остальное
       exp.active = false;
       exp.endTime = null;
       exp.scanUsed = false;
@@ -926,8 +927,8 @@ function checkCompletedExpeditions() {
   }
   
   if (changed) {
+    // 🩹 ФИКС: saveGame ТОЛЬКО после того как все active сброшены
     saveGame();
-    // Обновляем таймеры немедленно
     updateExpeditionTimers();
     if (_renderCurrentTab) _renderCurrentTab();
   }
@@ -992,6 +993,7 @@ export function startExpedition(expId) {
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
   
+  // 🩹 ФИКС: saveGame ПОСЛЕ установки active, а не внутри addXP
   saveGame();
   
   // Немедленно обновляем таймер
