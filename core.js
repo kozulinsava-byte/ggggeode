@@ -479,7 +479,6 @@ export function addXP(amount) {
   
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
-  // saveGame вызывается явно после всех изменений, не здесь
 }
 
 export function sellIngot(ingotId) {
@@ -925,29 +924,7 @@ function checkCompletedExpeditions() {
   
   if (changed) {
     saveGame();
-    // 🩹 ФИКС: точечное обновление DOM без перерисовки всей вкладки
-    updateExpeditionTimers();
-    restoreExpeditionButtons();
-  }
-}
-
-// 🩹 НОВАЯ ФУНКЦИЯ: восстанавливает кнопки "Подробнее" после завершения экспедиции
-function restoreExpeditionButtons() {
-  for (let k in playerState.expeditions) {
-    const exp = playerState.expeditions[k];
-    if (!exp.active) {
-      const actionEl = document.querySelector(`[data-expedition-click="${k}"] .expedition-action`);
-      if (actionEl) {
-        actionEl.innerHTML = `<button class="small-btn" data-info-exp="${k}">Подробнее</button>`;
-        const btn = actionEl.querySelector('.small-btn');
-        if (btn) {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            import('./ui.js?v=001').then(ui => ui.showExpeditionInfoModal(k));
-          });
-        }
-      }
-    }
+    if (_renderCurrentTab) _renderCurrentTab();
   }
 }
 
@@ -995,7 +972,6 @@ function updateEventTimer() {
   }
 }
 
-// 🩹 ПОЛНОСТЬЮ ПЕРЕПИСАННАЯ ФУНКЦИЯ startExpedition
 export function startExpedition(expId) {
   if (!playerState) return;
   
@@ -1010,14 +986,7 @@ export function startExpedition(expId) {
   
   saveGame();
   
-  // 🩹 ФИКС: НЕ перерисовываем всю вкладку — обновляем только кнопку на таймер
-  const actionEl = document.querySelector(`[data-expedition-click="${expId}"] .expedition-action`);
-  if (actionEl) {
-    const diff = Math.max(0, exp.endTime - Date.now());
-    const m = Math.floor(diff / 60000);
-    const s = Math.ceil((diff % 60000) / 1000);
-    actionEl.innerHTML = `<div class="timer-badge" id="timer-${expId}">⏳ ${m}:${s.toString().padStart(2, '0')}</div>`;
-  }
+  if (_renderExpeditionsTab) _renderExpeditionsTab();
   
   if (_showToast) _showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
   sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${CONFIG_EXPEDITIONS[expId].name}`);
