@@ -442,7 +442,6 @@ export function addXP(amount) {
   
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
-  // НЕ вызываем saveGame здесь — сохранение вызывается явно после всех изменений
 }
 
 export function sellIngot(ingotId) {
@@ -908,7 +907,7 @@ export function startGlobalTimer() {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
-  }, 500);
+  }, 1000);
 }
 
 function updateExpeditionTimers() {
@@ -920,9 +919,13 @@ function updateExpeditionTimers() {
     const el = document.getElementById(`timer-${k}`);
     if (el && exp && exp.active && exp.endTime) {
       const diff = Math.max(0, exp.endTime - now);
-      const m = Math.floor(diff / 60000);
-      const s = Math.ceil((diff % 60000) / 1000);
-      el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
+      if (diff <= 0) {
+        el.textContent = '✅ Завершено';
+      } else {
+        const m = Math.floor(diff / 60000);
+        const s = Math.ceil((diff % 60000) / 1000);
+        el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
+      }
     }
   }
 }
