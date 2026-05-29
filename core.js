@@ -442,7 +442,7 @@ export function addXP(amount) {
   
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
-  saveGame();
+  // НЕ вызываем saveGame здесь — сохранение вызывается явно после всех изменений
 }
 
 export function sellIngot(ingotId) {
