@@ -81,44 +81,6 @@ export function showSkeleton() {
   }
 }
 
-// ========== ГЛОБАЛЬНАЯ СИСТЕМА УПРАВЛЕНИЯ ТАЙМЕРАМИ ==========
-const activeTimers = {
-  global: null,
-  event: null,
-  forge: null,
-  signal: null,
-  signalTimeout: null
-};
-
-function clearTimer(timerName) {
-  if (activeTimers[timerName]) {
-    clearInterval(activeTimers[timerName]);
-    activeTimers[timerName] = null;
-  }
-}
-
-function clearTimeoutTimer(timerName) {
-  if (activeTimers[timerName]) {
-    clearTimeout(activeTimers[timerName]);
-    activeTimers[timerName] = null;
-  }
-}
-
-function setTimerInterval(timerName, callback, interval) {
-  clearTimer(timerName);
-  activeTimers[timerName] = setInterval(callback, interval);
-  return activeTimers[timerName];
-}
-
-function setTimerTimeout(timerName, callback, delay) {
-  clearTimeoutTimer(timerName);
-  activeTimers[timerName] = setTimeout(() => {
-    activeTimers[timerName] = null;
-    callback();
-  }, delay);
-  return activeTimers[timerName];
-}
-
 // ---------- МЕНЕДЖЕР ИВЕНТОВ ----------
 export const eventsManager = {
   activeEvent: null,
@@ -142,7 +104,7 @@ export const eventsManager = {
   },
   
   startEventCycle() {
-    clearTimer('event');
+    if (this.eventInterval) clearInterval(this.eventInterval);
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
       this.triggerGreatSmelt();
@@ -298,9 +260,6 @@ function closeForge() {
   
   overlay.classList.remove('active');
   content.innerHTML = '';
-  
-  clearTimer('forge');
-  
   forgeState.active = false;
   forgeState.selectedRecipe = null;
 }
@@ -324,7 +283,9 @@ function startSmeltProcess(recipe) {
   moltenEl.style.height = '0%';
   progressOverlay.classList.add('active');
   
-  setTimerInterval('forge', () => {
+  if (forgeState.smeltInterval) clearInterval(forgeState.smeltInterval);
+  
+  forgeState.smeltInterval = setInterval(() => {
     forgeState.smeltSeconds--;
     
     const elapsed = forgeState.smeltMaxSeconds - forgeState.smeltSeconds;
@@ -335,14 +296,16 @@ function startSmeltProcess(recipe) {
     moltenEl.style.height = progress + '%';
     
     if (forgeState.smeltSeconds <= 0) {
-      clearTimer('forge');
       finishSmeltProcess(recipe);
     }
   }, 1000);
 }
 
 function finishSmeltProcess(recipe) {
-  clearTimer('forge');
+  if (forgeState.smeltInterval) {
+    clearInterval(forgeState.smeltInterval);
+    forgeState.smeltInterval = null;
+  }
   
   document.getElementById('forgeProgressOverlay').classList.remove('active');
   
@@ -479,6 +442,7 @@ export function addXP(amount) {
   
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
+  saveGame();
 }
 
 export function sellIngot(ingotId) {
@@ -538,7 +502,9 @@ let activeSignalGame = {
   points: [],
   collected: 0,
   totalPoints: 8,
-  timer: 10
+  timer: 10,
+  timerInterval: null,
+  timeoutId: null
 };
 
 export function startSignalGame(expId, bonusType) {
@@ -570,7 +536,7 @@ export function startSignalGame(expId, bonusType) {
     }, i * 480);
   }
   
-  setTimerInterval('signal', () => {
+  activeSignalGame.timerInterval = setInterval(() => {
     if (!activeSignalGame.active) return;
     activeSignalGame.timer--;
     timerEl.textContent = activeSignalGame.timer;
@@ -580,7 +546,7 @@ export function startSignalGame(expId, bonusType) {
     }
   }, 1000);
   
-  setTimerTimeout('signalTimeout', () => {
+  activeSignalGame.timeoutId = setTimeout(() => {
     if (activeSignalGame.active) {
       signalGameFail();
     }
@@ -651,8 +617,14 @@ function signalGameFail() {
 }
 
 function cleanupSignalGame() {
-  clearTimer('signal');
-  clearTimeoutTimer('signalTimeout');
+  if (activeSignalGame.timerInterval) {
+    clearInterval(activeSignalGame.timerInterval);
+    activeSignalGame.timerInterval = null;
+  }
+  if (activeSignalGame.timeoutId) {
+    clearTimeout(activeSignalGame.timeoutId);
+    activeSignalGame.timeoutId = null;
+  }
   activeSignalGame.points.forEach(p => p.remove());
   activeSignalGame.active = false;
   activeSignalGame.expId = null;
@@ -800,7 +772,7 @@ function applySaveData(data) {
 
 export const saveToLocalStorage = saveGame;
 
-// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ ==========
+// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИКС: НЕ МЕНЯЕМ ССЫЛКУ) ==========
 (function applyDefaultStateImmediately() {
   const d = DEFAULT_STATE;
   
@@ -928,9 +900,11 @@ function checkCompletedExpeditions() {
   }
 }
 
+let globalTimerInterval = null;
+
 export function startGlobalTimer() {
-  clearTimer('global');
-  setTimerInterval('global', () => {
+  if (globalTimerInterval) clearInterval(globalTimerInterval);
+  globalTimerInterval = setInterval(() => {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
@@ -944,17 +918,11 @@ function updateExpeditionTimers() {
   for (let k in CONFIG_EXPEDITIONS) {
     const exp = playerState.expeditions[k];
     const el = document.getElementById(`timer-${k}`);
-    if (!el) continue;
-    
-    if (exp && exp.active && exp.endTime) {
+    if (el && exp && exp.active && exp.endTime) {
       const diff = Math.max(0, exp.endTime - now);
-      if (diff <= 0) {
-        el.textContent = '✅ Завершено';
-      } else {
-        const m = Math.floor(diff / 60000);
-        const s = Math.ceil((diff % 60000) / 1000);
-        el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
-      }
+      const m = Math.floor(diff / 60000);
+      const s = Math.ceil((diff % 60000) / 1000);
+      el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
     }
   }
 }
@@ -985,9 +953,7 @@ export function startExpedition(expId) {
   delete playerState.expeditionBonuses[expId];
   
   saveGame();
-  
   if (_renderExpeditionsTab) _renderExpeditionsTab();
-  
   if (_showToast) _showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
   sendBotNotification(`⛏️ Игрок отправился в экспедицию: ${CONFIG_EXPEDITIONS[expId].name}`);
 }
