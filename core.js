@@ -442,6 +442,7 @@ export function addXP(amount) {
   
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
+  saveGame();
 }
 
 export function sellIngot(ingotId) {
@@ -907,7 +908,7 @@ export function startGlobalTimer() {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
-  }, 1000);
+  }, 500);
 }
 
 function updateExpeditionTimers() {
@@ -919,13 +920,9 @@ function updateExpeditionTimers() {
     const el = document.getElementById(`timer-${k}`);
     if (el && exp && exp.active && exp.endTime) {
       const diff = Math.max(0, exp.endTime - now);
-      if (diff <= 0) {
-        el.textContent = '✅ Завершено';
-      } else {
-        const m = Math.floor(diff / 60000);
-        const s = Math.ceil((diff % 60000) / 1000);
-        el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
-      }
+      const m = Math.floor(diff / 60000);
+      const s = Math.ceil((diff % 60000) / 1000);
+      el.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')}`;
     }
   }
 }
@@ -1398,7 +1395,6 @@ function finishBrawlOpening() {
   }
 }
 
-// Привязка событий — с проверкой что DOM готов
 if (brawlGeode) {
   brawlGeode.addEventListener('click', handleBrawlTap);
 }
