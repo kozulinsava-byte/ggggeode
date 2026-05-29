@@ -1,6 +1,6 @@
 // ========== MAIN МОДУЛЬ: АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ ==========
-import { initializeState, startGlobalTimer, showSkeleton } from './core.js?v=001';
-import { setActiveTab, closeShowcase, closeModal } from './ui.js?v=001';
+import { initializeState, startGlobalTimer, showSkeleton } from './core.js';
+import { setActiveTab, closeShowcase, closeModal } from './ui.js';
 
 // Тихая инициализация Telegram
 const tg = window.Telegram?.WebApp;
@@ -62,7 +62,7 @@ class AssetManager {
     const paths = new Set();
     
     try {
-      const module = await import('./config.js?v=001');
+      const module = await import('./config.js');
       const { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS } = module;
       
       Object.values(CONFIG_ITEMS).forEach(item => {
