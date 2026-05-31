@@ -25,7 +25,6 @@ const modalContent = document.getElementById('modalContent');
 export let currentTab = 'expeditions';
 export let inventorySubTab = 'geodes';
 export let collectionSubTab = 'encyclopedia';
-export let encyclopediaFilter = 'all';
 
 // ID интервала для живого таймера в модалке
 let modalTimerInterval = null;
@@ -141,6 +140,29 @@ export function openShowcase(ingotId, isMystery = false) {
   let rarityClass = ingot.rarityClass;
   let idHtml = '';
 
+  // Цвета для тегов редкости
+  const rarityColors = {
+    'common': '#A0A0A0',
+    'rare': '#4A9CFF',
+    'epic': '#B44AFF',
+    'legendary': '#FFD700',
+    'collectible': '#FF64FF'
+  };
+  
+  // Названия типов добычи
+  const sourceNames = {
+    'expedition': 'Экспедиционный',
+    'crafted': 'Крафтовый',
+    'meteor': 'Метеоритный'
+  };
+  
+  // Цвета для тегов типа добычи
+  const sourceColors = {
+    'expedition': '#50C878',
+    'crafted': '#FF8C00',
+    'meteor': '#FF4444'
+  };
+
   if (!discovered && !ingot.isCollectible) {
     name = 'Неизвестный материал';
     const locationName = CONFIG_EXPEDITIONS[ingot.location]?.name || 'неизвестной локации';
@@ -158,16 +180,29 @@ export function openShowcase(ingotId, isMystery = false) {
     rarityClass = 'common';
     idHtml = `<div class="showcase-id"><span class="showcase-id-label">Статус</span><span class="showcase-id-value" style="color:var(--text-muted);">НЕ ОТКРЫТ</span></div>`;
   } else {
-    idHtml = ingot.isCollectible
-      ? `<div class="showcase-serial"><span class="showcase-serial-label">Серийный номер</span><span class="showcase-serial-value">#${getSerialForCollectible(ingotId)}</span></div>`
-      : `<div class="showcase-id"><span class="showcase-id-label">Добыто всего</span><span class="showcase-id-value">${state.minedStats[ingotId] || 0} ед.</span></div>`;
+    // ДВЕ ПЛАШКИ: Редкость и Тип добычи
+    const rarityColor = rarityColors[ingot.rarityLevel] || '#A0A0A0';
+    const sourceColor = sourceColors[ingot.sourceType] || '#A0A0A0';
+    const sourceName = sourceNames[ingot.sourceType] || ingot.sourceType;
+    
+    idHtml = `
+      <div style="display:flex; gap:8px; justify-content:center; margin:12px 0;">
+        <span style="background:${rarityColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${ingot.rarity}</span>
+        <span style="background:${sourceColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${sourceName}</span>
+      </div>
+    `;
+    
+    if (ingot.isCollectible) {
+      idHtml += `<div class="showcase-serial"><span class="showcase-serial-label">Серийный номер</span><span class="showcase-serial-value">#${getSerialForCollectible(ingotId)}</span></div>`;
+    } else {
+      idHtml += `<div class="showcase-id"><span class="showcase-id-label">Добыто всего</span><span class="showcase-id-value">${state.minedStats[ingotId] || 0} ед.</span></div>`;
+    }
   }
 
   let html = `
     <div class="showcase-image" id="showcaseImage"></div>
     <div class="showcase-info">
       <div class="showcase-name">${name}</div>
-      <div class="showcase-rarity ${rarityClass}">${rarity}</div>
       ${idHtml}
       <div class="showcase-description">${desc}</div>
       <div class="showcase-count">${owned ? `В наличии: ${state.ingots[ingotId]} шт.` : 'Ещё не найден'}</div>
@@ -876,7 +911,7 @@ export function renderInventoryTab() {
   document.querySelectorAll('[data-ingot]').forEach((c) => c.addEventListener('click', () => openShowcase(c.dataset.ingot)));
 }
 
-// ========== ОБНОВЛЁННАЯ КОЛЛЕКЦИЯ С ФИЛЬТРАМИ ==========
+// ========== ОБНОВЛЁННАЯ КОЛЛЕКЦИЯ: ПОЛОЧКИ БЕЗ ФИЛЬТРОВ ==========
 export function renderCollectionTab() {
   const state = getPlayerState();
   const totalRegular = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible).length;
@@ -898,68 +933,71 @@ export function renderCollectionTab() {
   `;
 
   if (collectionSubTab === 'encyclopedia') {
-    // ========== ФИЛЬТРЫ ЭНЦИКЛОПЕДИИ ==========
-    const sourceLabels = {
-      'all': '🌐 Все',
-      'expedition': '⛏️ Экспедиции',
-      'crafted': '🔥 Крафт',
-      'mine': '🪨 Шахты',
-      'jungle': '🌴 Джунгли',
-      'asteroid': '🌌 Астероиды'
-    };
-    
-    html += '<div class="inventory-subtabs" style="flex-wrap:wrap; gap:6px;">';
-    for (let key in sourceLabels) {
-      html += `<button class="subtab-btn ${encyclopediaFilter === key ? 'active' : ''}" data-filter="${key}" style="font-size:10px; padding:8px 6px;">${sourceLabels[key]}</button>`;
-    }
-    html += '</div>';
-    
     const regularIngots = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible);
     
-    // Применяем фильтр
-    let filteredIngots = regularIngots;
-    if (encyclopediaFilter === 'expedition') {
-      filteredIngots = regularIngots.filter(i => i.sourceType === 'expedition');
-    } else if (encyclopediaFilter === 'crafted') {
-      filteredIngots = regularIngots.filter(i => i.sourceType === 'crafted');
-    } else if (encyclopediaFilter === 'mine') {
-      filteredIngots = regularIngots.filter(i => i.location === 'mine');
-    } else if (encyclopediaFilter === 'jungle') {
-      filteredIngots = regularIngots.filter(i => i.location === 'jungle');
-    } else if (encyclopediaFilter === 'asteroid') {
-      filteredIngots = regularIngots.filter(i => i.location === 'asteroid');
-    }
+    // Названия типов добычи для тегов
+    const sourceNames = {
+      'expedition': 'Экспедиция',
+      'crafted': 'Крафт',
+      'meteor': 'Метеорит'
+    };
     
-    html += '<div class="grid-container">';
-    filteredIngots.forEach((ing) => {
+    // Функция для рендера карточки слитка
+    function renderIngotCard(ing) {
       const discovered = state.minedStats[ing.id] > 0;
       const cardClass = discovered ? 'collection-card' : 'collection-card silhouette';
       
-      let sourceLabel = '';
-      if (ing.sourceType === 'expedition') sourceLabel = '⛏️ Экспедиция';
-      else if (ing.sourceType === 'crafted') sourceLabel = '🔥 Крафт';
+      let sourceLabel = sourceNames[ing.sourceType] || ing.sourceType;
       
-      let locationLabel = '';
-      if (ing.location === 'mine') locationLabel = '🪨 Шахты';
-      else if (ing.location === 'jungle') locationLabel = '🌴 Джунгли';
-      else if (ing.location === 'asteroid') locationLabel = '🌌 Астероиды';
-      else if (ing.location === 'craft') locationLabel = '🏭 Кузня';
+      let tagsHtml = '';
+      if (discovered) {
+        // Теги видны только если слиток открыт
+        tagsHtml = `
+          <div style="font-size:9px; color:var(--text-secondary); margin:2px 0;">${ing.rarity} | ${sourceLabel}</div>
+        `;
+      }
       
-      html += `
+      return `
         <div class="${cardClass}" data-ingot="${ing.id}">
           <div class="card-icon" id="enc-${ing.id}"></div>
           <div class="card-name">${discovered ? ing.name : 'Неизвестный материал'}</div>
-          <div style="font-size:9px; color:var(--text-secondary); margin:2px 0;">${ing.rarity} | ${sourceLabel}</div>
-          <div style="font-size:8px; color:var(--text-muted);">${locationLabel}</div>
+          ${tagsHtml}
           <div class="card-count-badge">${discovered ? `Добыто: ${state.minedStats[ing.id]}` : '???'}</div>
         </div>
       `;
+    }
+    
+    // ===== ПОЛОЧКА 1: ЭКСПЕДИЦИИ =====
+    html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-gold);">⛏️ Шахты и Экспедиции</div>';
+    html += '<div class="grid-container">';
+    regularIngots.filter(i => i.sourceType === 'expedition').forEach(ing => {
+      html += renderIngotCard(ing);
     });
     html += '</div>';
     
+    // ===== ПОЛОЧКА 2: КРАФТ =====
+    html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-orange);">🔥 Мастерская Крафта</div>';
+    html += '<div class="grid-container">';
+    regularIngots.filter(i => i.sourceType === 'crafted').forEach(ing => {
+      html += renderIngotCard(ing);
+    });
+    html += '</div>';
+    
+    // ===== ПОЛОЧКА 3: МЕТЕОРИТЫ (задел) =====
+    const meteorIngots = regularIngots.filter(i => i.sourceType === 'meteor');
+    if (meteorIngots.length > 0) {
+      html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-purple);">☄️ Метеоритный Шторм</div>';
+      html += '<div class="grid-container">';
+      meteorIngots.forEach(ing => {
+        html += renderIngotCard(ing);
+      });
+      html += '</div>';
+    }
+    
     mainContent.innerHTML = html;
     
-    filteredIngots.forEach((ing) => {
+    // Рендер иконок
+    regularIngots.forEach((ing) => {
       const el = document.getElementById(`enc-${ing.id}`);
       if (el) {
         if (state.minedStats[ing.id] > 0) {
@@ -969,14 +1007,6 @@ export function renderCollectionTab() {
         }
       }
     });
-    
-    // Обработчики фильтров
-    document.querySelectorAll('[data-filter]').forEach((b) =>
-      b.addEventListener('click', () => {
-        encyclopediaFilter = b.dataset.filter;
-        renderCollectionTab();
-      })
-    );
     
   } else {
     // Зал Славы (коллекционные артефакты) — без изменений
@@ -1008,6 +1038,7 @@ export function renderCollectionTab() {
     });
   }
 
+  // Обработчики подвкладок Энциклопедия / Зал Славы
   document.querySelectorAll('[data-subtab]').forEach((b) =>
     b.addEventListener('click', () => {
       collectionSubTab = b.dataset.subtab;
@@ -1015,6 +1046,7 @@ export function renderCollectionTab() {
     })
   );
   
+  // Обработчики кликов по слиткам
   document.querySelectorAll('[data-ingot]').forEach((c) =>
     c.addEventListener('click', () => {
       const ing = CONFIG_ITEMS[c.dataset.ingot];
