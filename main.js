@@ -58,13 +58,23 @@ function hidePreloader() {
   }
 }
 
-// ---------- ASSET MANAGER (ФОНОВАЯ ЗАГРУЗКА, БЕЗ ЗАСОРЕНИЯ КОНСОЛИ) ----------
+// ---------- ПРОВЕРКА НАЛИЧИЯ ПАПКИ ASSETS ----------
+async function checkAssetsExist() {
+  return new Promise((resolve) => {
+    const testImg = new Image();
+    testImg.onload = () => resolve(true);
+    testImg.onerror = () => resolve(false);
+    testImg.src = 'assets/ingots/copper.png';
+    setTimeout(() => resolve(false), 2000);
+  });
+}
+
+// ---------- ASSET MANAGER (ТОЛЬКО ЕСЛИ ПАПКА ЕСТЬ) ----------
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
     this.loadedCount = 0;
     this.maxRetries = 1;
-    this.assetsMissing = false; // 🩹 Флаг: папка assets не найдена
   }
 
   async collectPaths() {
@@ -89,11 +99,7 @@ class AssetManager {
       Object.values(CONFIG_EXPEDITIONS).forEach(exp => {
         if (exp.imagePath) paths.add(exp.imagePath);
       });
-      
-      console.log('[AssetManager] Пути собраны:', paths.size);
-    } catch(e) {
-      console.warn('[AssetManager] Ошибка сбора путей:', e);
-    }
+    } catch(e) {}
     
     return [...paths];
   }
@@ -116,18 +122,6 @@ class AssetManager {
       };
       
       img.onerror = () => {
-        // 🩹 Если первая же картинка не загрузилась — папки assets нет, не мучаемся
-        if (retryCount === 0 && this.loadedCount === 0) {
-          this.assetsMissing = true;
-        }
-        
-        if (this.assetsMissing) {
-          // Папки нет — просто пропускаем, не засоряем консоль
-          this.updateProgress();
-          resolve({ src, success: false });
-          return;
-        }
-        
         if (retryCount < this.maxRetries) {
           setTimeout(() => {
             this.loadAsset(src, retryCount + 1).then(resolve);
@@ -162,20 +156,26 @@ class AssetManager {
   }
 }
 
-// ========== BOOT SEQUENCE (ФИКС: ПРЕЛОАДЕР МГНОВЕННО, АССЕТЫ В ФОНЕ) ==========
+// ========== BOOT SEQUENCE ==========
 async function boot() {
   console.log('[Boot] ========== ЗАГРУЗКА ИГРЫ ==========');
   
-  // 🩹 Прелоадер УЖЕ показан в HTML и в top-level коде
   updatePreloader(0, 'Инициализация...');
   showSkeleton();
   
-  // 🩹 ШАГ 2: Загружаем ассеты В ФОНЕ, не блокируя запуск
-  console.log('[Boot] Загрузка ассетов (фоновый режим)...');
-  const assetManager = new AssetManager();
-  assetManager.start().catch(e => console.warn('[AssetManager] Фоновая загрузка завершилась с ошибкой:', e));
+  // 🩹 Проверяем, есть ли папка assets
+  const assetsExist = await checkAssetsExist();
   
-  // 🩹 ШАГ 3: Инициализация состояния НЕМЕДЛЕННО, не ждём ассеты
+  if (assetsExist) {
+    console.log('[Boot] Загрузка ассетов (фоновый режим)...');
+    const assetManager = new AssetManager();
+    assetManager.start().catch(() => {});
+  } else {
+    console.log('[Boot] Папка assets не найдена — пропускаем загрузку картинок');
+    updatePreloader(90, 'Запуск...');
+  }
+  
+  // 🩹 Инициализация состояния НЕМЕДЛЕННО
   console.log('[Boot] Инициализация состояния...');
   updatePreloader(50, 'Загрузка данных...');
   const success = await initializeState();
@@ -186,12 +186,12 @@ async function boot() {
     return;
   }
   
-  // 🩹 ШАГ 4: Запуск систем сразу после инициализации
+  // 🩹 Запуск систем
   console.log('[Boot] Запуск таймеров...');
   updatePreloader(70, 'Запуск систем...');
   startGlobalTimer();
   
-  // 🩹 ШАГ 5: Запуск UI
+  // 🩹 Запуск UI
   console.log('[Boot] Запуск интерфейса...');
   updatePreloader(90, 'Запуск интерфейса...');
   
@@ -201,7 +201,6 @@ async function boot() {
   
   updatePreloader(100, 'Готово!');
   
-  // 🩹 Показываем игру через 200мс, не ждём загрузки ассетов
   setTimeout(() => {
     hidePreloader();
     setActiveTab('expeditions');
@@ -209,7 +208,7 @@ async function boot() {
   }, 200);
 }
 
-// 🩹 ФИКС: Запускаем boot СРАЗУ, DOM уже готов
+// 🩹 Запускаем boot
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     updatePreloader(0, 'Старт...');
