@@ -58,12 +58,13 @@ function hidePreloader() {
   }
 }
 
-// ---------- ASSET MANAGER (ФОНОВАЯ ЗАГРУЗКА) ----------
+// ---------- ASSET MANAGER (ФОНОВАЯ ЗАГРУЗКА, БЕЗ ЗАСОРЕНИЯ КОНСОЛИ) ----------
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
     this.loadedCount = 0;
-    this.maxRetries = 1; // 🩹 Уменьшаем ретраи для скорости
+    this.maxRetries = 1;
+    this.assetsMissing = false; // 🩹 Флаг: папка assets не найдена
   }
 
   async collectPaths() {
@@ -115,10 +116,22 @@ class AssetManager {
       };
       
       img.onerror = () => {
+        // 🩹 Если первая же картинка не загрузилась — папки assets нет, не мучаемся
+        if (retryCount === 0 && this.loadedCount === 0) {
+          this.assetsMissing = true;
+        }
+        
+        if (this.assetsMissing) {
+          // Папки нет — просто пропускаем, не засоряем консоль
+          this.updateProgress();
+          resolve({ src, success: false });
+          return;
+        }
+        
         if (retryCount < this.maxRetries) {
           setTimeout(() => {
             this.loadAsset(src, retryCount + 1).then(resolve);
-          }, 200); // 🩹 Уменьшаем задержку ретрая
+          }, 200);
         } else {
           this.updateProgress();
           resolve({ src, success: false });
