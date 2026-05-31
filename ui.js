@@ -25,6 +25,7 @@ const modalContent = document.getElementById('modalContent');
 export let currentTab = 'expeditions';
 export let inventorySubTab = 'geodes';
 export let collectionSubTab = 'encyclopedia';
+export let encyclopediaFilter = 'all';
 
 // ID интервала для живого таймера в модалке
 let modalTimerInterval = null;
@@ -875,6 +876,7 @@ export function renderInventoryTab() {
   document.querySelectorAll('[data-ingot]').forEach((c) => c.addEventListener('click', () => openShowcase(c.dataset.ingot)));
 }
 
+// ========== ОБНОВЛЁННАЯ КОЛЛЕКЦИЯ С ФИЛЬТРАМИ ==========
 export function renderCollectionTab() {
   const state = getPlayerState();
   const totalRegular = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible).length;
@@ -896,15 +898,59 @@ export function renderCollectionTab() {
   `;
 
   if (collectionSubTab === 'encyclopedia') {
+    // ========== ФИЛЬТРЫ ЭНЦИКЛОПЕДИИ ==========
+    const sourceLabels = {
+      'all': '🌐 Все',
+      'expedition': '⛏️ Экспедиции',
+      'crafted': '🔥 Крафт',
+      'mine': '🪨 Шахты',
+      'jungle': '🌴 Джунгли',
+      'asteroid': '🌌 Астероиды'
+    };
+    
+    html += '<div class="inventory-subtabs" style="flex-wrap:wrap; gap:6px;">';
+    for (let key in sourceLabels) {
+      html += `<button class="subtab-btn ${encyclopediaFilter === key ? 'active' : ''}" data-filter="${key}" style="font-size:10px; padding:8px 6px;">${sourceLabels[key]}</button>`;
+    }
+    html += '</div>';
+    
     const regularIngots = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible);
+    
+    // Применяем фильтр
+    let filteredIngots = regularIngots;
+    if (encyclopediaFilter === 'expedition') {
+      filteredIngots = regularIngots.filter(i => i.sourceType === 'expedition');
+    } else if (encyclopediaFilter === 'crafted') {
+      filteredIngots = regularIngots.filter(i => i.sourceType === 'crafted');
+    } else if (encyclopediaFilter === 'mine') {
+      filteredIngots = regularIngots.filter(i => i.location === 'mine');
+    } else if (encyclopediaFilter === 'jungle') {
+      filteredIngots = regularIngots.filter(i => i.location === 'jungle');
+    } else if (encyclopediaFilter === 'asteroid') {
+      filteredIngots = regularIngots.filter(i => i.location === 'asteroid');
+    }
+    
     html += '<div class="grid-container">';
-    regularIngots.forEach((ing) => {
+    filteredIngots.forEach((ing) => {
       const discovered = state.minedStats[ing.id] > 0;
       const cardClass = discovered ? 'collection-card' : 'collection-card silhouette';
+      
+      let sourceLabel = '';
+      if (ing.sourceType === 'expedition') sourceLabel = '⛏️ Экспедиция';
+      else if (ing.sourceType === 'crafted') sourceLabel = '🔥 Крафт';
+      
+      let locationLabel = '';
+      if (ing.location === 'mine') locationLabel = '🪨 Шахты';
+      else if (ing.location === 'jungle') locationLabel = '🌴 Джунгли';
+      else if (ing.location === 'asteroid') locationLabel = '🌌 Астероиды';
+      else if (ing.location === 'craft') locationLabel = '🏭 Кузня';
+      
       html += `
         <div class="${cardClass}" data-ingot="${ing.id}">
           <div class="card-icon" id="enc-${ing.id}"></div>
           <div class="card-name">${discovered ? ing.name : 'Неизвестный материал'}</div>
+          <div style="font-size:9px; color:var(--text-secondary); margin:2px 0;">${ing.rarity} | ${sourceLabel}</div>
+          <div style="font-size:8px; color:var(--text-muted);">${locationLabel}</div>
           <div class="card-count-badge">${discovered ? `Добыто: ${state.minedStats[ing.id]}` : '???'}</div>
         </div>
       `;
@@ -913,7 +959,7 @@ export function renderCollectionTab() {
     
     mainContent.innerHTML = html;
     
-    regularIngots.forEach((ing) => {
+    filteredIngots.forEach((ing) => {
       const el = document.getElementById(`enc-${ing.id}`);
       if (el) {
         if (state.minedStats[ing.id] > 0) {
@@ -923,7 +969,17 @@ export function renderCollectionTab() {
         }
       }
     });
+    
+    // Обработчики фильтров
+    document.querySelectorAll('[data-filter]').forEach((b) =>
+      b.addEventListener('click', () => {
+        encyclopediaFilter = b.dataset.filter;
+        renderCollectionTab();
+      })
+    );
+    
   } else {
+    // Зал Славы (коллекционные артефакты) — без изменений
     const coll = Object.values(CONFIG_ITEMS).filter((i) => i.isCollectible);
     html += '<div class="grid-container">';
     coll.forEach((ing) => {
