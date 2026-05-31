@@ -31,6 +31,14 @@ const preloaderPercent = document.getElementById('preloaderPercent');
 const preloaderText = document.getElementById('preloaderText');
 const appElement = document.getElementById('app');
 
+// 🩹 ФИКС: Показываем прелоадер НЕМЕДЛЕННО
+if (preloader) {
+  preloader.style.display = 'flex';
+}
+if (appElement) {
+  appElement.style.display = 'none';
+}
+
 function updatePreloader(percent, text) {
   if (preloaderBar) preloaderBar.style.width = percent + '%';
   if (preloaderPercent) preloaderPercent.textContent = percent + '%';
@@ -50,12 +58,12 @@ function hidePreloader() {
   }
 }
 
-// ---------- ASSET MANAGER ----------
+// ---------- ASSET MANAGER (ФОНОВАЯ ЗАГРУЗКА) ----------
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
     this.loadedCount = 0;
-    this.maxRetries = 3;
+    this.maxRetries = 1; // 🩹 Уменьшаем ретраи для скорости
   }
 
   async collectPaths() {
@@ -108,12 +116,10 @@ class AssetManager {
       
       img.onerror = () => {
         if (retryCount < this.maxRetries) {
-          console.warn(`Retry ${retryCount + 1}/${this.maxRetries} for: ${src}`);
           setTimeout(() => {
             this.loadAsset(src, retryCount + 1).then(resolve);
-          }, 500 * (retryCount + 1));
+          }, 200); // 🩹 Уменьшаем задержку ретрая
         } else {
-          console.error(`Failed to load after ${this.maxRetries} retries: ${src}`);
           this.updateProgress();
           resolve({ src, success: false });
         }
@@ -131,56 +137,34 @@ class AssetManager {
     
     if (this.totalAssets === 0) {
       updatePreloader(100, 'Пропуск загрузки...');
-      await new Promise(r => setTimeout(r, 300));
       return;
     }
     
     updatePreloader(10, 'Загрузка ресурсов...');
     
     const loadPromises = paths.map(src => this.loadAsset(src));
-    const results = await Promise.all(loadPromises);
-    
-    const cacheContainer = document.createElement('div');
-    cacheContainer.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;';
-    
-    results.forEach(({ src, success }) => {
-      if (success) {
-        const img = document.createElement('img');
-        img.src = src;
-        img.alt = '';
-        cacheContainer.appendChild(img);
-      }
-    });
-    
-    document.body.appendChild(cacheContainer);
+    await Promise.all(loadPromises);
     
     updatePreloader(90, 'Запуск...');
-    
-    setTimeout(() => {
-      cacheContainer.remove();
-    }, 2000);
   }
 }
 
-// ========== BOOT SEQUENCE ==========
+// ========== BOOT SEQUENCE (ФИКС: ПРЕЛОАДЕР МГНОВЕННО, АССЕТЫ В ФОНЕ) ==========
 async function boot() {
   console.log('[Boot] ========== ЗАГРУЗКА ИГРЫ ==========');
   
-  // ШАГ 1: Прелоадер виден, #app скрыт
-  if (appElement) {
-    appElement.style.display = 'none';
-  }
+  // 🩹 Прелоадер УЖЕ показан в HTML и в top-level коде
   updatePreloader(0, 'Инициализация...');
   showSkeleton();
   
-  // ШАГ 2: Загрузка ассетов
-  console.log('[Boot] Загрузка ассетов...');
+  // 🩹 ШАГ 2: Загружаем ассеты В ФОНЕ, не блокируя запуск
+  console.log('[Boot] Загрузка ассетов (фоновый режим)...');
   const assetManager = new AssetManager();
-  await assetManager.start();
+  assetManager.start().catch(e => console.warn('[AssetManager] Фоновая загрузка завершилась с ошибкой:', e));
   
-  // ШАГ 3: Инициализация состояния (асинхронно ждёт localStorage и CloudStorage)
+  // 🩹 ШАГ 3: Инициализация состояния НЕМЕДЛЕННО, не ждём ассеты
   console.log('[Boot] Инициализация состояния...');
-  updatePreloader(92, 'Загрузка данных...');
+  updatePreloader(50, 'Загрузка данных...');
   const success = await initializeState();
   
   if (!success) {
@@ -189,14 +173,14 @@ async function boot() {
     return;
   }
   
-  // ШАГ 4: Запуск систем
+  // 🩹 ШАГ 4: Запуск систем сразу после инициализации
   console.log('[Boot] Запуск таймеров...');
-  updatePreloader(96, 'Запуск систем...');
+  updatePreloader(70, 'Запуск систем...');
   startGlobalTimer();
   
-  // ШАГ 5: Запуск UI
+  // 🩹 ШАГ 5: Запуск UI
   console.log('[Boot] Запуск интерфейса...');
-  updatePreloader(99, 'Запуск интерфейса...');
+  updatePreloader(90, 'Запуск интерфейса...');
   
   document.querySelectorAll('.tab-item').forEach((t) =>
     t.addEventListener('click', () => setActiveTab(t.dataset.tab))
@@ -204,6 +188,7 @@ async function boot() {
   
   updatePreloader(100, 'Готово!');
   
+  // 🩹 Показываем игру через 200мс, не ждём загрузки ассетов
   setTimeout(() => {
     hidePreloader();
     setActiveTab('expeditions');
@@ -211,9 +196,13 @@ async function boot() {
   }, 200);
 }
 
-// Запуск
+// 🩹 ФИКС: Запускаем boot СРАЗУ, DOM уже готов
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
+  document.addEventListener('DOMContentLoaded', () => {
+    updatePreloader(0, 'Старт...');
+    boot();
+  });
 } else {
+  updatePreloader(0, 'Старт...');
   boot();
 }
