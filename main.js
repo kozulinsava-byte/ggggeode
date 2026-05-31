@@ -58,23 +58,11 @@ function hidePreloader() {
   }
 }
 
-// ---------- ПРОВЕРКА НАЛИЧИЯ ПАПКИ ASSETS ----------
-async function checkAssetsExist() {
-  return new Promise((resolve) => {
-    const testImg = new Image();
-    testImg.onload = () => resolve(true);
-    testImg.onerror = () => resolve(false);
-    testImg.src = 'assets/ingots/copper.png';
-    setTimeout(() => resolve(false), 2000);
-  });
-}
-
-// ---------- ASSET MANAGER (ТОЛЬКО ЕСЛИ ПАПКА ЕСТЬ) ----------
+// ---------- ASSET MANAGER (ТИХИЙ РЕЖИМ: БЕЗ КОНСОЛИ, БЕЗ ЗАДЕРЖЕК) ----------
 class AssetManager {
   constructor() {
     this.totalAssets = 0;
     this.loadedCount = 0;
-    this.maxRetries = 1;
   }
 
   async collectPaths() {
@@ -104,76 +92,36 @@ class AssetManager {
     return [...paths];
   }
 
-  updateProgress() {
-    this.loadedCount++;
-    if (this.totalAssets > 0) {
-      const percent = Math.floor((this.loadedCount / this.totalAssets) * 100);
-      updatePreloader(percent, 'Загрузка ресурсов...');
-    }
-  }
-
-  async loadAsset(src, retryCount = 0) {
+  async loadAsset(src) {
     return new Promise((resolve) => {
       const img = new Image();
-      
-      img.onload = () => {
-        this.updateProgress();
-        resolve({ src, success: true });
-      };
-      
-      img.onerror = () => {
-        if (retryCount < this.maxRetries) {
-          setTimeout(() => {
-            this.loadAsset(src, retryCount + 1).then(resolve);
-          }, 200);
-        } else {
-          this.updateProgress();
-          resolve({ src, success: false });
-        }
-      };
-      
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
       img.src = src;
     });
   }
 
   async start() {
-    updatePreloader(5, 'Сбор ресурсов...');
-    
     const paths = await this.collectPaths();
     this.totalAssets = paths.length;
     
-    if (this.totalAssets === 0) {
-      updatePreloader(100, 'Пропуск загрузки...');
-      return;
-    }
+    if (this.totalAssets === 0) return;
     
-    updatePreloader(10, 'Загрузка ресурсов...');
-    
-    const loadPromises = paths.map(src => this.loadAsset(src));
-    await Promise.all(loadPromises);
-    
-    updatePreloader(90, 'Запуск...');
+    // Загружаем все параллельно, молча
+    paths.forEach(src => this.loadAsset(src));
   }
 }
 
-// ========== BOOT SEQUENCE ==========
+// ========== BOOT SEQUENCE (ФИКС: БЕЗ ЗАДЕРЖЕК, ПРЕЛОАДЕР СРАЗУ) ==========
 async function boot() {
   console.log('[Boot] ========== ЗАГРУЗКА ИГРЫ ==========');
   
   updatePreloader(0, 'Инициализация...');
   showSkeleton();
   
-  // 🩹 Проверяем, есть ли папка assets
-  const assetsExist = await checkAssetsExist();
-  
-  if (assetsExist) {
-    console.log('[Boot] Загрузка ассетов (фоновый режим)...');
-    const assetManager = new AssetManager();
-    assetManager.start().catch(() => {});
-  } else {
-    console.log('[Boot] Папка assets не найдена — пропускаем загрузку картинок');
-    updatePreloader(90, 'Запуск...');
-  }
+  // 🩹 Ассеты — тихий фон, без await, без задержек
+  const assetManager = new AssetManager();
+  assetManager.start().catch(() => {});
   
   // 🩹 Инициализация состояния НЕМЕДЛЕННО
   console.log('[Boot] Инициализация состояния...');
