@@ -10,6 +10,7 @@ let _renderCurrentTab = null;
 let _renderExpeditionsTab = null;
 let _renderImageToElement = null;
 let _showRewardPopup = null;
+let _renderEventsTab = null; // 🆕 для обновления ивентов
 
 export function registerUIFunctions(functions) {
     _showToast = functions.showToast;
@@ -20,6 +21,7 @@ export function registerUIFunctions(functions) {
     _renderExpeditionsTab = functions.renderExpeditionsTab;
     _renderImageToElement = functions.renderImageToElement;
     _showRewardPopup = functions.showRewardPopup;
+    _renderEventsTab = functions.renderEventsTab;
 }
 
 const isTelegram = !!window.Telegram?.WebApp;
@@ -46,7 +48,9 @@ export let playerState = {
   minedStats: {},
   player: {},
   echoCooldowns: {},
-  expeditionBonuses: {}
+  expeditionBonuses: {},
+  meteorShards: 0, // 🆕 осколки метеоритов
+  meteorCooldownEnd: null // 🆕 время окончания КД шторма
 };
 
 export function getPlayerState() {
@@ -62,6 +66,20 @@ Object.keys(CONFIG_ITEMS).forEach((k) => {
 });
 
 let isOpeningGeode = false;
+
+// 🆕 СОСТОЯНИЕ МЕТЕОРИТНОГО ШТОРМА
+export const meteorStormState = {
+  active: false,
+  shardsCollected: 0,
+  meteorsSpawned: 0,
+  meteorsCaught: 0,
+  secretMeteorCaught: false,
+  spawnInterval: null,
+  roundTimer: null,
+  roundStartTime: null,
+  roundDuration: 20000, // 20 секунд
+  cooldownDuration: 60000 // 1 минута
+};
 
 export function sendBotNotification(message) {
   console.log('[StarForge Bot Notification]', message);
@@ -79,6 +97,46 @@ export function showSkeleton() {
       </div>
     `;
   }
+}
+
+// ========== ГЛОБАЛЬНАЯ СИСТЕМА УПРАВЛЕНИЯ ТАЙМЕРАМИ ==========
+const activeTimers = {
+  global: null,
+  event: null,
+  forge: null,
+  signal: null,
+  signalTimeout: null,
+  meteorSpawn: null, // 🆕
+  meteorRound: null   // 🆕
+};
+
+function clearTimer(timerName) {
+  if (activeTimers[timerName]) {
+    clearInterval(activeTimers[timerName]);
+    activeTimers[timerName] = null;
+  }
+}
+
+function clearTimeoutTimer(timerName) {
+  if (activeTimers[timerName]) {
+    clearTimeout(activeTimers[timerName]);
+    activeTimers[timerName] = null;
+  }
+}
+
+function setTimerInterval(timerName, callback, interval) {
+  clearTimer(timerName);
+  activeTimers[timerName] = setInterval(callback, interval);
+  return activeTimers[timerName];
+}
+
+function setTimerTimeout(timerName, callback, delay) {
+  clearTimeoutTimer(timerName);
+  activeTimers[timerName] = setTimeout(() => {
+    activeTimers[timerName] = null;
+    callback();
+  }, delay);
+  return activeTimers[timerName];
 }
 
 // ---------- МЕНЕДЖЕР ИВЕНТОВ ----------
@@ -104,7 +162,7 @@ export const eventsManager = {
   },
   
   startEventCycle() {
-    if (this.eventInterval) clearInterval(this.eventInterval);
+    clearTimer('event');
     this.triggerGreatSmelt();
     this.eventInterval = setInterval(() => {
       this.triggerGreatSmelt();
@@ -260,6 +318,9 @@ function closeForge() {
   
   overlay.classList.remove('active');
   content.innerHTML = '';
+  
+  clearTimer('forge');
+  
   forgeState.active = false;
   forgeState.selectedRecipe = null;
 }
@@ -283,9 +344,7 @@ function startSmeltProcess(recipe) {
   moltenEl.style.height = '0%';
   progressOverlay.classList.add('active');
   
-  if (forgeState.smeltInterval) clearInterval(forgeState.smeltInterval);
-  
-  forgeState.smeltInterval = setInterval(() => {
+  setTimerInterval('forge', () => {
     forgeState.smeltSeconds--;
     
     const elapsed = forgeState.smeltMaxSeconds - forgeState.smeltSeconds;
@@ -296,16 +355,14 @@ function startSmeltProcess(recipe) {
     moltenEl.style.height = progress + '%';
     
     if (forgeState.smeltSeconds <= 0) {
+      clearTimer('forge');
       finishSmeltProcess(recipe);
     }
   }, 1000);
 }
 
 function finishSmeltProcess(recipe) {
-  if (forgeState.smeltInterval) {
-    clearInterval(forgeState.smeltInterval);
-    forgeState.smeltInterval = null;
-  }
+  clearTimer('forge');
   
   document.getElementById('forgeProgressOverlay').classList.remove('active');
   
@@ -502,9 +559,7 @@ let activeSignalGame = {
   points: [],
   collected: 0,
   totalPoints: 8,
-  timer: 10,
-  timerInterval: null,
-  timeoutId: null
+  timer: 10
 };
 
 export function startSignalGame(expId, bonusType) {
@@ -536,7 +591,7 @@ export function startSignalGame(expId, bonusType) {
     }, i * 480);
   }
   
-  activeSignalGame.timerInterval = setInterval(() => {
+  setTimerInterval('signal', () => {
     if (!activeSignalGame.active) return;
     activeSignalGame.timer--;
     timerEl.textContent = activeSignalGame.timer;
@@ -546,7 +601,7 @@ export function startSignalGame(expId, bonusType) {
     }
   }, 1000);
   
-  activeSignalGame.timeoutId = setTimeout(() => {
+  setTimerTimeout('signalTimeout', () => {
     if (activeSignalGame.active) {
       signalGameFail();
     }
@@ -617,14 +672,8 @@ function signalGameFail() {
 }
 
 function cleanupSignalGame() {
-  if (activeSignalGame.timerInterval) {
-    clearInterval(activeSignalGame.timerInterval);
-    activeSignalGame.timerInterval = null;
-  }
-  if (activeSignalGame.timeoutId) {
-    clearTimeout(activeSignalGame.timeoutId);
-    activeSignalGame.timeoutId = null;
-  }
+  clearTimer('signal');
+  clearTimeoutTimer('signalTimeout');
   activeSignalGame.points.forEach(p => p.remove());
   activeSignalGame.active = false;
   activeSignalGame.expId = null;
@@ -656,6 +705,188 @@ function applyScanBonus(expId) {
   if (_showToast) _showToast('Глубинное сканирование активировано! +20% к шансу особой жеоды', '🔬');
 }
 
+// ---------- ☄️ МЕТЕОРИТНЫЙ ШТОРМ ----------
+export function getMeteorCooldownRemaining() {
+  if (!playerState.meteorCooldownEnd) return 0;
+  const diff = playerState.meteorCooldownEnd - Date.now();
+  return Math.max(0, diff);
+}
+
+export function isMeteorStormOnCooldown() {
+  return getMeteorCooldownRemaining() > 0;
+}
+
+export function canStartMeteorStorm() {
+  if (meteorStormState.active) return false;
+  if (isMeteorStormOnCooldown()) return false;
+  return true;
+}
+
+function getMeteorType() {
+  const rand = Math.random();
+  
+  // Проверяем, есть ли у игрока оба секретных слитка
+  const hasOrion = playerState.ingots['orion'] > 0;
+  const hasAndromeda = playerState.ingots['andromeda'] > 0;
+  const canSpawnSecret = !hasOrion || !hasAndromeda;
+  
+  if (canSpawnSecret && rand < 0.01) {
+    return { type: 'secret', shards: 100, speed: 1.0, color: '#FF00FF', emoji: '💜', size: 60 };
+  }
+  if (rand < 0.05) {
+    return { type: 'legendary', shards: 50, speed: 1.2, color: '#FFD700', emoji: '✨', size: 50 };
+  }
+  if (rand < 0.29) {
+    return { type: 'rare', shards: 15, speed: 2.5, color: '#FF8C00', emoji: '🔥', size: 44 };
+  }
+  return { type: 'common', shards: 5, speed: 4.0, color: '#A0A0A0', emoji: '☄️', size: 38 };
+}
+
+function spawnMeteor(container) {
+  if (!meteorStormState.active) return;
+  
+  const meteorData = getMeteorType();
+  meteorStormState.meteorsSpawned++;
+  
+  const meteor = document.createElement('div');
+  meteor.className = 'storm-meteor';
+  meteor.dataset.type = meteorData.type;
+  meteor.dataset.shards = meteorData.shards;
+  
+  const x = Math.random() * (container.clientWidth - 60) + 10;
+  const size = meteorData.size;
+  
+  meteor.style.left = x + 'px';
+  meteor.style.top = '-60px';
+  meteor.style.width = size + 'px';
+  meteor.style.height = size + 'px';
+  meteor.style.fontSize = (size * 0.6) + 'px';
+  meteor.textContent = meteorData.emoji;
+  meteor.style.animationDuration = meteorData.speed + 's';
+  
+  // Секретный метеорит — хитрая траектория
+  if (meteorData.type === 'secret') {
+    meteor.style.animationName = 'meteorFallSecret';
+    meteor.style.setProperty('--drift', (Math.random() * 100 - 50) + 'px');
+  }
+  
+  meteor.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!meteorStormState.active) return;
+    
+    meteorStormState.meteorsCaught++;
+    meteorStormState.shardsCollected += meteorData.shards;
+    
+    // Всплывающая циферка вместо частиц
+    const floatText = document.createElement('div');
+    floatText.className = 'storm-float-text';
+    floatText.textContent = '+' + meteorData.shards;
+    floatText.style.left = x + 'px';
+    floatText.style.top = (parseFloat(meteor.style.top) || 50) + 'px';
+    floatText.style.color = meteorData.color;
+    container.appendChild(floatText);
+    setTimeout(() => floatText.remove(), 1200);
+    
+    if (meteorData.type === 'secret') {
+      meteorStormState.secretMeteorCaught = true;
+      sendBotNotification('🌟 Игрок поймал секретный метеорит!');
+    }
+    
+    meteor.remove();
+  });
+  
+  // Автоудаление после падения
+  meteor.addEventListener('animationend', () => {
+    meteor.remove();
+  });
+  
+  container.appendChild(meteor);
+  
+  // Таймер автоудаления на случай, если анимация не сработала
+  setTimeout(() => {
+    if (meteor.parentNode) meteor.remove();
+  }, meteorData.speed * 1000 + 500);
+}
+
+export function startMeteorStorm() {
+  if (!canStartMeteorStorm()) return;
+  
+  const container = document.getElementById('meteorStormArea');
+  if (!container) return;
+  
+  // Очищаем предыдущие
+  container.innerHTML = '';
+  
+  meteorStormState.active = true;
+  meteorStormState.shardsCollected = 0;
+  meteorStormState.meteorsSpawned = 0;
+  meteorStormState.meteorsCaught = 0;
+  meteorStormState.secretMeteorCaught = false;
+  meteorStormState.roundStartTime = Date.now();
+  
+  // Показываем оверлей
+  document.getElementById('meteorStormOverlay').classList.add('active');
+  document.getElementById('stormTimerDisplay').textContent = '20';
+  
+  // Таймер обратного отсчёта
+  let secondsLeft = 20;
+  const countdownInterval = setInterval(() => {
+    secondsLeft--;
+    const display = document.getElementById('stormTimerDisplay');
+    if (display) display.textContent = secondsLeft;
+    
+    if (secondsLeft <= 0) {
+      clearInterval(countdownInterval);
+      endMeteorStorm();
+    }
+  }, 1000);
+  
+  activeTimers['meteorRound'] = countdownInterval;
+  
+  // Спавн метеоритов каждые 600–800 мс
+  const spawnMeteors = () => {
+    if (!meteorStormState.active) return;
+    spawnMeteor(container);
+    const nextDelay = 600 + Math.random() * 200;
+    activeTimers['meteorSpawn'] = setTimeout(spawnMeteors, nextDelay);
+  };
+  
+  spawnMeteors();
+  
+  // Блокируем кнопку, ставим КД
+  playerState.meteorCooldownEnd = Date.now() + meteorStormState.cooldownDuration;
+  saveGame();
+  
+  if (_renderEventsTab) _renderEventsTab();
+}
+
+function endMeteorStorm() {
+  meteorStormState.active = false;
+  
+  clearTimer('meteorSpawn');
+  clearTimer('meteorRound');
+  
+  // Очищаем оставшиеся метеориты
+  const container = document.getElementById('meteorStormArea');
+  if (container) {
+    container.querySelectorAll('.storm-meteor, .storm-float-text').forEach(el => el.remove());
+  }
+  
+  // Начисляем осколки на баланс
+  playerState.meteorShards += meteorStormState.shardsCollected;
+  saveGame();
+  
+  // Прячем оверлей
+  document.getElementById('meteorStormOverlay').classList.remove('active');
+  
+  // Показываем окно итогов через ui
+  import('./ui.js').then(ui => {
+    ui.showMeteorStormResults(meteorStormState.shardsCollected, meteorStormState.meteorsCaught, meteorStormState.secretMeteorCaught);
+  });
+  
+  if (_renderEventsTab) _renderEventsTab();
+}
+
 // ---------- СИСТЕМА СОХРАНЕНИЙ ----------
 export function saveGame() {
   if (!playerState) return;
@@ -670,7 +901,9 @@ export function saveGame() {
       minedStats: playerState.minedStats,
       player: playerState.player,
       echoCooldowns: playerState.echoCooldowns,
-      expeditionBonuses: playerState.expeditionBonuses
+      expeditionBonuses: playerState.expeditionBonuses,
+      meteorShards: playerState.meteorShards,
+      meteorCooldownEnd: playerState.meteorCooldownEnd
     },
     collectibleSerials,
     nextSerial,
@@ -751,12 +984,23 @@ function applySaveData(data) {
     if (Array.isArray(saved.collectedArtifacts.asteroid)) {
       playerState.collectedArtifacts.asteroid = [...saved.collectedArtifacts.asteroid];
     }
+    if (Array.isArray(saved.collectedArtifacts.meteor)) {
+      playerState.collectedArtifacts.meteor = [...saved.collectedArtifacts.meteor];
+    }
   }
   
   if (saved.discoveredSpecialGeodes && typeof saved.discoveredSpecialGeodes === 'object') {
     for (let k in saved.discoveredSpecialGeodes) {
       playerState.discoveredSpecialGeodes[k] = saved.discoveredSpecialGeodes[k];
     }
+  }
+  
+  // 🆕 Загружаем осколки и КД
+  if (typeof saved.meteorShards === 'number') {
+    playerState.meteorShards = saved.meteorShards;
+  }
+  if (typeof saved.meteorCooldownEnd === 'number' || saved.meteorCooldownEnd === null) {
+    playerState.meteorCooldownEnd = saved.meteorCooldownEnd;
   }
   
   if (data.collectibleSerials) {
@@ -772,7 +1016,7 @@ function applySaveData(data) {
 
 export const saveToLocalStorage = saveGame;
 
-// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ (ФИКС: НЕ МЕНЯЕМ ССЫЛКУ) ==========
+// ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ ==========
 (function applyDefaultStateImmediately() {
   const d = DEFAULT_STATE;
   
@@ -788,7 +1032,8 @@ export const saveToLocalStorage = saveGame;
   playerState.collectedArtifacts = {
     mine: [...d.collectedArtifacts.mine],
     jungle: [...d.collectedArtifacts.jungle],
-    asteroid: [...d.collectedArtifacts.asteroid]
+    asteroid: [...d.collectedArtifacts.asteroid],
+    meteor: [...(d.collectedArtifacts.meteor || [])]
   };
   playerState.player.level = d.player.level;
   playerState.player.xp = d.player.xp;
@@ -797,6 +1042,8 @@ export const saveToLocalStorage = saveGame;
   playerState.player.totalArtifacts = d.player.totalArtifacts;
   playerState.echoCooldowns = {};
   playerState.expeditionBonuses = {};
+  playerState.meteorShards = 0;
+  playerState.meteorCooldownEnd = null;
   
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
@@ -900,11 +1147,9 @@ function checkCompletedExpeditions() {
   }
 }
 
-let globalTimerInterval = null;
-
 export function startGlobalTimer() {
-  if (globalTimerInterval) clearInterval(globalTimerInterval);
-  globalTimerInterval = setInterval(() => {
+  clearTimer('global');
+  setTimerInterval('global', () => {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
