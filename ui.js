@@ -1,6 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES } from './config.js';
-import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState } from './core.js';
+import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState, buyMeteorGeode, METEOR_SHOP_ITEMS } from './core.js';
 
 // Регистрируем UI функции в core.js
 registerUIFunctions({
@@ -12,7 +12,8 @@ registerUIFunctions({
     renderExpeditionsTab: renderExpeditionsTab,
     renderImageToElement: renderImageToElement,
     showRewardPopup: showRewardPopup,
-    renderEventsTab: renderEventsTab
+    renderEventsTab: renderEventsTab,
+    updateMeteorShardsDisplay: updateMeteorShardsDisplay
 });
 
 // DOM-элементы
@@ -684,6 +685,15 @@ export function updateCollectionProgress() {
   if (textEl) textEl.textContent = `${discovered}/${totalRegular} открыто`;
 }
 
+// 🆕 Обновление счётчика осколков
+export function updateMeteorShardsDisplay() {
+  const state = getPlayerState();
+  const display = document.getElementById('meteorShardsDisplay');
+  if (display) {
+    display.textContent = `Осколки метеоритов: ${state.meteorShards || 0}`;
+  }
+}
+
 // ---------- РЕНДЕРИНГ ВКЛАДОК ----------
 export function renderProfileTab() {
   const state = getPlayerState();
@@ -911,7 +921,7 @@ export function renderInventoryTab() {
   document.querySelectorAll('[data-ingot]').forEach((c) => c.addEventListener('click', () => openShowcase(c.dataset.ingot)));
 }
 
-// ========== КОЛЛЕКЦИЯ: ПОЛОЧКИ БЕЗ ФИЛЬТРОВ ==========
+// ========== КОЛЛЕКЦИЯ: ПОЛОЧКИ ==========
 export function renderCollectionTab() {
   const state = getPlayerState();
   const totalRegular = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible).length;
@@ -964,30 +974,24 @@ export function renderCollectionTab() {
       `;
     }
     
-    // ===== ПОЛОЧКА 1: ШАХТЫ И ЭКСПЕДИЦИИ =====
+    // ПОЛОЧКА 1
     html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-gold);">⛏️ Шахты и Экспедиции</div>';
     html += '<div class="grid-container">';
-    regularIngots.filter(i => i.sourceType === 'expedition').forEach(ing => {
-      html += renderIngotCard(ing);
-    });
+    regularIngots.filter(i => i.sourceType === 'expedition').forEach(ing => { html += renderIngotCard(ing); });
     html += '</div>';
     
-    // ===== ПОЛОЧКА 2: КРАФТ =====
+    // ПОЛОЧКА 2
     html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-orange);">🔥 Мастерская Крафта</div>';
     html += '<div class="grid-container">';
-    regularIngots.filter(i => i.sourceType === 'crafted').forEach(ing => {
-      html += renderIngotCard(ing);
-    });
+    regularIngots.filter(i => i.sourceType === 'crafted').forEach(ing => { html += renderIngotCard(ing); });
     html += '</div>';
     
-    // ===== ПОЛОЧКА 3: МЕТЕОРИТЫ =====
+    // ПОЛОЧКА 3
     const meteorIngots = regularIngots.filter(i => i.sourceType === 'meteor');
     if (meteorIngots.length > 0) {
       html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-purple);">☄️ Метеоритный Шторм</div>';
       html += '<div class="grid-container">';
-      meteorIngots.forEach(ing => {
-        html += renderIngotCard(ing);
-      });
+      meteorIngots.forEach(ing => { html += renderIngotCard(ing); });
       html += '</div>';
     }
     
@@ -1005,7 +1009,6 @@ export function renderCollectionTab() {
     });
     
   } else {
-    // Зал Славы
     const coll = Object.values(CONFIG_ITEMS).filter((i) => i.isCollectible);
     html += '<div class="grid-container">';
     coll.forEach((ing) => {
@@ -1049,7 +1052,7 @@ export function renderCollectionTab() {
   );
 }
 
-// ========== ОБНОВЛЁННЫЙ РЕНДЕР ИВЕНТОВ ==========
+// ========== ИВЕНТЫ ==========
 export function renderEventsTab() {
   const state = getPlayerState();
   const activeEvent = eventsManager.getActiveEvent();
@@ -1058,7 +1061,6 @@ export function renderEventsTab() {
   
   let html = '<div class="section-title">📡 Ивенты</div>';
   
-  // === ВЕЛИКАЯ ПЕРЕПЛАВКА ===
   if (activeEvent && activeEvent.id === 'great_smelt' && phase === 'active') {
     html += `
       <div class="card" style="border: 2px solid rgba(255,100,0,0.4); background: rgba(255,50,0,0.05); position: relative; overflow: hidden;">
@@ -1073,9 +1075,7 @@ export function renderEventsTab() {
           <span style="font-size: 12px; color: var(--text-secondary);">до завершения</span>
         </div>
         
-        <button class="forge-smelt-btn" id="enterForgeBtn" style="width: 100%;">
-          ⚡ ВОЙТИ В ПЛАВИЛЬНЮ
-        </button>
+        <button class="forge-smelt-btn" id="enterForgeBtn" style="width: 100%;">⚡ ВОЙТИ В ПЛАВИЛЬНЮ</button>
         
         <div style="margin-top: 12px; text-align: center; color: var(--text-muted); font-size: 11px;">
           Доступны рецепты: 🌑 Чёрное Зеркало · 🛰️ Астро-Бронза · 🛡️ Хромированный Титан · 💎 Платиновый Сплав
@@ -1092,7 +1092,6 @@ export function renderEventsTab() {
     `;
   }
   
-  // === ☄️ МЕТЕОРИТНЫЙ ШТОРМ ===
   const onCooldown = isMeteorStormOnCooldown();
   const cooldownRemaining = getMeteorCooldownRemaining();
   const cooldownSec = Math.ceil(cooldownRemaining / 1000);
@@ -1107,7 +1106,7 @@ export function renderEventsTab() {
       <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 16px;">
         <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
           <span style="font-size: 20px;">💎</span>
-          <span style="font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent-gold);">Осколки метеоритов: ${state.meteorShards || 0}</span>
+          <span style="font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent-gold);" id="meteorShardsDisplay">Осколки метеоритов: ${state.meteorShards || 0}</span>
         </div>
       </div>
       
@@ -1115,8 +1114,8 @@ export function renderEventsTab() {
         <button class="forge-smelt-btn" id="playMeteorStormBtn" style="flex: 1; ${onCooldown || meteorStormState.active ? 'opacity: 0.5; pointer-events: none;' : ''}">
           ${onCooldown ? `⏳ Игра (0:${cooldownSec.toString().padStart(2, '0')})` : (meteorStormState.active ? '☄️ Идёт шторм...' : '🎮 Игра')}
         </button>
-        <button class="forge-smelt-btn" id="meteorShopBtn" style="flex: 1; opacity: 0.4; pointer-events: none;">
-          🛒 Обмен (скоро)
+        <button class="forge-smelt-btn" id="meteorShopBtn" style="flex: 1;">
+          🛒 Обмен
         </button>
       </div>
     </div>
@@ -1134,13 +1133,9 @@ export function renderEventsTab() {
   
   mainContent.innerHTML = html;
   
-  // Обработчики
   const enterForgeBtn = document.getElementById('enterForgeBtn');
-  if (enterForgeBtn) {
-    enterForgeBtn.addEventListener('click', () => openForge());
-  }
+  if (enterForgeBtn) enterForgeBtn.addEventListener('click', () => openForge());
   
-  // 🩹 ФИКС: обработчик напрямую на кнопке с stopPropagation
   const playBtn = document.getElementById('playMeteorStormBtn');
   if (playBtn) {
     playBtn.addEventListener('click', (e) => {
@@ -1152,11 +1147,74 @@ export function renderEventsTab() {
     });
   }
   
+  // 🛒 Кнопка магазина
+  const shopBtn = document.getElementById('meteorShopBtn');
+  if (shopBtn) {
+    shopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      showMeteorShop();
+    });
+  }
+  
   updateEventTimerInterval();
   updateMeteorCooldownUI();
 }
 
-// 🆕 Обновление кнопки КД метеоритного шторма
+// 🛒 МАГАЗИН ОБМЕНА
+function showMeteorShop() {
+  const state = getPlayerState();
+  
+  let itemsHtml = '';
+  for (let key in METEOR_SHOP_ITEMS) {
+    const item = METEOR_SHOP_ITEMS[key];
+    const canAfford = state.meteorShards >= item.price;
+    itemsHtml += `
+      <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+        <div style="font-size: 40px;">${item.icon}</div>
+        <div style="flex: 1; text-align: left;">
+          <div style="font-weight: 700; font-size: 16px; color: var(--text-primary);">${item.name}</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">${item.description}</div>
+          <div style="font-size: 14px; font-weight: 700; color: ${canAfford ? '#50C878' : '#FF4444'}; margin-top: 4px;">💎 ${item.price} осколков</div>
+        </div>
+        <button class="small-btn" data-shop-item="${key}" style="background: ${canAfford ? 'rgba(80,200,120,0.2)' : 'rgba(255,68,68,0.2)'}; border-color: ${canAfford ? 'rgba(80,200,120,0.4)' : 'rgba(255,68,68,0.4)'}; color: ${canAfford ? '#50C878' : '#FF4444'}; ${canAfford ? '' : 'opacity: 0.5; pointer-events: none;'}">
+          Купить
+        </button>
+      </div>
+    `;
+  }
+  
+  let html = `
+    <div class="modal-header">
+      <div class="modal-title">🛒 Магазин осколков</div>
+      <button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button>
+    </div>
+    <div class="modal-content">
+      <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 14px; margin-bottom: 16px; text-align: center;">
+        <span style="font-size: 20px;">💎</span>
+        <span style="font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent-gold);">Осколков: ${state.meteorShards || 0}</span>
+      </div>
+      ${itemsHtml}
+    </div>
+  `;
+  
+  openModal(html);
+  
+  setTimeout(() => {
+    document.querySelectorAll('[data-shop-item]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const itemId = btn.dataset.shopItem;
+        const item = METEOR_SHOP_ITEMS[itemId];
+        if (state.meteorShards >= item.price) {
+          buyMeteorGeode(itemId);
+          closeModal();
+          showMeteorShop();
+        }
+      });
+    });
+  }, 10);
+}
+
 let meteorCooldownInterval = null;
 
 function updateMeteorCooldownUI() {
@@ -1188,9 +1246,6 @@ function updateMeteorCooldownUI() {
       btn.textContent = '🎮 Игра';
       btn.style.opacity = '1';
       btn.style.pointerEvents = 'auto';
-      clearInterval(meteorCooldownInterval);
-      meteorCooldownInterval = null;
-      // 🩹 ПЕРЕВЕШИВАЕМ ОБРАБОТЧИК при разблокировке
       btn.onclick = (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -1199,10 +1254,12 @@ function updateMeteorCooldownUI() {
         }
       };
     }
+    
+    // Обновляем счётчик осколков
+    updateMeteorShardsDisplay();
   }, 1000);
 }
 
-// 🆕 Окно итогов метеоритного шторма
 export function showMeteorStormResults(shardsCollected, meteorsCaught, secretCaught) {
   let html = `
     <div class="modal-header">
