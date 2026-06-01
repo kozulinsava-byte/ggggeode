@@ -40,7 +40,7 @@ if (tg) {
   }
 }
 
-// ========== СОСТОЯНИЕ ИГРОКА (НЕ МЕНЯЕМ ССЫЛКУ НИКОГДА) ==========
+// ========== СОСТОЯНИЕ ИГРОКА ==========
 export let playerState = {
   expeditions: {},
   geodes: {},
@@ -141,19 +141,50 @@ function setTimerTimeout(timerName, callback, delay) {
   return activeTimers[timerName];
 }
 
-// ---------- МЕНЕДЖЕР ИВЕНТОВ (🩹 РОТАЦИЯ БЕЗ ПОВТОРОВ) ----------
+// ---------- 🆕 УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР ----------
 const EVENT_LIST = ['great_smelt', 'meteor_storm'];
 
+const EVENT_DEFINITIONS = {
+  great_smelt: {
+    id: 'great_smelt',
+    name: '🔥 Великая Переплавка',
+    icon: '🔥',
+    description: 'Древние кузни остывают!',
+    longDescription: 'Собери ресурсы и создай крафтовые предметы в Плавильне!',
+    startMessage: '🔥 Великая Переплавка началась!',
+    startToast: '🔥',
+    endMessage: 'Кузница остыла, Великая переплавка завершена.',
+    endToast: '❄️'
+  },
+  meteor_storm: {
+    id: 'meteor_storm',
+    name: '☄️ Метеоритный Шторм',
+    icon: '☄️',
+    description: 'Небо пылает! Лови падающие метеориты!',
+    longDescription: 'Метеориты падают с небес! Тапай по ним, чтобы собрать осколки. Обменяй осколки на жеоды в магазине!',
+    startMessage: '☄️ Метеоритный Шторм начался!',
+    startToast: '☄️',
+    endMessage: 'Метеоритный шторм утих, небо снова чистое!',
+    endToast: '☄️'
+  }
+};
+
 export const eventsManager = {
-  activeEvent: null,
+  activeEventId: null,
   eventEndTime: null,
   eventInterval: null,
-  eventPhase: 'idle',
-  lastEventId: null, // 🩹 запоминаем последний ивент
+  lastEventId: null,
   
   getActiveEvent() {
-    if (this.activeEvent && this.eventEndTime && Date.now() < this.eventEndTime) {
-      return this.activeEvent;
+    if (this.activeEventId && this.eventEndTime && Date.now() < this.eventEndTime) {
+      return EVENT_DEFINITIONS[this.activeEventId] || null;
+    }
+    return null;
+  },
+  
+  getActiveEventId() {
+    if (this.activeEventId && this.eventEndTime && Date.now() < this.eventEndTime) {
+      return this.activeEventId;
     }
     return null;
   },
@@ -174,7 +205,6 @@ export const eventsManager = {
     }, 30 * 60 * 1000);
   },
   
-  // 🩹 НОВОЕ: рандомайзер без повторов
   getNextEventId() {
     const available = EVENT_LIST.filter(id => id !== this.lastEventId);
     if (available.length === 0) return EVENT_LIST[0];
@@ -183,53 +213,76 @@ export const eventsManager = {
   
   triggerRandomEvent() {
     const nextId = this.getNextEventId();
-    this.lastEventId = nextId;
+    this.startEventById(nextId);
+  },
+  
+  startEventById(eventId) {
+    if (!EVENT_DEFINITIONS[eventId]) return;
     
-    if (nextId === 'great_smelt') {
-      this.triggerGreatSmelt();
-    } else if (nextId === 'meteor_storm') {
-      this.triggerMeteorStormEvent();
+    // Завершаем текущий перед запуском нового
+    if (this.activeEventId) {
+      this.forceEndEvent();
     }
+    
+    const def = EVENT_DEFINITIONS[eventId];
+    this.activeEventId = eventId;
+    this.eventEndTime = Date.now() + 15 * 60 * 1000;
+    this.lastEventId = eventId;
+    
+    if (_showToast) _showToast(def.startMessage, def.startToast);
+    sendBotNotification(`🚀 Ивент запущен: ${def.name}`);
+    saveGame();
+    
+    if (_renderEventsTab) _renderEventsTab();
   },
   
-  triggerGreatSmelt() {
-    this.activeEvent = {
-      id: 'great_smelt',
-      name: '🔥 Великая Переплавка',
-      icon: '🔥',
-      description: 'Древние кузни остывают!',
-      longDescription: 'Собери ресурсы и создай крафтовые предметы в Плавильне!'
-    };
-    this.eventEndTime = Date.now() + 15 * 60 * 1000;
-    this.eventPhase = 'active';
+  forceEndEvent() {
+    if (!this.activeEventId) {
+      if (_showToast) _showToast('В данный момент нет активных событий', '⚠️');
+      return;
+    }
     
-    if (_showToast) _showToast('🔥 Великая Переплавка началась!', '🔥');
-    sendBotNotification('🚀 Кузня открыта! 15 минут для переплавки!');
-    saveGame();
-  },
-  
-  // 🩹 НОВОЕ: ивент метеоритного шторма
-  triggerMeteorStormEvent() {
-    this.activeEvent = {
-      id: 'meteor_storm',
-      name: '☄️ Метеоритный Шторм',
-      icon: '☄️',
-      description: 'Небо пылает! Лови падающие метеориты!',
-      longDescription: 'Метеориты падают с небес! Тапай по ним, чтобы собрать осколки. Обменяй осколки на жеоды в магазине!'
-    };
-    this.eventEndTime = Date.now() + 15 * 60 * 1000;
-    this.eventPhase = 'active';
+    const def = EVENT_DEFINITIONS[this.activeEventId];
+    if (!def) return;
     
-    if (_showToast) _showToast('☄️ Метеоритный Шторм начался!', '☄️');
-    sendBotNotification('☄️ Шторм начался! 15 минут для сбора осколков!');
+    // Очистка специфичных состояний
+    if (this.activeEventId === 'meteor_storm') {
+      // Останавливаем шторм если идёт
+      if (meteorStormState.active) {
+        meteorStormState.active = false;
+        clearTimer('meteorSpawn');
+        clearTimer('meteorRound');
+        const container = document.getElementById('meteorStormArea');
+        if (container) {
+          container.querySelectorAll('.storm-meteor, .storm-float-text').forEach(el => el.remove());
+        }
+        document.getElementById('meteorStormOverlay')?.classList.remove('active');
+      }
+    }
+    
+    if (_showToast) _showToast(def.endMessage, def.endToast);
+    sendBotNotification(`❄️ Ивент завершён: ${def.name}`);
+    
+    this.activeEventId = null;
+    this.eventEndTime = null;
+    
     saveGame();
+    if (_renderEventsTab) _renderEventsTab();
   },
   
   endEvent() {
-    this.eventPhase = 'ending';
-    if (_showToast) _showToast('❄️ Ивент завершён!', '❄️');
-    sendBotNotification('❄️ Ивент завершён.');
+    if (!this.activeEventId) return;
+    const def = EVENT_DEFINITIONS[this.activeEventId];
+    if (!def) return;
+    
+    if (_showToast) _showToast(def.endMessage, def.endToast);
+    sendBotNotification(`❄️ Ивент завершён: ${def.name}`);
+    
+    this.activeEventId = null;
+    this.eventEndTime = null;
+    
     saveGame();
+    if (_renderEventsTab) _renderEventsTab();
   }
 };
 
@@ -243,8 +296,8 @@ let forgeState = {
 };
 
 export function openForge() {
-  const event = eventsManager.getActiveEvent();
-  if (!event || event.id !== 'great_smelt') {
+  const eventId = eventsManager.getActiveEventId();
+  if (eventId !== 'great_smelt') {
     if (_showToast) _showToast('Плавильня закрыта! Дождитесь Великой Переплавки.', '❄️');
     return;
   }
@@ -776,9 +829,9 @@ function getMeteorType() {
     return { type: 'legendary', shards: 50, speed: 1.2, color: '#FFD700', emoji: '✨', size: 60 };
   }
   if (rand < 0.29) {
-    return { type: 'rare', shards: 15, speed: 2.0, color: '#FF8C00', emoji: '🔥', size: 52 };
+    return { type: 'rare', shards: 15, speed: 1.6, color: '#FF8C00', emoji: '🔥', size: 52 };
   }
-  return { type: 'common', shards: 5, speed: 3.2, color: '#A0A0A0', emoji: '☄️', size: 46 };
+  return { type: 'common', shards: 5, speed: 2.5, color: '#A0A0A0', emoji: '☄️', size: 46 };
 }
 
 function spawnMeteor(container) {
@@ -802,8 +855,6 @@ function spawnMeteor(container) {
   meteor.style.fontSize = (size * 0.55) + 'px';
   meteor.textContent = meteorData.emoji;
   meteor.style.animationDuration = meteorData.speed + 's';
-  
-  // 🩹 Увеличенный хитбокс
   meteor.style.padding = '10px';
   
   if (meteorData.type === 'secret') {
@@ -818,13 +869,11 @@ function spawnMeteor(container) {
     meteorStormState.meteorsCaught++;
     meteorStormState.shardsCollected += meteorData.shards;
     
-    // 🩹 Счётчик на экране
     const shardsDisplay = document.getElementById('stormShardsDisplay');
     if (shardsDisplay) {
       shardsDisplay.textContent = `Осколков: ${meteorStormState.shardsCollected}`;
     }
     
-    // 🩹 Всплывающая циферка
     const floatText = document.createElement('div');
     floatText.className = 'storm-float-text';
     floatText.textContent = '+' + meteorData.shards;
@@ -851,6 +900,16 @@ function spawnMeteor(container) {
   setTimeout(() => {
     if (meteor.parentNode) meteor.remove();
   }, meteorData.speed * 1000 + 500);
+}
+
+// 🆕 ХАОС-СПАВН: случайные интервалы
+function scheduleNextMeteor(container) {
+  if (!meteorStormState.active) return;
+  const delay = 250 + Math.random() * 550; // 250–800 мс
+  activeTimers['meteorSpawn'] = setTimeout(() => {
+    spawnMeteor(container);
+    scheduleNextMeteor(container);
+  }, delay);
 }
 
 export function startMeteorStorm() {
@@ -886,14 +945,8 @@ export function startMeteorStorm() {
   
   activeTimers['meteorRound'] = countdownInterval;
   
-  const spawnMeteors = () => {
-    if (!meteorStormState.active) return;
-    spawnMeteor(container);
-    const nextDelay = 600 + Math.random() * 200;
-    activeTimers['meteorSpawn'] = setTimeout(spawnMeteors, nextDelay);
-  };
-  
-  spawnMeteors();
+  // Запускаем хаос-спавн
+  scheduleNextMeteor(container);
   
   playerState.meteorCooldownEnd = Date.now() + meteorStormState.cooldownDuration;
   saveGame();
@@ -975,9 +1028,8 @@ export function saveGame() {
     },
     collectibleSerials,
     nextSerial,
-    activeEvent: eventsManager.activeEvent,
+    activeEventId: eventsManager.activeEventId,
     eventEndTime: eventsManager.eventEndTime,
-    eventPhase: eventsManager.eventPhase,
     lastEventId: eventsManager.lastEventId
   });
   
@@ -1077,9 +1129,8 @@ function applySaveData(data) {
     }
   }
   if (data.nextSerial) nextSerial = data.nextSerial;
-  if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
+  if (data.activeEventId) eventsManager.activeEventId = data.activeEventId;
   if (data.eventEndTime) eventsManager.eventEndTime = data.eventEndTime;
-  if (data.eventPhase) eventsManager.eventPhase = data.eventPhase;
   if (data.lastEventId) eventsManager.lastEventId = data.lastEventId;
 }
 
@@ -1248,7 +1299,7 @@ function updateEventTimer() {
     timerEl.textContent = eventsManager.getTimeLeft();
   }
   
-  if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime && eventsManager.eventPhase === 'active') {
+  if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime) {
     eventsManager.endEvent();
     if (_renderCurrentTab) _renderCurrentTab();
   }
