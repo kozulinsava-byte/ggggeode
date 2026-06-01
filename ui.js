@@ -1,6 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES } from './config.js';
-import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions } from './core.js';
+import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState } from './core.js';
 
 // Регистрируем UI функции в core.js
 registerUIFunctions({
@@ -11,7 +11,8 @@ registerUIFunctions({
     renderCurrentTab: renderCurrentTab,
     renderExpeditionsTab: renderExpeditionsTab,
     renderImageToElement: renderImageToElement,
-    showRewardPopup: showRewardPopup
+    showRewardPopup: showRewardPopup,
+    renderEventsTab: renderEventsTab
 });
 
 // DOM-элементы
@@ -140,7 +141,6 @@ export function openShowcase(ingotId, isMystery = false) {
   let rarityClass = ingot.rarityClass;
   let idHtml = '';
 
-  // Цвета для тегов редкости
   const rarityColors = {
     'common': '#A0A0A0',
     'rare': '#4A9CFF',
@@ -149,18 +149,18 @@ export function openShowcase(ingotId, isMystery = false) {
     'collectible': '#FF64FF'
   };
   
-  // Названия типов добычи
   const sourceNames = {
     'expedition': 'Экспедиционный',
     'crafted': 'Крафтовый',
-    'meteor': 'Метеоритный'
+    'meteor': 'Метеоритный',
+    'special_meteor': 'Метеоритный'
   };
   
-  // Цвета для тегов типа добычи
   const sourceColors = {
     'expedition': '#50C878',
     'crafted': '#FF8C00',
-    'meteor': '#FF4444'
+    'meteor': '#FF4444',
+    'special_meteor': '#FF4444'
   };
 
   if (!discovered && !ingot.isCollectible) {
@@ -175,12 +175,12 @@ export function openShowcase(ingotId, isMystery = false) {
     desc = ingot.location === 'mine' ? 'Глубины Шахт скрывают этот секрет.' : 
            ingot.location === 'jungle' ? 'Джунгли ревностно охраняют эту тайну.' : 
            ingot.location === 'craft' ? 'Создаётся в горниле Великой Переплавки.' : 
+           ingot.location === 'meteor' ? 'Глубины космоса хранят это сокровище.' : 
            'Пояс Астероидов хранит это сокровище.';
     rarity = '???';
     rarityClass = 'common';
     idHtml = `<div class="showcase-id"><span class="showcase-id-label">Статус</span><span class="showcase-id-value" style="color:var(--text-muted);">НЕ ОТКРЫТ</span></div>`;
   } else {
-    // ДВЕ ПЛАШКИ: Редкость и Тип добычи
     const rarityColor = rarityColors[ingot.rarityLevel] || '#A0A0A0';
     const sourceColor = sourceColors[ingot.sourceType] || '#A0A0A0';
     const sourceName = sourceNames[ingot.sourceType] || ingot.sourceType;
@@ -317,7 +317,7 @@ function showAdminPanel() {
           state.minedStats[id] = (state.minedStats[id] || 0) + 1;
         }
       });
-      state.player.totalArtifacts += 6;
+      state.player.totalArtifacts += 8;
       saveGame(); 
       showToast('+1 артефакт каждого типа!', '💎'); 
       closeModal(); 
@@ -911,7 +911,7 @@ export function renderInventoryTab() {
   document.querySelectorAll('[data-ingot]').forEach((c) => c.addEventListener('click', () => openShowcase(c.dataset.ingot)));
 }
 
-// ========== ОБНОВЛЁННАЯ КОЛЛЕКЦИЯ: ПОЛОЧКИ БЕЗ ФИЛЬТРОВ ==========
+// ========== КОЛЛЕКЦИЯ: ПОЛОЧКИ БЕЗ ФИЛЬТРОВ ==========
 export function renderCollectionTab() {
   const state = getPlayerState();
   const totalRegular = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible).length;
@@ -935,14 +935,12 @@ export function renderCollectionTab() {
   if (collectionSubTab === 'encyclopedia') {
     const regularIngots = Object.values(CONFIG_ITEMS).filter((i) => !i.isCollectible);
     
-    // Названия типов добычи для тегов
     const sourceNames = {
       'expedition': 'Экспедиция',
       'crafted': 'Крафт',
       'meteor': 'Метеорит'
     };
     
-    // Функция для рендера карточки слитка
     function renderIngotCard(ing) {
       const discovered = state.minedStats[ing.id] > 0;
       const cardClass = discovered ? 'collection-card' : 'collection-card silhouette';
@@ -951,7 +949,6 @@ export function renderCollectionTab() {
       
       let tagsHtml = '';
       if (discovered) {
-        // Теги видны только если слиток открыт
         tagsHtml = `
           <div style="font-size:9px; color:var(--text-secondary); margin:2px 0;">${ing.rarity} | ${sourceLabel}</div>
         `;
@@ -967,7 +964,7 @@ export function renderCollectionTab() {
       `;
     }
     
-    // ===== ПОЛОЧКА 1: ЭКСПЕДИЦИИ =====
+    // ===== ПОЛОЧКА 1: ШАХТЫ И ЭКСПЕДИЦИИ =====
     html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-gold);">⛏️ Шахты и Экспедиции</div>';
     html += '<div class="grid-container">';
     regularIngots.filter(i => i.sourceType === 'expedition').forEach(ing => {
@@ -983,7 +980,7 @@ export function renderCollectionTab() {
     });
     html += '</div>';
     
-    // ===== ПОЛОЧКА 3: МЕТЕОРИТЫ (задел) =====
+    // ===== ПОЛОЧКА 3: МЕТЕОРИТЫ =====
     const meteorIngots = regularIngots.filter(i => i.sourceType === 'meteor');
     if (meteorIngots.length > 0) {
       html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-purple);">☄️ Метеоритный Шторм</div>';
@@ -996,7 +993,6 @@ export function renderCollectionTab() {
     
     mainContent.innerHTML = html;
     
-    // Рендер иконок
     regularIngots.forEach((ing) => {
       const el = document.getElementById(`enc-${ing.id}`);
       if (el) {
@@ -1009,7 +1005,7 @@ export function renderCollectionTab() {
     });
     
   } else {
-    // Зал Славы (коллекционные артефакты) — без изменений
+    // Зал Славы
     const coll = Object.values(CONFIG_ITEMS).filter((i) => i.isCollectible);
     html += '<div class="grid-container">';
     coll.forEach((ing) => {
@@ -1038,7 +1034,6 @@ export function renderCollectionTab() {
     });
   }
 
-  // Обработчики подвкладок Энциклопедия / Зал Славы
   document.querySelectorAll('[data-subtab]').forEach((b) =>
     b.addEventListener('click', () => {
       collectionSubTab = b.dataset.subtab;
@@ -1046,7 +1041,6 @@ export function renderCollectionTab() {
     })
   );
   
-  // Обработчики кликов по слиткам
   document.querySelectorAll('[data-ingot]').forEach((c) =>
     c.addEventListener('click', () => {
       const ing = CONFIG_ITEMS[c.dataset.ingot];
@@ -1055,14 +1049,17 @@ export function renderCollectionTab() {
   );
 }
 
+// ========== ОБНОВЛЁННЫЙ РЕНДЕР ИВЕНТОВ ==========
 export function renderEventsTab() {
+  const state = getPlayerState();
   const activeEvent = eventsManager.getActiveEvent();
   const timeLeft = activeEvent ? eventsManager.getTimeLeft() : '';
   const phase = eventsManager.eventPhase;
   
   let html = '<div class="section-title">📡 Ивенты</div>';
   
-  if (activeEvent && phase === 'active') {
+  // === ВЕЛИКАЯ ПЕРЕПЛАВКА ===
+  if (activeEvent && activeEvent.id === 'great_smelt' && phase === 'active') {
     html += `
       <div class="card" style="border: 2px solid rgba(255,100,0,0.4); background: rgba(255,50,0,0.05); position: relative; overflow: hidden;">
         <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, rgba(255,100,0,0.1) 0%, transparent 70%); pointer-events: none;"></div>
@@ -1091,12 +1088,43 @@ export function renderEventsTab() {
         <div class="event-icon">❄️</div>
         <div class="event-title">Кузни остыли</div>
         <div class="event-desc">Великая Переплавка завершена. Дождитесь следующего ивента.</div>
-        <div style="margin-top: 16px; color: var(--text-muted); font-size: 13px;">Следующий ивент начнётся автоматически</div>
       </div>
     `;
-  } else {
+  }
+  
+  // === ☄️ МЕТЕОРИТНЫЙ ШТОРМ ===
+  const onCooldown = isMeteorStormOnCooldown();
+  const cooldownRemaining = getMeteorCooldownRemaining();
+  const cooldownSec = Math.ceil(cooldownRemaining / 1000);
+  
+  html += `
+    <div class="card" style="border: 2px solid rgba(180,0,255,0.3); background: rgba(100,0,150,0.05); position: relative; overflow: hidden; margin-top: 16px;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, rgba(180,0,255,0.08) 0%, transparent 70%); pointer-events: none;"></div>
+      <div class="event-icon" style="font-size:72px; margin-bottom:16px;">☄️</div>
+      <div class="event-title" style="color: var(--accent-purple); font-size: 22px; margin-bottom: 8px;">Метеоритный Шторм</div>
+      <div class="event-desc" style="color: var(--text-primary); font-size: 14px; line-height: 1.6; margin-bottom: 16px;">Небо пылает! Лови падающие метеориты и собирай осколки!</div>
+      
+      <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+          <span style="font-size: 20px;">💎</span>
+          <span style="font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent-gold);">Осколки метеоритов: ${state.meteorShards || 0}</span>
+        </div>
+      </div>
+      
+      <div style="display: flex; gap: 10px;">
+        <button class="forge-smelt-btn" id="playMeteorStormBtn" style="flex: 1; ${onCooldown || meteorStormState.active ? 'opacity: 0.5; pointer-events: none;' : ''}">
+          ${onCooldown ? `⏳ Игра (0:${cooldownSec.toString().padStart(2, '0')})` : (meteorStormState.active ? '☄️ Идёт шторм...' : '🎮 Игра')}
+        </button>
+        <button class="forge-smelt-btn" id="meteorShopBtn" style="flex: 1; opacity: 0.4; pointer-events: none;">
+          🛒 Обмен (скоро)
+        </button>
+      </div>
+    </div>
+  `;
+  
+  if (phase !== 'active' && phase !== 'ending') {
     html += `
-      <div class="event-placeholder">
+      <div class="event-placeholder" style="margin-top: 16px;">
         <div class="event-icon">🛰️</div>
         <div class="event-title">Ожидание ивента</div>
         <div class="event-desc">Великая Переплавка запускается автоматически. Проверяйте вкладку Ивентов!</div>
@@ -1106,14 +1134,80 @@ export function renderEventsTab() {
   
   mainContent.innerHTML = html;
   
+  // Обработчики
   const enterForgeBtn = document.getElementById('enterForgeBtn');
   if (enterForgeBtn) {
-    enterForgeBtn.addEventListener('click', () => {
-      openForge();
-    });
+    enterForgeBtn.addEventListener('click', () => openForge());
+  }
+  
+  const playBtn = document.getElementById('playMeteorStormBtn');
+  if (playBtn && !onCooldown && !meteorStormState.active) {
+    playBtn.addEventListener('click', () => startMeteorStorm());
   }
   
   updateEventTimerInterval();
+  updateMeteorCooldownUI();
+}
+
+// 🆕 Обновление кнопки КД метеоритного шторма
+let meteorCooldownInterval = null;
+
+function updateMeteorCooldownUI() {
+  if (meteorCooldownInterval) clearInterval(meteorCooldownInterval);
+  
+  meteorCooldownInterval = setInterval(() => {
+    if (currentTab !== 'events') {
+      clearInterval(meteorCooldownInterval);
+      meteorCooldownInterval = null;
+      return;
+    }
+    
+    const btn = document.getElementById('playMeteorStormBtn');
+    if (!btn) return;
+    
+    const onCooldown = isMeteorStormOnCooldown();
+    const remaining = getMeteorCooldownRemaining();
+    const sec = Math.ceil(remaining / 1000);
+    
+    if (onCooldown) {
+      btn.textContent = `⏳ Игра (0:${sec.toString().padStart(2, '0')})`;
+      btn.style.opacity = '0.5';
+      btn.style.pointerEvents = 'none';
+    } else if (meteorStormState.active) {
+      btn.textContent = '☄️ Идёт шторм...';
+      btn.style.opacity = '0.5';
+      btn.style.pointerEvents = 'none';
+    } else {
+      btn.textContent = '🎮 Игра';
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+      clearInterval(meteorCooldownInterval);
+      meteorCooldownInterval = null;
+    }
+  }, 1000);
+}
+
+// 🆕 Окно итогов метеоритного шторма
+export function showMeteorStormResults(shardsCollected, meteorsCaught, secretCaught) {
+  let html = `
+    <div class="modal-header">
+      <div class="modal-title">☄️ Шторм завершён!</div>
+      <button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button>
+    </div>
+    <div class="modal-content">
+      <div class="modal-icon-large" style="font-size:80px;">☄️</div>
+      <div style="font-size: 16px; color: var(--text-primary); margin-bottom: 20px;">
+        Метеоритов поймано: <strong>${meteorsCaught}</strong>
+      </div>
+      <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 18px; margin-bottom: 16px;">
+        <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">Собрано осколков за раунд:</div>
+        <div style="font-family: 'Unbounded', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent-gold);">+${shardsCollected}</div>
+      </div>
+      ${secretCaught ? '<div style="color: #FF00FF; font-weight: 700; margin-top: 12px;">🌟 Пойман секретный метеорит!</div>' : ''}
+    </div>
+  `;
+  
+  openModal(html);
 }
 
 let eventTimerInterval = null;
