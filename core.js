@@ -11,7 +11,7 @@ let _renderExpeditionsTab = null;
 let _renderImageToElement = null;
 let _showRewardPopup = null;
 let _renderEventsTab = null;
-let _updateMeteorShardsDisplay = null; // 🆕
+let _updateMeteorShardsDisplay = null;
 
 export function registerUIFunctions(functions) {
     _showToast = functions.showToast;
@@ -141,12 +141,15 @@ function setTimerTimeout(timerName, callback, delay) {
   return activeTimers[timerName];
 }
 
-// ---------- МЕНЕДЖЕР ИВЕНТОВ ----------
+// ---------- МЕНЕДЖЕР ИВЕНТОВ (🩹 РОТАЦИЯ БЕЗ ПОВТОРОВ) ----------
+const EVENT_LIST = ['great_smelt', 'meteor_storm'];
+
 export const eventsManager = {
   activeEvent: null,
   eventEndTime: null,
   eventInterval: null,
   eventPhase: 'idle',
+  lastEventId: null, // 🩹 запоминаем последний ивент
   
   getActiveEvent() {
     if (this.activeEvent && this.eventEndTime && Date.now() < this.eventEndTime) {
@@ -165,10 +168,28 @@ export const eventsManager = {
   
   startEventCycle() {
     clearTimer('event');
-    this.triggerGreatSmelt();
+    this.triggerRandomEvent();
     this.eventInterval = setInterval(() => {
-      this.triggerGreatSmelt();
+      this.triggerRandomEvent();
     }, 30 * 60 * 1000);
+  },
+  
+  // 🩹 НОВОЕ: рандомайзер без повторов
+  getNextEventId() {
+    const available = EVENT_LIST.filter(id => id !== this.lastEventId);
+    if (available.length === 0) return EVENT_LIST[0];
+    return available[Math.floor(Math.random() * available.length)];
+  },
+  
+  triggerRandomEvent() {
+    const nextId = this.getNextEventId();
+    this.lastEventId = nextId;
+    
+    if (nextId === 'great_smelt') {
+      this.triggerGreatSmelt();
+    } else if (nextId === 'meteor_storm') {
+      this.triggerMeteorStormEvent();
+    }
   },
   
   triggerGreatSmelt() {
@@ -187,10 +208,27 @@ export const eventsManager = {
     saveGame();
   },
   
+  // 🩹 НОВОЕ: ивент метеоритного шторма
+  triggerMeteorStormEvent() {
+    this.activeEvent = {
+      id: 'meteor_storm',
+      name: '☄️ Метеоритный Шторм',
+      icon: '☄️',
+      description: 'Небо пылает! Лови падающие метеориты!',
+      longDescription: 'Метеориты падают с небес! Тапай по ним, чтобы собрать осколки. Обменяй осколки на жеоды в магазине!'
+    };
+    this.eventEndTime = Date.now() + 15 * 60 * 1000;
+    this.eventPhase = 'active';
+    
+    if (_showToast) _showToast('☄️ Метеоритный Шторм начался!', '☄️');
+    sendBotNotification('☄️ Шторм начался! 15 минут для сбора осколков!');
+    saveGame();
+  },
+  
   endEvent() {
     this.eventPhase = 'ending';
-    if (_showToast) _showToast('❄️ Переплавка завершена!', '❄️');
-    sendBotNotification('❄️ Кузни остыли.');
+    if (_showToast) _showToast('❄️ Ивент завершён!', '❄️');
+    sendBotNotification('❄️ Ивент завершён.');
     saveGame();
   }
 };
@@ -732,15 +770,15 @@ function getMeteorType() {
   const canSpawnSecret = !hasOrion || !hasAndromeda;
   
   if (canSpawnSecret && rand < 0.01) {
-    return { type: 'secret', shards: 100, speed: 1.0, color: '#FF00FF', emoji: '💜', size: 60 };
+    return { type: 'secret', shards: 100, speed: 1.0, color: '#FF00FF', emoji: '💜', size: 70 };
   }
   if (rand < 0.05) {
-    return { type: 'legendary', shards: 50, speed: 1.2, color: '#FFD700', emoji: '✨', size: 50 };
+    return { type: 'legendary', shards: 50, speed: 1.2, color: '#FFD700', emoji: '✨', size: 60 };
   }
   if (rand < 0.29) {
-    return { type: 'rare', shards: 15, speed: 2.5, color: '#FF8C00', emoji: '🔥', size: 44 };
+    return { type: 'rare', shards: 15, speed: 2.0, color: '#FF8C00', emoji: '🔥', size: 52 };
   }
-  return { type: 'common', shards: 5, speed: 4.0, color: '#A0A0A0', emoji: '☄️', size: 38 };
+  return { type: 'common', shards: 5, speed: 3.2, color: '#A0A0A0', emoji: '☄️', size: 46 };
 }
 
 function spawnMeteor(container) {
@@ -754,16 +792,19 @@ function spawnMeteor(container) {
   meteor.dataset.type = meteorData.type;
   meteor.dataset.shards = meteorData.shards;
   
-  const x = Math.random() * (container.clientWidth - 60) + 10;
+  const x = Math.random() * (container.clientWidth - 80) + 20;
   const size = meteorData.size;
   
   meteor.style.left = x + 'px';
-  meteor.style.top = '-60px';
+  meteor.style.top = '-70px';
   meteor.style.width = size + 'px';
   meteor.style.height = size + 'px';
-  meteor.style.fontSize = (size * 0.6) + 'px';
+  meteor.style.fontSize = (size * 0.55) + 'px';
   meteor.textContent = meteorData.emoji;
   meteor.style.animationDuration = meteorData.speed + 's';
+  
+  // 🩹 Увеличенный хитбокс
+  meteor.style.padding = '10px';
   
   if (meteorData.type === 'secret') {
     meteor.style.animationName = 'meteorFallSecret';
@@ -777,13 +818,13 @@ function spawnMeteor(container) {
     meteorStormState.meteorsCaught++;
     meteorStormState.shardsCollected += meteorData.shards;
     
-    // 🩹 ФИКС: обновляем счётчик на экране мгновенно
+    // 🩹 Счётчик на экране
     const shardsDisplay = document.getElementById('stormShardsDisplay');
     if (shardsDisplay) {
       shardsDisplay.textContent = `Осколков: ${meteorStormState.shardsCollected}`;
     }
     
-    // Всплывающая циферка
+    // 🩹 Всплывающая циферка
     const floatText = document.createElement('div');
     floatText.className = 'storm-float-text';
     floatText.textContent = '+' + meteorData.shards;
@@ -791,7 +832,7 @@ function spawnMeteor(container) {
     floatText.style.top = (parseFloat(meteor.style.top) || 50) + 'px';
     floatText.style.color = meteorData.color;
     container.appendChild(floatText);
-    setTimeout(() => floatText.remove(), 1200);
+    setTimeout(() => floatText.remove(), 500);
     
     if (meteorData.type === 'secret') {
       meteorStormState.secretMeteorCaught = true;
@@ -936,7 +977,8 @@ export function saveGame() {
     nextSerial,
     activeEvent: eventsManager.activeEvent,
     eventEndTime: eventsManager.eventEndTime,
-    eventPhase: eventsManager.eventPhase
+    eventPhase: eventsManager.eventPhase,
+    lastEventId: eventsManager.lastEventId
   });
   
   try {
@@ -1038,6 +1080,7 @@ function applySaveData(data) {
   if (data.activeEvent) eventsManager.activeEvent = data.activeEvent;
   if (data.eventEndTime) eventsManager.eventEndTime = data.eventEndTime;
   if (data.eventPhase) eventsManager.eventPhase = data.eventPhase;
+  if (data.lastEventId) eventsManager.lastEventId = data.lastEventId;
 }
 
 export const saveToLocalStorage = saveGame;
