@@ -373,15 +373,20 @@
     .storm-timer { font-family:'Unbounded',sans-serif; font-size:48px; font-weight:800; color:var(--accent-purple); text-shadow:0 0 30px rgba(180,0,255,0.5); margin-bottom:10px; z-index:601; }
     .storm-shards { font-size:16px; color:var(--accent-gold); margin-bottom:20px; z-index:601; }
     
-    .storm-area { position:relative; width:100%; max-width:400px; height:70vh; overflow:hidden; z-index:601; }
+    /* 🩹 ГРАДИЕНТНАЯ МАСКА КОНТЕЙНЕРА */
+    .storm-area { 
+      position:relative; width:100%; max-width:400px; height:70vh; overflow:hidden; z-index:601; 
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+    }
     
     .storm-meteor { position:absolute; cursor:pointer; display:flex; align-items:center; justify-content:center; animation:meteorFall linear forwards; z-index:602; filter:drop-shadow(0 0 10px currentColor); -webkit-tap-highlight-color:transparent; }
-    @keyframes meteorFall { 0%{top:-60px;opacity:1;} 100%{top:105%;opacity:1;} }
-    @keyframes meteorFallSecret { 0%{top:-60px;opacity:1;transform:translateX(0);} 50%{transform:translateX(var(--drift));} 100%{top:105%;opacity:1;transform:translateX(0);} }
+    @keyframes meteorFall { 0%{top:-70px;opacity:1;} 100%{top:105%;opacity:1;} }
+    @keyframes meteorFallSecret { 0%{top:-70px;opacity:1;transform:translateX(0);} 50%{transform:translateX(var(--drift));} 100%{top:105%;opacity:1;transform:translateX(0);} }
     .storm-meteor:active { transform:scale(1.3); }
     
-    .storm-float-text { position:absolute; font-family:'Unbounded',sans-serif; font-weight:800; font-size:20px; z-index:610; pointer-events:none; animation:floatUp 1.2s ease-out forwards; text-shadow:0 0 10px currentColor; }
-    @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1);} 100%{opacity:0;transform:translateY(-60px) scale(1.5);} }
+    .storm-float-text { position:absolute; font-family:'Unbounded',sans-serif; font-weight:800; font-size:22px; z-index:610; pointer-events:none; animation:floatUp 0.5s ease-out forwards; text-shadow:0 0 10px currentColor; }
+    @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1);} 100%{opacity:0;transform:translateY(-50px) scale(1.8);} }
 
     .mt-4 { margin-top:16px; }
   </style>
