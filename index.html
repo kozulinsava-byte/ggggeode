@@ -365,6 +365,24 @@
     .brawl-close-btn { margin-top:40px; background:linear-gradient(135deg,var(--accent-gold),var(--accent-orange)); color:var(--btn-text); border:none; padding:16px 40px; border-radius:60px; font-weight:800; font-size:16px; cursor:pointer; transition:all 0.2s; box-shadow:0 4px 30px rgba(255,215,0,0.3); }
     .brawl-close-btn:active { transform:scale(0.92); }
 
+    /* ========== ☄️ МЕТЕОРИТНЫЙ ШТОРМ ========== */
+    .meteor-storm-overlay { position:fixed; top:0;left:0;right:0;bottom:0; background:radial-gradient(circle at center, #0a0015 0%, #000000 100%); z-index:600; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; visibility:hidden; transition:opacity 0.3s; }
+    [data-theme="light"] .meteor-storm-overlay { background:radial-gradient(circle at center, #f5f0ff 0%, #e8e0f0 100%); }
+    .meteor-storm-overlay.active { opacity:1; visibility:visible; }
+    
+    .storm-timer { font-family:'Unbounded',sans-serif; font-size:48px; font-weight:800; color:var(--accent-purple); text-shadow:0 0 30px rgba(180,0,255,0.5); margin-bottom:10px; z-index:601; }
+    .storm-shards { font-size:16px; color:var(--accent-gold); margin-bottom:20px; z-index:601; }
+    
+    .storm-area { position:relative; width:100%; max-width:400px; height:70vh; overflow:hidden; z-index:601; }
+    
+    .storm-meteor { position:absolute; cursor:pointer; display:flex; align-items:center; justify-content:center; animation:meteorFall linear forwards; z-index:602; filter:drop-shadow(0 0 10px currentColor); -webkit-tap-highlight-color:transparent; }
+    @keyframes meteorFall { 0%{top:-60px;opacity:1;} 100%{top:105%;opacity:1;} }
+    @keyframes meteorFallSecret { 0%{top:-60px;opacity:1;transform:translateX(0);} 50%{transform:translateX(var(--drift));} 100%{top:105%;opacity:1;transform:translateX(0);} }
+    .storm-meteor:active { transform:scale(1.3); }
+    
+    .storm-float-text { position:absolute; font-family:'Unbounded',sans-serif; font-weight:800; font-size:20px; z-index:610; pointer-events:none; animation:floatUp 1.2s ease-out forwards; text-shadow:0 0 10px currentColor; }
+    @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1);} 100%{opacity:0;transform:translateY(-60px) scale(1.5);} }
+
     .mt-4 { margin-top:16px; }
   </style>
 
@@ -465,6 +483,13 @@
       <div class="signal-game-timer" id="signalTimer">10</div>
       <div class="signal-game-counter" id="signalCounter">Сигналов: 0 / 8</div>
       <div id="signalGameArea" style="position: relative; width: 100%; height: 60vh;"></div>
+    </div>
+
+    <!-- ☄️ МЕТЕОРИТНЫЙ ШТОРМ -->
+    <div class="meteor-storm-overlay" id="meteorStormOverlay">
+      <div class="storm-timer" id="stormTimerDisplay">20</div>
+      <div class="storm-shards" id="stormShardsDisplay">Осколков: 0</div>
+      <div class="storm-area" id="meteorStormArea"></div>
     </div>
   </div>
 
