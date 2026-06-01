@@ -1140,13 +1140,17 @@ export function renderEventsTab() {
     enterForgeBtn.addEventListener('click', () => openForge());
   }
   
-  // 🩹 ФИКС: вешаем обработчик через делегирование на весь mainContent
-  mainContent.addEventListener('click', (e) => {
-    const btn = e.target.closest('#playMeteorStormBtn');
-    if (!btn) return;
-    if (isMeteorStormOnCooldown() || meteorStormState.active) return;
-    startMeteorStorm();
-  });
+  // 🩹 ФИКС: обработчик напрямую на кнопке с stopPropagation
+  const playBtn = document.getElementById('playMeteorStormBtn');
+  if (playBtn) {
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!isMeteorStormOnCooldown() && !meteorStormState.active) {
+        startMeteorStorm();
+      }
+    });
+  }
   
   updateEventTimerInterval();
   updateMeteorCooldownUI();
@@ -1186,6 +1190,14 @@ function updateMeteorCooldownUI() {
       btn.style.pointerEvents = 'auto';
       clearInterval(meteorCooldownInterval);
       meteorCooldownInterval = null;
+      // 🩹 ПЕРЕВЕШИВАЕМ ОБРАБОТЧИК при разблокировке
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!isMeteorStormOnCooldown() && !meteorStormState.active) {
+          startMeteorStorm();
+        }
+      };
     }
   }, 1000);
 }
