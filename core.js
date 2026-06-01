@@ -10,7 +10,8 @@ let _renderCurrentTab = null;
 let _renderExpeditionsTab = null;
 let _renderImageToElement = null;
 let _showRewardPopup = null;
-let _renderEventsTab = null; // 🆕 для обновления ивентов
+let _renderEventsTab = null;
+let _updateMeteorShardsDisplay = null; // 🆕
 
 export function registerUIFunctions(functions) {
     _showToast = functions.showToast;
@@ -22,6 +23,7 @@ export function registerUIFunctions(functions) {
     _renderImageToElement = functions.renderImageToElement;
     _showRewardPopup = functions.showRewardPopup;
     _renderEventsTab = functions.renderEventsTab;
+    _updateMeteorShardsDisplay = functions.updateMeteorShardsDisplay;
 }
 
 const isTelegram = !!window.Telegram?.WebApp;
@@ -49,8 +51,8 @@ export let playerState = {
   player: {},
   echoCooldowns: {},
   expeditionBonuses: {},
-  meteorShards: 0, // 🆕 осколки метеоритов
-  meteorCooldownEnd: null // 🆕 время окончания КД шторма
+  meteorShards: 0,
+  meteorCooldownEnd: null
 };
 
 export function getPlayerState() {
@@ -77,8 +79,8 @@ export const meteorStormState = {
   spawnInterval: null,
   roundTimer: null,
   roundStartTime: null,
-  roundDuration: 20000, // 20 секунд
-  cooldownDuration: 60000 // 1 минута
+  roundDuration: 20000,
+  cooldownDuration: 60000
 };
 
 export function sendBotNotification(message) {
@@ -106,8 +108,8 @@ const activeTimers = {
   forge: null,
   signal: null,
   signalTimeout: null,
-  meteorSpawn: null, // 🆕
-  meteorRound: null   // 🆕
+  meteorSpawn: null,
+  meteorRound: null
 };
 
 function clearTimer(timerName) {
@@ -725,7 +727,6 @@ export function canStartMeteorStorm() {
 function getMeteorType() {
   const rand = Math.random();
   
-  // Проверяем, есть ли у игрока оба секретных слитка
   const hasOrion = playerState.ingots['orion'] > 0;
   const hasAndromeda = playerState.ingots['andromeda'] > 0;
   const canSpawnSecret = !hasOrion || !hasAndromeda;
@@ -764,7 +765,6 @@ function spawnMeteor(container) {
   meteor.textContent = meteorData.emoji;
   meteor.style.animationDuration = meteorData.speed + 's';
   
-  // Секретный метеорит — хитрая траектория
   if (meteorData.type === 'secret') {
     meteor.style.animationName = 'meteorFallSecret';
     meteor.style.setProperty('--drift', (Math.random() * 100 - 50) + 'px');
@@ -777,7 +777,13 @@ function spawnMeteor(container) {
     meteorStormState.meteorsCaught++;
     meteorStormState.shardsCollected += meteorData.shards;
     
-    // Всплывающая циферка вместо частиц
+    // 🩹 ФИКС: обновляем счётчик на экране мгновенно
+    const shardsDisplay = document.getElementById('stormShardsDisplay');
+    if (shardsDisplay) {
+      shardsDisplay.textContent = `Осколков: ${meteorStormState.shardsCollected}`;
+    }
+    
+    // Всплывающая циферка
     const floatText = document.createElement('div');
     floatText.className = 'storm-float-text';
     floatText.textContent = '+' + meteorData.shards;
@@ -795,14 +801,12 @@ function spawnMeteor(container) {
     meteor.remove();
   });
   
-  // Автоудаление после падения
   meteor.addEventListener('animationend', () => {
     meteor.remove();
   });
   
   container.appendChild(meteor);
   
-  // Таймер автоудаления на случай, если анимация не сработала
   setTimeout(() => {
     if (meteor.parentNode) meteor.remove();
   }, meteorData.speed * 1000 + 500);
@@ -814,7 +818,6 @@ export function startMeteorStorm() {
   const container = document.getElementById('meteorStormArea');
   if (!container) return;
   
-  // Очищаем предыдущие
   container.innerHTML = '';
   
   meteorStormState.active = true;
@@ -824,11 +827,10 @@ export function startMeteorStorm() {
   meteorStormState.secretMeteorCaught = false;
   meteorStormState.roundStartTime = Date.now();
   
-  // Показываем оверлей
   document.getElementById('meteorStormOverlay').classList.add('active');
   document.getElementById('stormTimerDisplay').textContent = '20';
+  document.getElementById('stormShardsDisplay').textContent = 'Осколков: 0';
   
-  // Таймер обратного отсчёта
   let secondsLeft = 20;
   const countdownInterval = setInterval(() => {
     secondsLeft--;
@@ -843,7 +845,6 @@ export function startMeteorStorm() {
   
   activeTimers['meteorRound'] = countdownInterval;
   
-  // Спавн метеоритов каждые 600–800 мс
   const spawnMeteors = () => {
     if (!meteorStormState.active) return;
     spawnMeteor(container);
@@ -853,7 +854,6 @@ export function startMeteorStorm() {
   
   spawnMeteors();
   
-  // Блокируем кнопку, ставим КД
   playerState.meteorCooldownEnd = Date.now() + meteorStormState.cooldownDuration;
   saveGame();
   
@@ -866,25 +866,52 @@ function endMeteorStorm() {
   clearTimer('meteorSpawn');
   clearTimer('meteorRound');
   
-  // Очищаем оставшиеся метеориты
   const container = document.getElementById('meteorStormArea');
   if (container) {
     container.querySelectorAll('.storm-meteor, .storm-float-text').forEach(el => el.remove());
   }
   
-  // Начисляем осколки на баланс
   playerState.meteorShards += meteorStormState.shardsCollected;
   saveGame();
   
-  // Прячем оверлей
   document.getElementById('meteorStormOverlay').classList.remove('active');
   
-  // Показываем окно итогов через ui
   import('./ui.js').then(ui => {
     ui.showMeteorStormResults(meteorStormState.shardsCollected, meteorStormState.meteorsCaught, meteorStormState.secretMeteorCaught);
   });
   
   if (_renderEventsTab) _renderEventsTab();
+}
+
+// 🆕 МАГАЗИН ОБМЕНА ОСКОЛКОВ
+export const METEOR_SHOP_ITEMS = {
+  meteor_common: { geodeId: 'meteor_common', name: 'Космический обломок', icon: '☄️', price: 100, description: 'Обычный осколок метеоритного дождя.' },
+  meteor_rare: { geodeId: 'meteor_rare', name: 'Звёздное ядро', icon: '🌟', price: 350, description: 'Редкое ядро разрушенной звезды.' },
+  meteor_legendary: { geodeId: 'meteor_legendary', name: 'Осколок Пустоты', icon: '🕳️', price: 800, description: 'Легендарный осколок из глубин Пустоты.' }
+};
+
+export function buyMeteorGeode(shopItemId) {
+  const item = METEOR_SHOP_ITEMS[shopItemId];
+  if (!item) {
+    if (_showToast) _showToast('Товар не найден!', '⚠️');
+    return false;
+  }
+  
+  if (playerState.meteorShards < item.price) {
+    if (_showToast) _showToast(`Недостаточно осколков! Нужно ${item.price} 💎`, '⚠️');
+    return false;
+  }
+  
+  playerState.meteorShards -= item.price;
+  playerState.geodes[item.geodeId] = (playerState.geodes[item.geodeId] || 0) + 1;
+  
+  saveGame();
+  
+  if (_showToast) _showToast(`Куплено: ${item.name}!`, item.icon);
+  sendBotNotification(`🛒 Игрок купил ${item.name} за ${item.price} осколков`);
+  
+  if (_renderEventsTab) _renderEventsTab();
+  return true;
 }
 
 // ---------- СИСТЕМА СОХРАНЕНИЙ ----------
@@ -995,7 +1022,6 @@ function applySaveData(data) {
     }
   }
   
-  // 🆕 Загружаем осколки и КД
   if (typeof saved.meteorShards === 'number') {
     playerState.meteorShards = saved.meteorShards;
   }
@@ -1343,7 +1369,7 @@ function renderTestLeaderboard() {
   import('./ui.js').then(ui => ui.openModal(html));
 }
 
-// ---------- КОНВЕЙЕР (СИНХРОНИЗИРОВАННЫЙ) ----------
+// ---------- КОНВЕЙЕР ----------
 const conveyorOverlay = document.getElementById('conveyorOverlay');
 const conveyorTrack = document.getElementById('conveyorTrack');
 const conveyorTitle = document.getElementById('conveyorTitle');
@@ -1472,7 +1498,7 @@ function stopRoulette() {
   }, 100);
 }
 
-// ---------- КУЗНИЦА (BRAWL STARS) — ЭФФЕКТНОЕ ОТКРЫТИЕ ----------
+// ---------- КУЗНИЦА ----------
 let brawlState = {
   geodeId: null,
   isSpecial: false,
