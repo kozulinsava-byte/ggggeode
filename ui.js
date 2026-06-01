@@ -1140,10 +1140,13 @@ export function renderEventsTab() {
     enterForgeBtn.addEventListener('click', () => openForge());
   }
   
-  const playBtn = document.getElementById('playMeteorStormBtn');
-  if (playBtn && !onCooldown && !meteorStormState.active) {
-    playBtn.addEventListener('click', () => startMeteorStorm());
-  }
+  // 🩹 ФИКС: вешаем обработчик через делегирование на весь mainContent
+  mainContent.addEventListener('click', (e) => {
+    const btn = e.target.closest('#playMeteorStormBtn');
+    if (!btn) return;
+    if (isMeteorStormOnCooldown() || meteorStormState.active) return;
+    startMeteorStorm();
+  });
   
   updateEventTimerInterval();
   updateMeteorCooldownUI();
