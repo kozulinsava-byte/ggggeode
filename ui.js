@@ -127,21 +127,15 @@ export function showRewardPopup(ingot) {
   closeBtn.addEventListener('click', closeHandler);
 }
 
-// ---------- SHOWCASE (ПОЛНОЭКРАННЫЙ ПРОСМОТР) ----------
-export function openShowcase(ingotId, isMystery = false) {
+// ---------- ОТКРЫТИЕ КАРТОЧКИ ИЗ ИНВЕНТАРЯ (без «Добыто всего») ----------
+function openInventoryShowcase(ingotId) {
   const state = getPlayerState();
   const ingot = CONFIG_ITEMS[ingotId];
   if (!ingot) return;
   
   const owned = state.ingots[ingotId] > 0;
-  const discovered = state.minedStats[ingotId] > 0;
+  if (!owned) return;
   
-  let name = ingot.name;
-  let desc = ingot.description;
-  let rarity = ingot.rarity;
-  let rarityClass = ingot.rarityClass;
-  let idHtml = '';
-
   const rarityColors = {
     'common': '#A0A0A0',
     'rare': '#4A9CFF',
@@ -164,60 +158,144 @@ export function openShowcase(ingotId, isMystery = false) {
     'special_meteor': '#FF4444'
   };
 
-  if (!discovered && !ingot.isCollectible) {
-    name = 'Неизвестный материал';
-    const locationName = CONFIG_EXPEDITIONS[ingot.location]?.name || 'неизвестной локации';
-    desc = `Месторождение: ${locationName}`;
-    rarity = '???';
-    rarityClass = 'common';
-    idHtml = `<div class="showcase-id"><span class="showcase-id-label">Статус</span><span class="showcase-id-value" style="color:var(--text-muted);">НЕ ИЗУЧЕН</span></div>`;
-  } else if (!owned && ingot.isCollectible) {
-    name = 'Неизвестный Артефакт';
-    desc = ingot.location === 'mine' ? 'Глубины Шахт скрывают этот секрет.' : 
-           ingot.location === 'jungle' ? 'Джунгли ревностно охраняют эту тайну.' : 
-           ingot.location === 'craft' ? 'Создаётся в горниле Великой Переплавки.' : 
-           ingot.location === 'meteor' ? 'Глубины космоса хранят это сокровище.' : 
-           'Пояс Астероидов хранит это сокровище.';
-    rarity = '???';
-    rarityClass = 'common';
-    idHtml = `<div class="showcase-id"><span class="showcase-id-label">Статус</span><span class="showcase-id-value" style="color:var(--text-muted);">НЕ ОТКРЫТ</span></div>`;
-  } else {
-    const rarityColor = rarityColors[ingot.rarityLevel] || '#A0A0A0';
-    const sourceColor = sourceColors[ingot.sourceType] || '#A0A0A0';
-    const sourceName = sourceNames[ingot.sourceType] || ingot.sourceType;
-    
-    idHtml = `
+  const rarityColor = rarityColors[ingot.rarityLevel] || '#A0A0A0';
+  const sourceColor = sourceColors[ingot.sourceType] || '#A0A0A0';
+  const sourceName = sourceNames[ingot.sourceType] || ingot.sourceType;
+  
+  let html = `
+    <div class="showcase-image" id="showcaseImage"></div>
+    <div class="showcase-info">
+      <div class="showcase-name">${ingot.name}</div>
       <div style="display:flex; gap:8px; justify-content:center; margin:12px 0;">
         <span style="background:${rarityColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${ingot.rarity}</span>
         <span style="background:${sourceColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${sourceName}</span>
       </div>
-    `;
-    
-    if (ingot.isCollectible) {
-      idHtml += `<div class="showcase-serial"><span class="showcase-serial-label">Серийный номер</span><span class="showcase-serial-value">#${getSerialForCollectible(ingotId)}</span></div>`;
-    } else {
-      idHtml += `<div class="showcase-id"><span class="showcase-id-label">Добыто всего</span><span class="showcase-id-value">${state.minedStats[ingotId] || 0} ед.</span></div>`;
-    }
-  }
-
-  let html = `
-    <div class="showcase-image" id="showcaseImage"></div>
-    <div class="showcase-info">
-      <div class="showcase-name">${name}</div>
-      ${idHtml}
-      <div class="showcase-description">${desc}</div>
-      <div class="showcase-count">${owned ? `В наличии: ${state.ingots[ingotId]} шт.` : 'Ещё не найден'}</div>
+      <div class="showcase-description">${ingot.description}</div>
+      <div class="showcase-count">В наличии: ${state.ingots[ingotId]} шт.</div>
     </div>
   `;
   
   showcaseContent.innerHTML = html;
   
   const imgEl = document.getElementById('showcaseImage');
-  if ((!discovered && !ingot.isCollectible) || (!owned && ingot.isCollectible)) {
-    renderMysteryPlaceholder(imgEl);
+  renderImageToElement(imgEl, ingot.imagePath, ingot.icon, ingot.fallbackColor);
+  showcaseContent.style.opacity = '1';
+  showcaseOverlay.classList.add('active');
+}
+
+// ---------- ОТКРЫТИЕ КАРТОЧКИ ИЗ КОЛЛЕКЦИИ (с «Добыто за всё время», опытом, кузнечным статусом) ----------
+function openCollectionShowcase(ingotId) {
+  const state = getPlayerState();
+  const ingot = CONFIG_ITEMS[ingotId];
+  if (!ingot) return;
+  
+  const discovered = state.minedStats[ingotId] > 0;
+  const isCollectible = ingot.isCollectible;
+  
+  const rarityColors = {
+    'common': '#A0A0A0',
+    'rare': '#4A9CFF',
+    'epic': '#B44AFF',
+    'legendary': '#FFD700',
+    'collectible': '#FF64FF'
+  };
+  
+  const sourceNames = {
+    'expedition': 'Экспедиционный',
+    'crafted': 'Крафтовый',
+    'meteor': 'Метеоритный',
+    'special_meteor': 'Метеоритный'
+  };
+  
+  const sourceColors = {
+    'expedition': '#50C878',
+    'crafted': '#FF8C00',
+    'meteor': '#FF4444',
+    'special_meteor': '#FF4444'
+  };
+
+  const rarityColor = rarityColors[ingot.rarityLevel] || '#A0A0A0';
+  const sourceColor = sourceColors[ingot.sourceType] || '#A0A0A0';
+  const sourceName = sourceNames[ingot.sourceType] || ingot.sourceType;
+  
+  let html = '';
+
+  if (!discovered && !isCollectible) {
+    const locationName = CONFIG_EXPEDITIONS[ingot.location]?.name || 'неизвестной локации';
+    html = `
+      <div class="showcase-image" id="showcaseImage"></div>
+      <div class="showcase-info">
+        <div class="showcase-name">Неизвестный материал</div>
+        <div class="showcase-rarity common">???</div>
+        <div class="showcase-id"><span class="showcase-id-label">Статус</span><span class="showcase-id-value" style="color:var(--text-muted);">НЕ ИЗУЧЕН</span></div>
+        <div class="showcase-description">Месторождение: ${locationName}</div>
+        <div class="showcase-count">Ещё не найден</div>
+      </div>
+    `;
+    showcaseContent.innerHTML = html;
+    renderMysteryPlaceholder(document.getElementById('showcaseImage'));
     showcaseContent.style.opacity = '0.8';
+    
+  } else if (!discovered && isCollectible) {
+    html = `
+      <div class="showcase-image" id="showcaseImage"></div>
+      <div class="showcase-info">
+        <div class="showcase-name">Неизвестный Артефакт</div>
+        <div class="showcase-rarity common">???</div>
+        <div class="showcase-id"><span class="showcase-id-label">Статус</span><span class="showcase-id-value" style="color:var(--text-muted);">НЕ ОТКРЫТ</span></div>
+        <div class="showcase-description">Глубины космоса хранят это сокровище.</div>
+        <div class="showcase-count">Ещё не найден</div>
+      </div>
+    `;
+    showcaseContent.innerHTML = html;
+    renderMysteryPlaceholder(document.getElementById('showcaseImage'));
+    showcaseContent.style.opacity = '0.8';
+    
+  } else if (isCollectible) {
+    // 👑 ОКНО СЛАВЫ ДЛЯ ВСЕХ КОЛЛЕКЦИОННЫХ СЛИТКОВ
+    html = `
+      <div class="showcase-image" id="showcaseImage"></div>
+      <div class="showcase-info" style="border: 2px solid #FFD700; box-shadow: 0 0 40px rgba(255,215,0,0.6), 0 0 80px rgba(180,0,255,0.4); background: linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(180,0,255,0.1) 100%); animation: legendaryGlow 3s ease-in-out infinite;">
+        <div class="showcase-name" style="font-size: 26px;">${ingot.name}</div>
+        <div style="display:flex; gap:8px; justify-content:center; margin:12px 0;">
+          <span style="background:${rarityColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${ingot.rarity}</span>
+          <span style="background:${sourceColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${sourceName}</span>
+        </div>
+        <div style="font-size: 18px; font-weight: 800; color: #FFD700; margin: 16px 0; text-transform: uppercase; letter-spacing: 2px;">СТАТУС: ДОБЫТО В КОЛЛЕКЦИЮ СЛАВЫ</div>
+        <div class="showcase-serial"><span class="showcase-serial-label">Серийный номер</span><span class="showcase-serial-value">#${getSerialForCollectible(ingotId)}</span></div>
+        <div class="showcase-description">${ingot.description}</div>
+        <div style="font-size: 12px; color: var(--accent-gold); margin-top: 12px;">Применение: [👑 Легендарный трофей]</div>
+        <div class="showcase-count">В наличии: ${state.ingots[ingotId]} шт.</div>
+      </div>
+    `;
+    showcaseContent.innerHTML = html;
+    renderImageToElement(document.getElementById('showcaseImage'), ingot.imagePath, ingot.icon, ingot.fallbackColor);
+    showcaseContent.style.opacity = '1';
+    
+    // Анимированное свечение
+    const styleEl = document.createElement('style');
+    styleEl.textContent = '@keyframes legendaryGlow { 0%,100%{box-shadow:0 0 40px rgba(255,215,0,0.6),0 0 80px rgba(180,0,255,0.4);} 50%{box-shadow:0 0 60px rgba(255,215,0,0.9),0 0 120px rgba(180,0,255,0.7);} }';
+    showcaseContent.appendChild(styleEl);
+    
   } else {
-    renderImageToElement(imgEl, ingot.imagePath, ingot.icon, ingot.fallbackColor);
+    // Обычный слиток
+    html = `
+      <div class="showcase-image" id="showcaseImage"></div>
+      <div class="showcase-info">
+        <div class="showcase-name">${ingot.name}</div>
+        <div style="display:flex; gap:8px; justify-content:center; margin:12px 0;">
+          <span style="background:${rarityColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${ingot.rarity}</span>
+          <span style="background:${sourceColor}; color:#fff; padding:5px 14px; border-radius:40px; font-weight:700; font-size:12px;">${sourceName}</span>
+        </div>
+        <div class="showcase-id"><span class="showcase-id-label">Добыто за всё время</span><span class="showcase-id-value">${state.minedStats[ingotId] || 0} ед.</span></div>
+        <div class="showcase-description">${ingot.description}</div>
+        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Применение: [⏳ В разработке для будущих ивентов]</div>
+        <div style="font-size: 12px; color: var(--accent-gold); margin-top: 4px;">Опыт при продаже: +${ingot.sellValue} EXP</div>
+        <div class="showcase-count">В наличии: ${state.ingots[ingotId]} шт.</div>
+      </div>
+    `;
+    showcaseContent.innerHTML = html;
+    renderImageToElement(document.getElementById('showcaseImage'), ingot.imagePath, ingot.icon, ingot.fallbackColor);
     showcaseContent.style.opacity = '1';
   }
   
@@ -228,7 +306,7 @@ export function closeShowcase() {
   showcaseOverlay.classList.remove('active');
 }
 
-// ---------- УНИВЕРСАЛЬНАЯ АДМИН-ПАНЕЛЬ ----------
+// ---------- АДМИН-ПАНЕЛЬ ----------
 function showAdminPanel() {
   const state = getPlayerState();
   const activeEventId = eventsManager.getActiveEventId();
@@ -933,7 +1011,7 @@ export function renderInventoryTab() {
   );
   
   document.querySelectorAll('[data-geode]').forEach((c) => c.addEventListener('click', () => showGeodeModal(c.dataset.geode)));
-  document.querySelectorAll('[data-ingot]').forEach((c) => c.addEventListener('click', () => openShowcase(c.dataset.ingot)));
+  document.querySelectorAll('[data-ingot]').forEach((c) => c.addEventListener('click', () => openInventoryShowcase(c.dataset.ingot)));
 }
 
 // ========== КОЛЛЕКЦИЯ: ПОЛОЧКИ ==========
@@ -1059,12 +1137,12 @@ export function renderCollectionTab() {
   document.querySelectorAll('[data-ingot]').forEach((c) =>
     c.addEventListener('click', () => {
       const ing = CONFIG_ITEMS[c.dataset.ingot];
-      openShowcase(c.dataset.ingot, !state.minedStats[ing.id] && !ing.isCollectible);
+      openCollectionShowcase(c.dataset.ingot);
     })
   );
 }
 
-// ========== 🆕 ЕДИНЫЙ ДИНАМИЧЕСКИЙ КОНТЕЙНЕР ИВЕНТОВ ==========
+// ========== ЕДИНЫЙ ДИНАМИЧЕСКИЙ КОНТЕЙНЕР ИВЕНТОВ ==========
 export function renderEventsTab() {
   const state = getPlayerState();
   const activeEvent = eventsManager.getActiveEvent();
@@ -1073,9 +1151,7 @@ export function renderEventsTab() {
   
   let html = '<div class="section-title">📡 Ивенты</div>';
   
-  // === ЕДИНЫЙ КОНТЕЙНЕР — только ОДИН блок на всю вкладку ===
   if (!activeEvent || !activeEventId) {
-    // Нет активных событий — только заглушка, БОЛЬШЕ НИЧЕГО
     html += `
       <div class="event-placeholder">
         <div class="event-icon">🛰️</div>
@@ -1084,7 +1160,6 @@ export function renderEventsTab() {
       </div>
     `;
   } else if (activeEventId === 'great_smelt') {
-    // 🔥 ВЕЛИКАЯ ПЕРЕПЛАВКА — одна оранжевая плашка
     html += `
       <div class="card" style="border: 2px solid rgba(255,100,0,0.4); background: rgba(255,50,0,0.05); position: relative; overflow: hidden;">
         <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, rgba(255,100,0,0.1) 0%, transparent 70%); pointer-events: none;"></div>
@@ -1105,7 +1180,6 @@ export function renderEventsTab() {
       </div>
     `;
   } else if (activeEventId === 'meteor_storm') {
-    // ☄️ МЕТЕОРИТНЫЙ ШТОРМ — одна фиолетовая плашка со ВСЕМИ функциями внутри
     const onCooldown = isMeteorStormOnCooldown();
     const cooldownRemaining = getMeteorCooldownRemaining();
     const cooldownSec = Math.ceil(cooldownRemaining / 1000);
@@ -1144,7 +1218,6 @@ export function renderEventsTab() {
   
   mainContent.innerHTML = html;
   
-  // Обработчики
   const enterForgeBtn = document.getElementById('enterForgeBtn');
   if (enterForgeBtn) enterForgeBtn.addEventListener('click', () => openForge());
   
