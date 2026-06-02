@@ -1,5 +1,5 @@
 // ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
-import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE } from './config.js';
+import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS } from './config.js';
 
 // ========== ЗАГЛУШКИ UI ФУНКЦИЙ ==========
 let _showToast = null;
@@ -52,7 +52,10 @@ export let playerState = {
   echoCooldowns: {},
   expeditionBonuses: {},
   meteorShards: 0,
-  meteorCooldownEnd: null
+  meteorCooldownEnd: null,
+  activeQuests: [],        // 🆕 текущие 3 квеста
+  questRefreshTime: null,  // 🆕 время следующего обновления квестов
+  completedQuests: []      // 🆕 выполненные квесты
 };
 
 export function getPlayerState() {
@@ -141,8 +144,10 @@ function setTimerTimeout(timerName, callback, delay) {
   return activeTimers[timerName];
 }
 
-// ---------- УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР ----------
+// ---------- УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР (РОТАЦИЯ ПО СИСТЕМНОМУ ВРЕМЕНИ) ----------
 const EVENT_LIST = ['great_smelt', 'meteor_storm'];
+const EVENT_DURATION = 15 * 60 * 1000; // 15 минут
+const ROTATION_INTERVAL = 30 * 60 * 1000; // 30 минут
 
 const EVENT_DEFINITIONS = {
   great_smelt: {
@@ -168,6 +173,31 @@ const EVENT_DEFINITIONS = {
     endToast: '☄️'
   }
 };
+
+// 🆕 Ускоренный режим для тестов
+let speedMode = false;
+const SPEED_MULTIPLIER = 60; // 30 минут → 30 секунд
+
+function getEffectiveInterval() {
+  return speedMode ? ROTATION_INTERVAL / SPEED_MULTIPLIER : ROTATION_INTERVAL;
+}
+
+function getEffectiveDuration() {
+  return speedMode ? EVENT_DURATION / SPEED_MULTIPLIER : EVENT_DURATION;
+}
+
+export function toggleSpeedMode() {
+  speedMode = !speedMode;
+  if (_showToast) _showToast(speedMode ? '⚡ Турбо-ротация включена (30 сек)' : '🐢 Обычная ротация (30 мин)', '⏱️');
+  // Перезапускаем цикл с новой скоростью
+  eventsManager.startEventCycle();
+}
+
+function getCurrentSlotStart() {
+  const now = Date.now();
+  const interval = getEffectiveInterval();
+  return Math.floor(now / interval) * interval;
+}
 
 export const eventsManager = {
   activeEventId: null,
@@ -199,37 +229,90 @@ export const eventsManager = {
   
   startEventCycle() {
     clearTimer('event');
-    this.triggerRandomEvent();
+    this.syncWithSystemTime();
     this.eventInterval = setInterval(() => {
-      this.triggerRandomEvent();
-    }, 30 * 60 * 1000);
+      this.syncWithSystemTime();
+    }, 1000);
   },
   
-  getNextEventId() {
-    const available = EVENT_LIST.filter(id => id !== this.lastEventId);
-    if (available.length === 0) return EVENT_LIST[0];
-    return available[Math.floor(Math.random() * available.length)];
-  },
-  
-  triggerRandomEvent() {
-    const nextId = this.getNextEventId();
-    this.startEventById(nextId);
-  },
-  
-  startEventById(eventId) {
-    if (!EVENT_DEFINITIONS[eventId]) return;
+  // 🆕 Синхронизация с системным временем
+  syncWithSystemTime() {
+    const now = Date.now();
+    const interval = getEffectiveInterval();
+    const duration = getEffectiveDuration();
+    const currentSlot = Math.floor(now / interval);
+    const slotStart = currentSlot * interval;
+    const slotEnd = slotStart + duration;
     
-    if (this.activeEventId) {
-      this.forceEndEvent();
+    if (now >= slotStart && now < slotEnd) {
+      // Мы внутри активной фазы — нужен ивент
+      if (!this.activeEventId || this.eventEndTime !== slotEnd) {
+        const eventId = this.getEventForSlot(currentSlot);
+        if (eventId && eventId !== this.activeEventId) {
+          this.startEventByIdInternal(eventId, slotEnd);
+        }
+      }
+    } else if (now >= slotEnd && this.activeEventId) {
+      // Ивент должен завершиться
+      this.endEventInternal();
+    } else if (!this.activeEventId && now >= slotEnd) {
+      // Нет активного ивента — всё правильно
+      this.activeEventId = null;
+      this.eventEndTime = null;
     }
+  },
+  
+  getEventForSlot(slot) {
+    if (this.lastEventId) {
+      const available = EVENT_LIST.filter(id => id !== this.lastEventId);
+      return available[slot % available.length];
+    }
+    return EVENT_LIST[slot % EVENT_LIST.length];
+  },
+  
+  startEventByIdInternal(eventId, endTime) {
+    if (!EVENT_DEFINITIONS[eventId]) return;
     
     const def = EVENT_DEFINITIONS[eventId];
     this.activeEventId = eventId;
-    this.eventEndTime = Date.now() + 15 * 60 * 1000;
+    this.eventEndTime = endTime;
     this.lastEventId = eventId;
     
     if (_showToast) _showToast(def.startMessage, def.startToast);
     sendBotNotification(`🚀 Ивент запущен: ${def.name}`);
+    saveGame();
+    
+    if (_renderEventsTab) _renderEventsTab();
+  },
+  
+  endEventInternal() {
+    if (!this.activeEventId) return;
+    const def = EVENT_DEFINITIONS[this.activeEventId];
+    if (!def) return;
+    
+    if (_showToast) _showToast(def.endMessage, def.endToast);
+    sendBotNotification(`❄️ Ивент завершён: ${def.name}`);
+    
+    this.activeEventId = null;
+    this.eventEndTime = null;
+    
+    saveGame();
+    if (_renderEventsTab) _renderEventsTab();
+  },
+  
+  // Ручной запуск (админка)
+  startEventById(eventId) {
+    if (!EVENT_DEFINITIONS[eventId]) return;
+    if (this.activeEventId) this.forceEndEvent();
+    
+    const def = EVENT_DEFINITIONS[eventId];
+    const duration = getEffectiveDuration();
+    this.activeEventId = eventId;
+    this.eventEndTime = Date.now() + duration;
+    this.lastEventId = eventId;
+    
+    if (_showToast) _showToast(def.startMessage, def.startToast);
+    sendBotNotification(`🚀 Ивент запущен вручную: ${def.name}`);
     saveGame();
     
     if (_renderEventsTab) _renderEventsTab();
@@ -258,22 +341,7 @@ export const eventsManager = {
     }
     
     if (_showToast) _showToast(def.endMessage, def.endToast);
-    sendBotNotification(`❄️ Ивент завершён: ${def.name}`);
-    
-    this.activeEventId = null;
-    this.eventEndTime = null;
-    
-    saveGame();
-    if (_renderEventsTab) _renderEventsTab();
-  },
-  
-  endEvent() {
-    if (!this.activeEventId) return;
-    const def = EVENT_DEFINITIONS[this.activeEventId];
-    if (!def) return;
-    
-    if (_showToast) _showToast(def.endMessage, def.endToast);
-    sendBotNotification(`❄️ Ивент завершён: ${def.name}`);
+    sendBotNotification(`❄️ Ивент завершён принудительно: ${def.name}`);
     
     this.activeEventId = null;
     this.eventEndTime = null;
@@ -329,12 +397,13 @@ function renderForgeInterface(container) {
   } else {
     recipes.forEach((recipe) => {
       const isActive = forgeState.selectedRecipe && forgeState.selectedRecipe.id === recipe.id;
-      const cardClass = isActive ? 'recipe-card active' : (recipe.canCraft ? 'recipe-card' : 'recipe-card disabled');
+      const isLocked = recipe.reqLevel && playerState.player.level < recipe.reqLevel;
+      const cardClass = isActive ? 'recipe-card active' : (isLocked ? 'recipe-card disabled' : (recipe.canCraft ? 'recipe-card' : 'recipe-card disabled'));
       
       html += `
         <div class="${cardClass}" data-recipe="${recipe.id}">
           <div class="recipe-card-icon">${recipe.icon}</div>
-          <div class="recipe-card-name">${recipe.name}</div>
+          <div class="recipe-card-name">${recipe.name} ${isLocked ? '🔒' : ''}</div>
           <div class="recipe-card-ingredients">
       `;
       
@@ -354,9 +423,14 @@ function renderForgeInterface(container) {
         `;
       }
       
+      if (isLocked) {
+        html += `<div class="recipe-card-xp" style="color: #FF4444;">🔒 Требуется ${recipe.reqLevel} уровень</div>`;
+      } else {
+        html += `<div class="recipe-card-xp">+${recipe.xpReward} XP · ${recipe.smeltTime}с</div>`;
+      }
+      
       html += `
           </div>
-          <div class="recipe-card-xp">+${recipe.xpReward} XP · ${recipe.smeltTime}с</div>
         </div>
       `;
     });
@@ -365,8 +439,8 @@ function renderForgeInterface(container) {
   html += `
     </div>
     <div class="forge-action-area">
-      <button class="forge-smelt-btn" id="forgeSmeltBtn" ${forgeState.selectedRecipe && forgeState.selectedRecipe.canCraft ? '' : 'disabled'}>
-        ${forgeState.selectedRecipe && forgeState.selectedRecipe.canCraft ? '⚡ СПЛАВИТЬ' : 'ВЫБЕРИТЕ РЕЦЕПТ'}
+      <button class="forge-smelt-btn" id="forgeSmeltBtn" ${forgeState.selectedRecipe && forgeState.selectedRecipe.canCraft && (!forgeState.selectedRecipe.reqLevel || playerState.player.level >= forgeState.selectedRecipe.reqLevel) ? '' : 'disabled'}>
+        ${forgeState.selectedRecipe ? (forgeState.selectedRecipe.reqLevel && playerState.player.level < forgeState.selectedRecipe.reqLevel ? `🔒 Требуется ${forgeState.selectedRecipe.reqLevel} уровень` : (forgeState.selectedRecipe.canCraft ? '⚡ СПЛАВИТЬ' : 'ВЫБЕРИТЕ РЕЦЕПТ')) : 'ВЫБЕРИТЕ РЕЦЕПТ'}
       </button>
       <button class="forge-exit-btn" id="forgeExitBtn">Выйти из Плавильни</button>
     </div>
@@ -378,7 +452,7 @@ function renderForgeInterface(container) {
     el.addEventListener('click', () => {
       const recipeId = el.dataset.recipe;
       const recipe = getCraftableRecipes().find(r => r.id === recipeId);
-      if (recipe && recipe.canCraft) {
+      if (recipe && recipe.canCraft && (!recipe.reqLevel || playerState.player.level >= recipe.reqLevel)) {
         forgeState.selectedRecipe = recipe;
         renderForgeInterface(container);
       }
@@ -388,7 +462,7 @@ function renderForgeInterface(container) {
   const smeltBtn = container.querySelector('#forgeSmeltBtn');
   if (smeltBtn) {
     smeltBtn.addEventListener('click', () => {
-      if (forgeState.selectedRecipe && forgeState.selectedRecipe.canCraft) {
+      if (forgeState.selectedRecipe && forgeState.selectedRecipe.canCraft && (!forgeState.selectedRecipe.reqLevel || playerState.player.level >= forgeState.selectedRecipe.reqLevel)) {
         startSmeltProcess(forgeState.selectedRecipe);
       }
     });
@@ -503,6 +577,11 @@ export function craftItem(recipeId) {
   const recipe = CRAFT_RECIPES[recipeId];
   if (!recipe) {
     if (_showToast) _showToast('Рецепт не найден!', '⚠️');
+    return false;
+  }
+  
+  if (recipe.reqLevel && playerState.player.level < recipe.reqLevel) {
+    if (_showToast) _showToast(`Требуется ${recipe.reqLevel} уровень!`, '🔒');
     return false;
   }
   
@@ -639,6 +718,104 @@ export function exchangeSpecialGeodeForXP(geodeId) {
   
   if (_showToast) _showToast(`Жеода изучена! +${xpGained} XP`, '📚');
   if (_renderCurrentTab) _renderCurrentTab();
+}
+
+// ---------- 🆕 ЗАКАЗЫ ГИЛЬДИИ ----------
+export function getAvailableQuests() {
+  const playerLevel = playerState.player.level;
+  return GUILD_QUESTS.filter(q => q.reqLevel <= playerLevel);
+}
+
+export function refreshActiveQuests() {
+  const available = getAvailableQuests();
+  const completed = playerState.completedQuests || [];
+  
+  // Исключаем уже выполненные
+  const uncompleted = available.filter(q => !completed.includes(q.id));
+  
+  // Перемешиваем и берём 3
+  const shuffled = [...uncompleted].sort(() => Math.random() - 0.5);
+  playerState.activeQuests = shuffled.slice(0, 3).map(q => q.id);
+  playerState.questRefreshTime = Date.now() + 10 * 60 * 1000; // +10 минут
+  
+  saveGame();
+}
+
+export function checkAndRefreshQuests() {
+  if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
+    refreshActiveQuests();
+    return;
+  }
+  
+  // Проверяем, все ли выполнены
+  const allCompleted = playerState.activeQuests.every(qId => 
+    (playerState.completedQuests || []).includes(qId)
+  );
+  
+  if (allCompleted) {
+    refreshActiveQuests();
+    return;
+  }
+  
+  // Проверяем таймер
+  if (playerState.questRefreshTime && Date.now() >= playerState.questRefreshTime) {
+    refreshActiveQuests();
+  }
+}
+
+export function completeQuest(questId) {
+  const quest = GUILD_QUESTS.find(q => q.id === questId);
+  if (!quest) return false;
+  
+  // Проверяем, есть ли квест в активных
+  if (!playerState.activeQuests || !playerState.activeQuests.includes(questId)) {
+    if (_showToast) _showToast('Этот заказ уже не активен!', '⚠️');
+    return false;
+  }
+  
+  // Проверяем уровень
+  if (playerState.player.level < quest.reqLevel) {
+    if (_showToast) _showToast(`Требуется ${quest.reqLevel} уровень!`, '🔒');
+    return false;
+  }
+  
+  // Проверяем ингредиенты
+  for (let ingId in quest.ingredients) {
+    const required = quest.ingredients[ingId];
+    const owned = playerState.ingots[ingId] || 0;
+    if (owned < required) {
+      if (_showToast) _showToast(`Недостаточно ${CONFIG_ITEMS[ingId]?.name || ingId}!`, '⚠️');
+      return false;
+    }
+  }
+  
+  // Списываем ингредиенты
+  for (let ingId in quest.ingredients) {
+    playerState.ingots[ingId] -= quest.ingredients[ingId];
+  }
+  
+  // Начисляем награду
+  addXP(quest.rewardXP);
+  
+  if (quest.rewardGeode) {
+    playerState.geodes[quest.rewardGeode] = (playerState.geodes[quest.rewardGeode] || 0) + 1;
+    const geodeName = CONFIG_GEODES[quest.rewardGeode]?.name || 'жеода';
+    if (_showToast) _showToast(`Заказ выполнен! +${quest.rewardXP} XP, +1 ${geodeName}`, '📜');
+  } else {
+    if (_showToast) _showToast(`Заказ выполнен! +${quest.rewardXP} XP`, '📜');
+  }
+  
+  // Отмечаем как выполненный
+  if (!playerState.completedQuests) playerState.completedQuests = [];
+  playerState.completedQuests.push(questId);
+  
+  saveGame();
+  
+  // Проверяем, нужно ли обновить пул
+  checkAndRefreshQuests();
+  
+  if (_renderEventsTab) _renderEventsTab();
+  return true;
 }
 
 // ---------- МИНИ-ИГРА "АКТИВНАЯ РАЗВЕДКА" ----------
@@ -972,7 +1149,7 @@ function endMeteorStorm() {
   if (_renderEventsTab) _renderEventsTab();
 }
 
-// 🆕 МАГАЗИН ОБМЕНА ОСКОЛКОВ (ОБНОВЛЁННЫЕ ЦЕНЫ)
+// МАГАЗИН ОБМЕНА ОСКОЛКОВ
 export const METEOR_SHOP_ITEMS = {
   meteor_common: { geodeId: 'meteor_common', name: 'Космический обломок', icon: '☄️', price: 300, description: 'Обычный осколок метеоритного дождя.' },
   meteor_rare: { geodeId: 'meteor_rare', name: 'Звёздное ядро', icon: '🌟', price: 700, description: 'Редкое ядро разрушенной звезды.' },
@@ -1019,7 +1196,10 @@ export function saveGame() {
       echoCooldowns: playerState.echoCooldowns,
       expeditionBonuses: playerState.expeditionBonuses,
       meteorShards: playerState.meteorShards,
-      meteorCooldownEnd: playerState.meteorCooldownEnd
+      meteorCooldownEnd: playerState.meteorCooldownEnd,
+      activeQuests: playerState.activeQuests,
+      questRefreshTime: playerState.questRefreshTime,
+      completedQuests: playerState.completedQuests
     },
     collectibleSerials,
     nextSerial,
@@ -1118,6 +1298,17 @@ function applySaveData(data) {
     playerState.meteorCooldownEnd = saved.meteorCooldownEnd;
   }
   
+  // 🆕 Загружаем квесты
+  if (Array.isArray(saved.activeQuests)) {
+    playerState.activeQuests = [...saved.activeQuests];
+  }
+  if (typeof saved.questRefreshTime === 'number' || saved.questRefreshTime === null) {
+    playerState.questRefreshTime = saved.questRefreshTime;
+  }
+  if (Array.isArray(saved.completedQuests)) {
+    playerState.completedQuests = [...saved.completedQuests];
+  }
+  
   if (data.collectibleSerials) {
     for (let k in data.collectibleSerials) {
       collectibleSerials[k] = data.collectibleSerials[k];
@@ -1159,6 +1350,9 @@ export const saveToLocalStorage = saveGame;
   playerState.expeditionBonuses = {};
   playerState.meteorShards = 0;
   playerState.meteorCooldownEnd = null;
+  playerState.activeQuests = [];
+  playerState.questRefreshTime = null;
+  playerState.completedQuests = [];
   
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
@@ -1197,6 +1391,12 @@ export async function initializeState() {
     
     console.log('[Boot] Инициализация завершена');
     eventsManager.startEventCycle();
+    
+    // 🆕 Инициализируем квесты если нужно
+    if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
+      refreshActiveQuests();
+    }
+    
     return true;
   })();
   
@@ -1292,11 +1492,6 @@ function updateEventTimer() {
   const timerEl = document.getElementById('eventTimer');
   if (timerEl && event) {
     timerEl.textContent = eventsManager.getTimeLeft();
-  }
-  
-  if (event && eventsManager.eventEndTime && Date.now() >= eventsManager.eventEndTime) {
-    eventsManager.endEvent();
-    if (_renderCurrentTab) _renderCurrentTab();
   }
 }
 
