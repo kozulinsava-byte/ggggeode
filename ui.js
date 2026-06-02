@@ -220,7 +220,7 @@ function openCollectionShowcase(ingotId) {
   
   let html = '';
 
-  if (!discovered && !ingot.isCollectible) {
+  if (!discovered && !isCollectible) {
     const locationName = CONFIG_EXPEDITIONS[ingot.location]?.name || 'неизвестной локации';
     html = `
       <div class="showcase-image" id="showcaseImage"></div>
@@ -303,7 +303,7 @@ export function closeShowcase() {
   showcaseOverlay.classList.remove('active');
 }
 
-// ---------- АДМИН-ПАНЕЛЬ ----------
+// ---------- АДМИН-ПАНЕЛЬ (С КНОПКОЙ СБРОСА) ----------
 function showAdminPanel() {
   const state = getPlayerState();
   const activeEventId = eventsManager.getActiveEventId();
@@ -333,6 +333,9 @@ function showAdminPanel() {
       <button class="btn" id="adminStartMeteor" style="margin-bottom:8px;">☄️ Запустить Метеоритный шторм</button>
       <button class="btn" id="adminEndEvent" style="margin-bottom:8px; background: linear-gradient(135deg, #FF4444, #CC0000); box-shadow: 0 4px 20px rgba(255,0,0,0.3);">⏹️ Завершить текущий ивент</button>
       <button class="btn" id="adminSpeedMode" style="margin-bottom:8px; background: linear-gradient(135deg, #FFD700, #FFA500); color: #000;">⚡ Ускорить ротацию (Тест)</button>
+      
+      <div style="margin:20px 0; font-weight:600; color:var(--accent-gold);">⚠️ Опасная зона</div>
+      <button class="btn" id="adminResetAll" style="margin-bottom:8px; background: linear-gradient(135deg, #FF0000, #990000); box-shadow: 0 4px 20px rgba(255,0,0,0.4);">💀 Сбросить ВЕСЬ прогресс</button>
       
       <div style="margin:20px 0; font-weight:600; color:var(--accent-gold);">🔧 Отдельные жеоды (+5 шт.)</div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
@@ -433,6 +436,48 @@ function showAdminPanel() {
     document.getElementById('adminSpeedMode')?.addEventListener('click', () => {
       toggleSpeedMode();
       closeModal();
+    });
+    
+    // 🆕 КНОПКА СБРОСА ВСЕГО ПРОГРЕССА
+    document.getElementById('adminResetAll')?.addEventListener('click', () => {
+      closeModal();
+      // Показываем подтверждение
+      let confirmHtml = `
+        <div class="modal-header">
+          <div class="modal-title">⚠️ Сброс прогресса</div>
+          <button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button>
+        </div>
+        <div class="modal-content">
+          <div style="font-size:48px; margin-bottom:16px;">💀</div>
+          <div style="color: #FF4444; font-weight:700; font-size:18px; margin-bottom:12px;">ВНИМАНИЕ!</div>
+          <div style="color: var(--text-secondary); font-size:14px; line-height:1.5; margin-bottom:20px;">
+            Это действие полностью удалит весь прогресс:<br>
+            • Уровень и опыт<br>
+            • Все слитки и жеоды<br>
+            • Осколки метеоритов<br>
+            • Выполненные квесты<br><br>
+            <strong>Отменить это действие будет НЕВОЗМОЖНО!</strong>
+          </div>
+          <button class="btn" id="confirmResetBtn" style="background: linear-gradient(135deg, #FF0000, #990000); box-shadow: 0 4px 20px rgba(255,0,0,0.4); margin-bottom:10px;">💀 ДА, СБРОСИТЬ ВСЁ</button>
+          <button class="btn" id="cancelResetBtn">ОТМЕНА</button>
+        </div>
+      `;
+      openModal(confirmHtml);
+      
+      setTimeout(() => {
+        document.getElementById('confirmResetBtn')?.addEventListener('click', () => {
+          // Очищаем localStorage
+          localStorage.removeItem('starforge_v1');
+          // Перезагружаем страницу
+          showToast('Прогресс сброшен. Перезагрузка...', '💀');
+          setTimeout(() => { window.location.reload(); }, 1000);
+        });
+        
+        document.getElementById('cancelResetBtn')?.addEventListener('click', () => {
+          closeModal();
+          showAdminPanel();
+        });
+      }, 10);
     });
     
     document.querySelectorAll('.admin-add-geode').forEach(btn => {
