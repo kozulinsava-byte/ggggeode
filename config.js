@@ -266,7 +266,7 @@ export const CONFIG_ITEMS = {
         imagePath: 'assets/ingots/cosmonium.png', fallbackColor: '#FFFFFF', isCollectible: false, xpValue: 150, sellValue: 150 
     },
     
-    // ========== КОЛЛЕКЦИОННЫЕ АРТЕФАКТЫ (НЕ ТРОГАЕМ) ==========
+    // ========== КОЛЛЕКЦИОННЫЕ АРТЕФАКТЫ ==========
     isotope: { 
         id: 'isotope', name: 'Изотоп-256', icon: '☢️', 
         rarity: 'COLLECTIBLE', rarityClass: 'collectible', rarityLevel: 'collectible',
@@ -335,11 +335,12 @@ export const CONFIG_ITEMS = {
     }
 };
 
+// 🆕 КРАФТЫ С УРОВНЕМ
 export const CRAFT_RECIPES = {
-    black_mirror: { id: 'black_mirror', name: 'Чёрное Зеркало', icon: '🌑', description: 'Объедини уголь и железо.', resultIngotId: 'black_mirror', ingredients: { iron: 2, coal: 1 }, xpReward: 30, smeltTime: 10 },
-    astro_bronze: { id: 'astro_bronze', name: 'Астро-Бронза', icon: '🛰️', description: 'Сплав космических технологий.', resultIngotId: 'astro_bronze', ingredients: { vinebronze: 3, lunarsilver: 1 }, xpReward: 45, smeltTime: 15 },
-    chrome_titan: { id: 'chrome_titan', name: 'Хромированный Титан', icon: '🛡️', description: 'Броня из титана и хрома.', resultIngotId: 'chrome_titan', ingredients: { titanium: 2, starchrome: 1 }, xpReward: 55, smeltTime: 20 },
-    platinum_alloy: { id: 'platinum_alloy', name: 'Платиновый Сплав', icon: '💎', description: 'Платина и иридий.', resultIngotId: 'platinum_alloy', ingredients: { platincon: 5, iridium: 2 }, xpReward: 75, smeltTime: 25 }
+    black_mirror: { id: 'black_mirror', name: 'Чёрное Зеркало', icon: '🌑', description: 'Объедини уголь и железо.', resultIngotId: 'black_mirror', ingredients: { iron: 2, coal: 1 }, xpReward: 30, smeltTime: 10, reqLevel: 1 },
+    astro_bronze: { id: 'astro_bronze', name: 'Астро-Бронза', icon: '🛰️', description: 'Сплав космических технологий.', resultIngotId: 'astro_bronze', ingredients: { vinebronze: 3, lunarsilver: 1 }, xpReward: 45, smeltTime: 15, reqLevel: 3 },
+    chrome_titan: { id: 'chrome_titan', name: 'Хромированный Титан', icon: '🛡️', description: 'Броня из титана и хрома.', resultIngotId: 'chrome_titan', ingredients: { titanium: 2, starchrome: 1 }, xpReward: 55, smeltTime: 20, reqLevel: 5 },
+    platinum_alloy: { id: 'platinum_alloy', name: 'Платиновый Сплав', icon: '💎', description: 'Платина и иридий.', resultIngotId: 'platinum_alloy', ingredients: { platincon: 5, iridium: 2 }, xpReward: 75, smeltTime: 25, reqLevel: 8 }
 };
 
 export const CONFIG_GEODES = {
@@ -347,7 +348,7 @@ export const CONFIG_GEODES = {
     jungle: { id: 'jungle', name: 'Жеода Джунглей', icon: '🌲', isSpecial: false, timer: 300, description: 'Таинственная жеода, пропитанная энергией древних лесов.', stages: [{ minTaps: 7, maxTaps: 10, imagePath: 'assets/geodes/jungle_stage1.png', fallbackIcon: '🌲' }, { minTaps: 3, maxTaps: 6, imagePath: 'assets/geodes/jungle_stage2.png', fallbackIcon: '🍂' }, { minTaps: 1, maxTaps: 2, imagePath: 'assets/geodes/jungle_stage3.png', fallbackIcon: '🪵' }], lootTable: [{ ingotId: 'biocopper', chance: 0.20 }, { ingotId: 'oxidizedsilver', chance: 0.20 }, { ingotId: 'emeraldsteel', chance: 0.15 }, { ingotId: 'woodalloy', chance: 0.20 }, { ingotId: 'vinebronze', chance: 0.25 }], xpValue: 20 },
     asteroid: { id: 'asteroid', name: 'Жеода Астероидов', icon: '🌌', isSpecial: false, timer: 1200, description: 'Космический артефакт из пояса астероидов.', stages: [{ minTaps: 7, maxTaps: 10, imagePath: 'assets/geodes/asteroid_stage1.png', fallbackIcon: '🌌' }, { minTaps: 3, maxTaps: 6, imagePath: 'assets/geodes/asteroid_stage2.png', fallbackIcon: '☄️' }, { minTaps: 1, maxTaps: 2, imagePath: 'assets/geodes/asteroid_stage3.png', fallbackIcon: '💫' }], lootTable: [{ ingotId: 'titanium', chance: 0.20 }, { ingotId: 'cobalt', chance: 0.15 }, { ingotId: 'iridium', chance: 0.10 }, { ingotId: 'platincon', chance: 0.20 }, { ingotId: 'lunarsilver', chance: 0.15 }, { ingotId: 'starchrome', chance: 0.20 }], xpValue: 40 },
     
-    // ========== ☄️ НОВЫЕ МЕТЕОРИТНЫЕ ЖЕОДЫ ==========
+    // ========== ☄️ МЕТЕОРИТНЫЕ ЖЕОДЫ ==========
     meteor_common: { 
         id: 'meteor_common', name: 'Космический обломок', icon: '☄️', isSpecial: false, timer: 60, 
         description: 'Обычный осколок метеоритного дождя, упавший из пояса астероидов. Внутри могут скрываться базовые космические металлы.', 
@@ -402,6 +403,23 @@ export const CONFIG_EXPEDITIONS = {
     asteroid: { id: 'asteroid', name: 'Пояс Астероидов', description: 'Экстремальная экспедиция в открытый космос.', imagePath: 'assets/expeditions/asteroid.png', fallbackIcon: '🪐', timer: 1200, requiredLevel: 10, specialGeodeChance: 0.25, specialGeodeId: 'special_asteroid' }
 };
 
+// 🆕 ЗАКАЗЫ ГИЛЬДИИ
+export const GUILD_QUESTS = [
+    // Уровни 1-3
+    { id: 'quest_1', name: 'Медный заказ', description: 'Гильдия просит поставить партию меди для электропроводки.', reqLevel: 1, ingredients: { copper: 3 }, rewardXP: 25 },
+    { id: 'quest_2', name: 'Железная партия', description: 'Строителям нужны железные слитки для каркаса станции.', reqLevel: 1, ingredients: { iron: 3 }, rewardXP: 25 },
+    { id: 'quest_3', name: 'Топливный контракт', description: 'Угольные брикеты требуются для систем фильтрации.', reqLevel: 2, ingredients: { coal: 4 }, rewardXP: 30 },
+    // Уровни 4-6
+    { id: 'quest_4', name: 'Био-сплав для медиков', description: 'Медицинский центр запрашивает Био-медь для регенеративных камер.', reqLevel: 4, ingredients: { biocopper: 2 }, rewardXP: 60, rewardGeode: 'jungle' },
+    { id: 'quest_5', name: 'Метеоритный груз', description: 'Инженеры просят доставить Реолит и Феррит для анализа.', reqLevel: 4, ingredients: { rheolite: 3, ferrite: 2 }, rewardXP: 80 },
+    { id: 'quest_6', name: 'Звёздный блеск', description: 'Ювелиры ищут Звёздное Серебро для украшений.', reqLevel: 5, ingredients: { star_silver: 2 }, rewardXP: 100, rewardGeode: 'meteor_common' },
+    { id: 'quest_7', name: 'Эпический сплав', description: 'Военные просят Изумрудную сталь для экспериментального оружия.', reqLevel: 6, ingredients: { emeraldsteel: 1, titanium: 1 }, rewardXP: 150, rewardGeode: 'meteor_rare' },
+    // Уровни 7+
+    { id: 'quest_8', name: 'Крафтовый заказ', description: 'Гильдия кузнецов просит Чёрное Зеркало для изучения.', reqLevel: 7, ingredients: { black_mirror: 1 }, rewardXP: 200 },
+    { id: 'quest_9', name: 'Астро-контракт', description: 'Космическая верфь запрашивает Астро-Бронзу для обшивки.', reqLevel: 8, ingredients: { astro_bronze: 1 }, rewardXP: 250, rewardGeode: 'meteor_legendary' },
+    { id: 'quest_10', name: 'Элитный заказ Гильдии', description: 'Верховный совет просит Хромированный Титан для защиты штаба.', reqLevel: 9, ingredients: { chrome_titan: 1, meteor_gold: 2 }, rewardXP: 400, rewardGeode: 'special_meteor' }
+];
+
 export const LEVELS = [0, 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700, 3300, 4000, 4800, 5700, 6700, 7800, 9000, 10300, 11700, 13200, 15000];
 export const STATUSES = ['Новичок', 'Старатель', 'Геолог', 'Шахтёр', 'Исследователь', 'Космопроходец', 'Мастер Жеод', 'Хранитель', 'Легенда'];
 
@@ -414,7 +432,8 @@ export const DEFAULT_STATE = {
     minedStats: {},
     player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 },
     echoCooldowns: {},
-    expeditionBonuses: {}
+    expeditionBonuses: {},
+    completedQuests: [] // 🆕 выполненные квесты
 };
 
 // ========== КОНФИГУРАЦИЯ ИВЕНТОВ (РОТАЦИЯ) ==========
