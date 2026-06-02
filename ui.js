@@ -228,7 +228,7 @@ export function closeShowcase() {
   showcaseOverlay.classList.remove('active');
 }
 
-// ---------- 🆕 УНИВЕРСАЛЬНАЯ АДМИН-ПАНЕЛЬ ----------
+// ---------- УНИВЕРСАЛЬНАЯ АДМИН-ПАНЕЛЬ ----------
 function showAdminPanel() {
   const state = getPlayerState();
   const activeEventId = eventsManager.getActiveEventId();
@@ -334,7 +334,6 @@ function showAdminPanel() {
       closeModal(); 
     });
     
-    // 🆕 Универсальные кнопки ивентов
     document.getElementById('adminStartSmelt')?.addEventListener('click', () => {
       eventsManager.startEventById('great_smelt');
       saveGame();
@@ -1065,7 +1064,7 @@ export function renderCollectionTab() {
   );
 }
 
-// ========== ИВЕНТЫ ==========
+// ========== 🆕 ЕДИНЫЙ ДИНАМИЧЕСКИЙ КОНТЕЙНЕР ИВЕНТОВ ==========
 export function renderEventsTab() {
   const state = getPlayerState();
   const activeEvent = eventsManager.getActiveEvent();
@@ -1074,36 +1073,9 @@ export function renderEventsTab() {
   
   let html = '<div class="section-title">📡 Ивенты</div>';
   
-  // === АКТИВНЫЙ ИВЕНТ ===
-  if (activeEvent && activeEventId) {
-    const isSmelt = activeEventId === 'great_smelt';
-    const isMeteor = activeEventId === 'meteor_storm';
-    
-    html += `
-      <div class="card" style="border: 2px solid ${isSmelt ? 'rgba(255,100,0,0.4)' : 'rgba(180,0,255,0.4)'}; background: ${isSmelt ? 'rgba(255,50,0,0.05)' : 'rgba(100,0,150,0.05)'}; position: relative; overflow: hidden;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, ${isSmelt ? 'rgba(255,100,0,0.1)' : 'rgba(180,0,255,0.1)'} 0%, transparent 70%); pointer-events: none;"></div>
-        <div class="event-icon" style="font-size:72px; margin-bottom:16px;">${activeEvent.icon}</div>
-        <div class="event-title" style="color: ${isSmelt ? 'var(--accent-orange)' : 'var(--accent-purple)'}; font-size: 22px; margin-bottom: 8px;">${activeEvent.name}</div>
-        <div class="event-desc" style="color: var(--text-primary); font-size: 14px; line-height: 1.6; margin-bottom: 16px;">${activeEvent.longDescription || activeEvent.description}</div>
-        
-        <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <span style="font-size: 24px;">⏳</span>
-          <span style="font-family: 'Unbounded', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent-gold);" id="eventTimer">${timeLeft}</span>
-          <span style="font-size: 12px; color: var(--text-secondary);">до завершения</span>
-        </div>
-    `;
-    
-    if (isSmelt) {
-      html += `
-        <button class="forge-smelt-btn" id="enterForgeBtn" style="width: 100%;">⚡ ВОЙТИ В ПЛАВИЛЬНЮ</button>
-        <div style="margin-top: 12px; text-align: center; color: var(--text-muted); font-size: 11px;">
-          Доступны рецепты: 🌑 Чёрное Зеркало · 🛰️ Астро-Бронза · 🛡️ Хромированный Титан · 💎 Платиновый Сплав
-        </div>
-      `;
-    }
-    
-    html += `</div>`;
-  } else {
+  // === ЕДИНЫЙ КОНТЕЙНЕР — только ОДИН блок на всю вкладку ===
+  if (!activeEvent || !activeEventId) {
+    // Нет активных событий — только заглушка, БОЛЬШЕ НИЧЕГО
     html += `
       <div class="event-placeholder">
         <div class="event-icon">🛰️</div>
@@ -1111,40 +1083,68 @@ export function renderEventsTab() {
         <div class="event-desc">Следующий ивент запустится автоматически.</div>
       </div>
     `;
-  }
-  
-  // === МЕТЕОРИТНЫЙ ШТОРМ (всегда виден) ===
-  const onCooldown = isMeteorStormOnCooldown();
-  const cooldownRemaining = getMeteorCooldownRemaining();
-  const cooldownSec = Math.ceil(cooldownRemaining / 1000);
-  
-  html += `
-    <div class="card" style="border: 2px solid rgba(180,0,255,0.3); background: rgba(100,0,150,0.05); position: relative; overflow: hidden; margin-top: 16px;">
-      <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, rgba(180,0,255,0.08) 0%, transparent 70%); pointer-events: none;"></div>
-      <div class="event-icon" style="font-size:72px; margin-bottom:16px;">☄️</div>
-      <div class="event-title" style="color: var(--accent-purple); font-size: 22px; margin-bottom: 8px;">Метеоритный Шторм</div>
-      <div class="event-desc" style="color: var(--text-primary); font-size: 14px; line-height: 1.6; margin-bottom: 16px;">Небо пылает! Лови падающие метеориты и собирай осколки!</div>
-      
-      <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-          <span style="font-size: 20px;">💎</span>
-          <span style="font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent-gold);" id="meteorShardsDisplay">Осколки метеоритов: ${state.meteorShards || 0}</span>
+  } else if (activeEventId === 'great_smelt') {
+    // 🔥 ВЕЛИКАЯ ПЕРЕПЛАВКА — одна оранжевая плашка
+    html += `
+      <div class="card" style="border: 2px solid rgba(255,100,0,0.4); background: rgba(255,50,0,0.05); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, rgba(255,100,0,0.1) 0%, transparent 70%); pointer-events: none;"></div>
+        <div class="event-icon" style="font-size:72px; margin-bottom:16px;">${activeEvent.icon}</div>
+        <div class="event-title" style="color: var(--accent-orange); font-size: 22px; margin-bottom: 8px;">${activeEvent.name}</div>
+        <div class="event-desc" style="color: var(--text-primary); font-size: 14px; line-height: 1.6; margin-bottom: 16px;">${activeEvent.longDescription || activeEvent.description}</div>
+        
+        <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          <span style="font-size: 24px;">⏳</span>
+          <span style="font-family: 'Unbounded', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent-gold);" id="eventTimer">${timeLeft}</span>
+          <span style="font-size: 12px; color: var(--text-secondary);">до завершения</span>
+        </div>
+        
+        <button class="forge-smelt-btn" id="enterForgeBtn" style="width: 100%;">⚡ ВОЙТИ В ПЛАВИЛЬНЮ</button>
+        <div style="margin-top: 12px; text-align: center; color: var(--text-muted); font-size: 11px;">
+          Доступны рецепты: 🌑 Чёрное Зеркало · 🛰️ Астро-Бронза · 🛡️ Хромированный Титан · 💎 Платиновый Сплав
         </div>
       </div>
-      
-      <div style="display: flex; gap: 10px;">
-        <button class="forge-smelt-btn" id="playMeteorStormBtn" style="flex: 1; ${onCooldown || meteorStormState.active ? 'opacity: 0.5; pointer-events: none;' : ''}">
-          ${onCooldown ? `⏳ Игра (0:${cooldownSec.toString().padStart(2, '0')})` : (meteorStormState.active ? '☄️ Идёт шторм...' : '🎮 Игра')}
-        </button>
-        <button class="forge-smelt-btn" id="meteorShopBtn" style="flex: 1;">
-          🛒 Обмен
-        </button>
+    `;
+  } else if (activeEventId === 'meteor_storm') {
+    // ☄️ МЕТЕОРИТНЫЙ ШТОРМ — одна фиолетовая плашка со ВСЕМИ функциями внутри
+    const onCooldown = isMeteorStormOnCooldown();
+    const cooldownRemaining = getMeteorCooldownRemaining();
+    const cooldownSec = Math.ceil(cooldownRemaining / 1000);
+    
+    html += `
+      <div class="card" style="border: 2px solid rgba(180,0,255,0.4); background: rgba(100,0,150,0.05); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 50% 0%, rgba(180,0,255,0.1) 0%, transparent 70%); pointer-events: none;"></div>
+        <div class="event-icon" style="font-size:72px; margin-bottom:16px;">${activeEvent.icon}</div>
+        <div class="event-title" style="color: var(--accent-purple); font-size: 22px; margin-bottom: 8px;">${activeEvent.name}</div>
+        <div class="event-desc" style="color: var(--text-primary); font-size: 14px; line-height: 1.6; margin-bottom: 16px;">${activeEvent.longDescription || activeEvent.description}</div>
+        
+        <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+          <span style="font-size: 24px;">⏳</span>
+          <span style="font-family: 'Unbounded', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent-gold);" id="eventTimer">${timeLeft}</span>
+          <span style="font-size: 12px; color: var(--text-secondary);">до завершения</span>
+        </div>
+        
+        <div style="background: rgba(0,0,0,0.3); border-radius: 20px; padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+            <span style="font-size: 20px;">💎</span>
+            <span style="font-family: 'Unbounded', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent-gold);" id="meteorShardsDisplay">Осколки метеоритов: ${state.meteorShards || 0}</span>
+          </div>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+          <button class="forge-smelt-btn" id="playMeteorStormBtn" style="flex: 1; ${onCooldown || meteorStormState.active ? 'opacity: 0.5; pointer-events: none;' : ''}">
+            ${onCooldown ? `⏳ Игра (0:${cooldownSec.toString().padStart(2, '0')})` : (meteorStormState.active ? '☄️ Идёт шторм...' : '🎮 Игра')}
+          </button>
+          <button class="forge-smelt-btn" id="meteorShopBtn" style="flex: 1;">
+            🛒 Обмен
+          </button>
+        </div>
       </div>
-    </div>
-  `;
+    `;
+  }
   
   mainContent.innerHTML = html;
   
+  // Обработчики
   const enterForgeBtn = document.getElementById('enterForgeBtn');
   if (enterForgeBtn) enterForgeBtn.addEventListener('click', () => openForge());
   
@@ -1169,7 +1169,7 @@ export function renderEventsTab() {
   }
   
   updateEventTimerInterval();
-  updateMeteorCooldownUI();
+  if (activeEventId === 'meteor_storm') updateMeteorCooldownUI();
 }
 
 function showMeteorShop() {
