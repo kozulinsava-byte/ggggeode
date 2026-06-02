@@ -433,7 +433,7 @@ export const DEFAULT_STATE = {
     player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 },
     echoCooldowns: {},
     expeditionBonuses: {},
-    completedQuests: [] // 🆕 выполненные квесты
+    completedQuests: []
 };
 
 // ========== КОНФИГУРАЦИЯ ИВЕНТОВ (РОТАЦИЯ) ==========
