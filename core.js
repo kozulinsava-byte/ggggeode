@@ -69,7 +69,7 @@ Object.keys(CONFIG_ITEMS).forEach((k) => {
 
 let isOpeningGeode = false;
 
-// 🆕 СОСТОЯНИЕ МЕТЕОРИТНОГО ШТОРМА
+// СОСТОЯНИЕ МЕТЕОРИТНОГО ШТОРМА
 export const meteorStormState = {
   active: false,
   shardsCollected: 0,
@@ -141,7 +141,7 @@ function setTimerTimeout(timerName, callback, delay) {
   return activeTimers[timerName];
 }
 
-// ---------- 🆕 УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР ----------
+// ---------- УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР ----------
 const EVENT_LIST = ['great_smelt', 'meteor_storm'];
 
 const EVENT_DEFINITIONS = {
@@ -219,7 +219,6 @@ export const eventsManager = {
   startEventById(eventId) {
     if (!EVENT_DEFINITIONS[eventId]) return;
     
-    // Завершаем текущий перед запуском нового
     if (this.activeEventId) {
       this.forceEndEvent();
     }
@@ -245,9 +244,7 @@ export const eventsManager = {
     const def = EVENT_DEFINITIONS[this.activeEventId];
     if (!def) return;
     
-    // Очистка специфичных состояний
     if (this.activeEventId === 'meteor_storm') {
-      // Останавливаем шторм если идёт
       if (meteorStormState.active) {
         meteorStormState.active = false;
         clearTimer('meteorSpawn');
@@ -902,10 +899,9 @@ function spawnMeteor(container) {
   }, meteorData.speed * 1000 + 500);
 }
 
-// 🆕 ХАОС-СПАВН: случайные интервалы
 function scheduleNextMeteor(container) {
   if (!meteorStormState.active) return;
-  const delay = 250 + Math.random() * 550; // 250–800 мс
+  const delay = 250 + Math.random() * 550;
   activeTimers['meteorSpawn'] = setTimeout(() => {
     spawnMeteor(container);
     scheduleNextMeteor(container);
@@ -945,7 +941,6 @@ export function startMeteorStorm() {
   
   activeTimers['meteorRound'] = countdownInterval;
   
-  // Запускаем хаос-спавн
   scheduleNextMeteor(container);
   
   playerState.meteorCooldownEnd = Date.now() + meteorStormState.cooldownDuration;
@@ -977,11 +972,11 @@ function endMeteorStorm() {
   if (_renderEventsTab) _renderEventsTab();
 }
 
-// 🆕 МАГАЗИН ОБМЕНА ОСКОЛКОВ
+// 🆕 МАГАЗИН ОБМЕНА ОСКОЛКОВ (ОБНОВЛЁННЫЕ ЦЕНЫ)
 export const METEOR_SHOP_ITEMS = {
-  meteor_common: { geodeId: 'meteor_common', name: 'Космический обломок', icon: '☄️', price: 100, description: 'Обычный осколок метеоритного дождя.' },
-  meteor_rare: { geodeId: 'meteor_rare', name: 'Звёздное ядро', icon: '🌟', price: 350, description: 'Редкое ядро разрушенной звезды.' },
-  meteor_legendary: { geodeId: 'meteor_legendary', name: 'Осколок Пустоты', icon: '🕳️', price: 800, description: 'Легендарный осколок из глубин Пустоты.' }
+  meteor_common: { geodeId: 'meteor_common', name: 'Космический обломок', icon: '☄️', price: 300, description: 'Обычный осколок метеоритного дождя.' },
+  meteor_rare: { geodeId: 'meteor_rare', name: 'Звёздное ядро', icon: '🌟', price: 700, description: 'Редкое ядро разрушенной звезды.' },
+  meteor_legendary: { geodeId: 'meteor_legendary', name: 'Осколок Пустоты', icon: '🕳️', price: 2000, description: 'Легендарный осколок из глубин Пустоты.' }
 };
 
 export function buyMeteorGeode(shopItemId) {
