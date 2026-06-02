@@ -53,9 +53,10 @@ export let playerState = {
   expeditionBonuses: {},
   meteorShards: 0,
   meteorCooldownEnd: null,
-  activeQuests: [],        // 🆕 текущие 3 квеста
-  questRefreshTime: null,  // 🆕 время следующего обновления квестов
-  completedQuests: []      // 🆕 выполненные квесты
+  activeQuests: [],
+  questRefreshTime: null,
+  completedQuests: [],
+  questCooldownEnd: null  // 🆕 КД на обновление квестов (10 минут после выполнения всех)
 };
 
 export function getPlayerState() {
@@ -176,7 +177,7 @@ const EVENT_DEFINITIONS = {
 
 // 🆕 Ускоренный режим для тестов
 let speedMode = false;
-const SPEED_MULTIPLIER = 60; // 30 минут → 30 секунд
+const SPEED_MULTIPLIER = 60;
 
 function getEffectiveInterval() {
   return speedMode ? ROTATION_INTERVAL / SPEED_MULTIPLIER : ROTATION_INTERVAL;
@@ -189,14 +190,7 @@ function getEffectiveDuration() {
 export function toggleSpeedMode() {
   speedMode = !speedMode;
   if (_showToast) _showToast(speedMode ? '⚡ Турбо-ротация включена (30 сек)' : '🐢 Обычная ротация (30 мин)', '⏱️');
-  // Перезапускаем цикл с новой скоростью
   eventsManager.startEventCycle();
-}
-
-function getCurrentSlotStart() {
-  const now = Date.now();
-  const interval = getEffectiveInterval();
-  return Math.floor(now / interval) * interval;
 }
 
 export const eventsManager = {
@@ -235,7 +229,6 @@ export const eventsManager = {
     }, 1000);
   },
   
-  // 🆕 Синхронизация с системным временем
   syncWithSystemTime() {
     const now = Date.now();
     const interval = getEffectiveInterval();
@@ -245,7 +238,6 @@ export const eventsManager = {
     const slotEnd = slotStart + duration;
     
     if (now >= slotStart && now < slotEnd) {
-      // Мы внутри активной фазы — нужен ивент
       if (!this.activeEventId || this.eventEndTime !== slotEnd) {
         const eventId = this.getEventForSlot(currentSlot);
         if (eventId && eventId !== this.activeEventId) {
@@ -253,10 +245,8 @@ export const eventsManager = {
         }
       }
     } else if (now >= slotEnd && this.activeEventId) {
-      // Ивент должен завершиться
       this.endEventInternal();
     } else if (!this.activeEventId && now >= slotEnd) {
-      // Нет активного ивента — всё правильно
       this.activeEventId = null;
       this.eventEndTime = null;
     }
@@ -300,7 +290,6 @@ export const eventsManager = {
     if (_renderEventsTab) _renderEventsTab();
   },
   
-  // Ручной запуск (админка)
   startEventById(eventId) {
     if (!EVENT_DEFINITIONS[eventId]) return;
     if (this.activeEventId) this.forceEndEvent();
@@ -720,31 +709,90 @@ export function exchangeSpecialGeodeForXP(geodeId) {
   if (_renderCurrentTab) _renderCurrentTab();
 }
 
-// ---------- 🆕 ЗАКАЗЫ ГИЛЬДИИ ----------
+// ---------- 🆕 ПЕРЕРАБОТАННЫЕ ЗАКАЗЫ ГИЛЬДИИ ----------
 export function getAvailableQuests() {
   const playerLevel = playerState.player.level;
-  return GUILD_QUESTS.filter(q => q.reqLevel <= playerLevel);
+  return GUILD_QUESTS.filter(q => q.reqLevel >= playerLevel - 1 && q.reqLevel <= playerLevel + 1);
 }
 
 export function refreshActiveQuests() {
+  const now = Date.now();
+  
+  // Проверяем КД
+  if (playerState.questCooldownEnd && now < playerState.questCooldownEnd) {
+    return false;
+  }
+  
+  const playerLevel = playerState.player.level;
   const available = getAvailableQuests();
   const completed = playerState.completedQuests || [];
   
-  // Исключаем уже выполненные
+  // Исключаем выполненные
   const uncompleted = available.filter(q => !completed.includes(q.id));
   
-  // Перемешиваем и берём 3
-  const shuffled = [...uncompleted].sort(() => Math.random() - 0.5);
-  playerState.activeQuests = shuffled.slice(0, 3).map(q => q.id);
-  playerState.questRefreshTime = Date.now() + 10 * 60 * 1000; // +10 минут
+  if (uncompleted.length === 0) {
+    playerState.activeQuests = [];
+    saveGame();
+    return true;
+  }
+  
+  // 🆕 Умная выдача: один текущего уровня, один ±0/-1, один +1
+  const atLevel = uncompleted.filter(q => q.reqLevel === playerLevel);
+  const belowLevel = uncompleted.filter(q => q.reqLevel === playerLevel - 1);
+  const aboveLevel = uncompleted.filter(q => q.reqLevel === playerLevel + 1);
+  
+  const selected = [];
+  
+  // Квест текущего уровня
+  const pool1 = [...atLevel, ...belowLevel];
+  if (pool1.length > 0) {
+    const pick1 = pool1[Math.floor(Math.random() * pool1.length)];
+    selected.push(pick1.id);
+  }
+  
+  // Квест текущего или на 1 ниже
+  const pool2 = uncompleted.filter(q => !selected.includes(q.id) && q.reqLevel <= playerLevel);
+  if (pool2.length > 0) {
+    const pick2 = pool2[Math.floor(Math.random() * pool2.length)];
+    selected.push(pick2.id);
+  }
+  
+  // Квест на 1 выше (челлендж) или текущий если выше нет
+  const pool3 = aboveLevel.length > 0 ? aboveLevel : uncompleted.filter(q => !selected.includes(q.id) && q.reqLevel === playerLevel);
+  if (pool3.length > 0) {
+    const pick3 = pool3[Math.floor(Math.random() * pool3.length)];
+    selected.push(pick3.id);
+  }
+  
+  // Добираем до 3 если не хватило
+  if (selected.length < 3) {
+    const remaining = uncompleted.filter(q => !selected.includes(q.id));
+    const shuffled = [...remaining].sort(() => Math.random() - 0.5);
+    for (let q of shuffled) {
+      if (selected.length >= 3) break;
+      selected.push(q.id);
+    }
+  }
+  
+  playerState.activeQuests = selected.slice(0, 3);
+  playerState.questRefreshTime = now + 10 * 60 * 1000; // 10 минут на автообновление
+  playerState.questCooldownEnd = null; // сбрасываем КД
   
   saveGame();
+  return true;
 }
 
 export function checkAndRefreshQuests() {
+  const now = Date.now();
+  
+  // Если КД активен — не обновляем
+  if (playerState.questCooldownEnd && now < playerState.questCooldownEnd) {
+    return false;
+  }
+  
+  // Если нет активных квестов — обновляем
   if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
-    refreshActiveQuests();
-    return;
+    return refreshActiveQuests();
   }
   
   // Проверяем, все ли выполнены
@@ -753,14 +801,20 @@ export function checkAndRefreshQuests() {
   );
   
   if (allCompleted) {
-    refreshActiveQuests();
-    return;
+    return refreshActiveQuests();
   }
   
-  // Проверяем таймер
-  if (playerState.questRefreshTime && Date.now() >= playerState.questRefreshTime) {
-    refreshActiveQuests();
+  // Проверяем таймер автообновления
+  if (playerState.questRefreshTime && now >= playerState.questRefreshTime) {
+    return refreshActiveQuests();
   }
+  
+  return false;
+}
+
+export function getQuestCooldownRemaining() {
+  if (!playerState.questCooldownEnd) return 0;
+  return Math.max(0, playerState.questCooldownEnd - Date.now());
 }
 
 export function completeQuest(questId) {
@@ -811,8 +865,16 @@ export function completeQuest(questId) {
   
   saveGame();
   
-  // Проверяем, нужно ли обновить пул
-  checkAndRefreshQuests();
+  // Проверяем, все ли выполнены
+  const allCompleted = playerState.activeQuests.every(qId => 
+    playerState.completedQuests.includes(qId)
+  );
+  
+  if (allCompleted) {
+    // Устанавливаем КД на 10 минут
+    playerState.questCooldownEnd = Date.now() + 10 * 60 * 1000;
+    saveGame();
+  }
   
   if (_renderEventsTab) _renderEventsTab();
   return true;
@@ -826,8 +888,7 @@ let activeSignalGame = {
   points: [],
   collected: 0,
   totalPoints: 8,
-  timer: 10
-};
+  timer: 10};
 
 export function startSignalGame(expId, bonusType) {
   if (activeSignalGame.active) {
@@ -1199,7 +1260,8 @@ export function saveGame() {
       meteorCooldownEnd: playerState.meteorCooldownEnd,
       activeQuests: playerState.activeQuests,
       questRefreshTime: playerState.questRefreshTime,
-      completedQuests: playerState.completedQuests
+      completedQuests: playerState.completedQuests,
+      questCooldownEnd: playerState.questCooldownEnd
     },
     collectibleSerials,
     nextSerial,
@@ -1298,7 +1360,6 @@ function applySaveData(data) {
     playerState.meteorCooldownEnd = saved.meteorCooldownEnd;
   }
   
-  // 🆕 Загружаем квесты
   if (Array.isArray(saved.activeQuests)) {
     playerState.activeQuests = [...saved.activeQuests];
   }
@@ -1307,6 +1368,9 @@ function applySaveData(data) {
   }
   if (Array.isArray(saved.completedQuests)) {
     playerState.completedQuests = [...saved.completedQuests];
+  }
+  if (typeof saved.questCooldownEnd === 'number' || saved.questCooldownEnd === null) {
+    playerState.questCooldownEnd = saved.questCooldownEnd;
   }
   
   if (data.collectibleSerials) {
@@ -1353,6 +1417,7 @@ export const saveToLocalStorage = saveGame;
   playerState.activeQuests = [];
   playerState.questRefreshTime = null;
   playerState.completedQuests = [];
+  playerState.questCooldownEnd = null;
   
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
@@ -1392,9 +1457,12 @@ export async function initializeState() {
     console.log('[Boot] Инициализация завершена');
     eventsManager.startEventCycle();
     
-    // 🆕 Инициализируем квесты если нужно
+    // Инициализируем квесты если нужно
     if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
-      refreshActiveQuests();
+      const now = Date.now();
+      if (!playerState.questCooldownEnd || now >= playerState.questCooldownEnd) {
+        refreshActiveQuests();
+      }
     }
     
     return true;
@@ -1601,7 +1669,7 @@ function showCollectibleAnimation(ingot) {
   sendBotNotification(`🏆 Игрок получил коллекционный артефакт: ${ingot.name} ${ingot.icon}!`);
 }
 
-// ---------- ЛИДЕРБОРД (ТЕСТОВЫЙ РЕЖИМ) ----------
+// ---------- ЛИДЕРБОРД ----------
 export async function updateLeaderboard() {
   if (!isTelegram || !tg.initData) {
     if (_showToast) _showToast('Лидерборд доступен только в Telegram', '⚠️');
@@ -1614,40 +1682,21 @@ export async function updateLeaderboard() {
 function renderTestLeaderboard() {
   const userName = tg?.initDataUnsafe?.user?.first_name || 'Старатель';
   const testData = [
-    { rank: 1, name: '⛏️ Шахтёр_Бог', xp: 15000 },
-    { rank: 2, name: '💎 Алмазный_Лорд', xp: 12000 },
-    { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 },
-    { rank: 4, name: userName, xp: playerState.player.xp, isPlayer: true },
-    { rank: 5, name: '🪨 Геолог_777', xp: 3200 },
-    { rank: 6, name: '🔥 Лавовый_Копатель', xp: 2100 },
-    { rank: 7, name: '❄️ Ледяной_Бур', xp: 900 },
-    { rank: 8, name: '🌟 Звёздный_Путник', xp: 450 },
-    { rank: 9, name: '🪐 Астероидный_Волк', xp: 200 },
-    { rank: 10, name: '⛏️ Новичок_2026', xp: 50 }
+    { rank: 1, name: '⛏️ Шахтёр_Бог', xp: 15000 }, { rank: 2, name: '💎 Алмазный_Лорд', xp: 12000 },
+    { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 }, { rank: 4, name: userName, xp: playerState.player.xp, isPlayer: true },
+    { rank: 5, name: '🪨 Геолог_777', xp: 3200 }, { rank: 6, name: '🔥 Лавовый_Копатель', xp: 2100 },
+    { rank: 7, name: '❄️ Ледяной_Бур', xp: 900 }, { rank: 8, name: '🌟 Звёздный_Путник', xp: 450 },
+    { rank: 9, name: '🪐 Астероидный_Волк', xp: 200 }, { rank: 10, name: '⛏️ Новичок_2026', xp: 50 }
   ];
   
   testData.sort((a, b) => b.xp - a.xp);
   testData.forEach((entry, i) => entry.rank = i + 1);
   
-  let html = `
-    <div class="modal-header">
-      <div class="modal-title">🏆 ТОП ИГРОКОВ</div>
-      <button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button>
-    </div>
-    <div class="modal-content" style="text-align:left; padding:10px;">
-  `;
-  
+  let html = `<div class="modal-header"><div class="modal-title">🏆 ТОП ИГРОКОВ</div><button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button></div><div class="modal-content" style="text-align:left; padding:10px;">`;
   testData.forEach((entry) => {
     const isPlayer = entry.isPlayer;
-    html += `
-      <div style="display:flex; align-items:center; gap:12px; padding:12px; background:${isPlayer ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius:16px; margin-bottom:8px;">
-        <span style="font-size:20px; font-weight:700; width:30px;">${entry.rank}</span>
-        <span style="flex:1; font-weight:600;">${entry.name} ${isPlayer ? '👈' : ''}</span>
-        <span style="color:#FFD700; font-weight:700;">${entry.xp} XP</span>
-      </div>
-    `;
+    html += `<div style="display:flex; align-items:center; gap:12px; padding:12px; background:${isPlayer ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius:16px; margin-bottom:8px;"><span style="font-size:20px; font-weight:700; width:30px;">${entry.rank}</span><span style="flex:1; font-weight:600;">${entry.name} ${isPlayer ? '👈' : ''}</span><span style="color:#FFD700; font-weight:700;">${entry.xp} XP</span></div>`;
   });
-  
   html += '</div>';
   
   import('./ui.js').then(ui => ui.openModal(html));
@@ -1658,138 +1707,44 @@ const conveyorOverlay = document.getElementById('conveyorOverlay');
 const conveyorTrack = document.getElementById('conveyorTrack');
 const conveyorTitle = document.getElementById('conveyorTitle');
 
-let conveyorState = {
-  geodeId: null,
-  isOpen: false,
-  resultIngot: null,
-  items: [],
-  trackItems: [],
-  timeoutId: null
-};
-
+let conveyorState = { geodeId: null, isOpen: false, resultIngot: null, items: [], trackItems: [], timeoutId: null };
 const ITEM_WIDTH = 96;
 const VISIBLE_ITEMS = 3;
 
-function cleanupConveyor() {
-  if (conveyorState.timeoutId) {
-    clearTimeout(conveyorState.timeoutId);
-    conveyorState.timeoutId = null;
-  }
-  conveyorOverlay.classList.remove('active');
-  conveyorState.isOpen = false;
-}
+function cleanupConveyor() { if (conveyorState.timeoutId) { clearTimeout(conveyorState.timeoutId); conveyorState.timeoutId = null; } conveyorOverlay.classList.remove('active'); conveyorState.isOpen = false; }
 
 export function initRoulette(geodeId) {
   if (!playerState) return;
-  
-  const g = CONFIG_GEODES[geodeId];
-  if (!g || g.isSpecial) return;
-  
-  const rand = Math.random();
-  let cum = 0;
-  let droppedId = g.lootTable[0].ingotId;
-  for (let e of g.lootTable) {
-    cum += e.chance;
-    if (rand < cum) {
-      droppedId = e.ingotId;
-      break;
-    }
-  }
-  
-  const resultIngot = CONFIG_ITEMS[droppedId];
-  const items = g.lootTable.map(e => CONFIG_ITEMS[e.ingotId]);
-  
-  const totalLength = 30;
-  const trackItems = [];
-  for (let i = 0; i < totalLength; i++) {
-    trackItems.push(items[i % items.length]);
-  }
-  
-  const targetSlot = 19;
-  trackItems[targetSlot] = resultIngot;
-  
-  conveyorState.geodeId = geodeId;
-  conveyorState.isOpen = true;
-  conveyorState.resultIngot = resultIngot;
-  conveyorState.items = items;
-  conveyorState.trackItems = trackItems;
-  
+  const g = CONFIG_GEODES[geodeId]; if (!g || g.isSpecial) return;
+  const rand = Math.random(); let cum = 0; let droppedId = g.lootTable[0].ingotId;
+  for (let e of g.lootTable) { cum += e.chance; if (rand < cum) { droppedId = e.ingotId; break; } }
+  const resultIngot = CONFIG_ITEMS[droppedId]; const items = g.lootTable.map(e => CONFIG_ITEMS[e.ingotId]);
+  const totalLength = 30; const trackItems = [];
+  for (let i = 0; i < totalLength; i++) { trackItems.push(items[i % items.length]); }
+  const targetSlot = 19; trackItems[targetSlot] = resultIngot;
+  conveyorState.geodeId = geodeId; conveyorState.isOpen = true; conveyorState.resultIngot = resultIngot; conveyorState.items = items; conveyorState.trackItems = trackItems;
   conveyorTrack.innerHTML = '';
-  trackItems.forEach((item, index) => {
-    const itemEl = document.createElement('div');
-    itemEl.className = 'conveyor-item';
-    itemEl.innerHTML = `
-      <div class="conveyor-item-icon" id="conv-${index}"></div>
-      <div class="conveyor-item-name">${item.name}</div>
-    `;
-    conveyorTrack.appendChild(itemEl);
-  });
-  
-  trackItems.forEach((item, index) => {
-    const el = document.getElementById(`conv-${index}`);
-    if (el) {
-      if (_renderImageToElement) _renderImageToElement(el, item.imagePath, item.icon, item.fallbackColor);
-    }
-  });
-  
-  conveyorTitle.textContent = `Анализ ${g.name}...`;
-  conveyorOverlay.classList.add('active');
-  
+  trackItems.forEach((item, index) => { const itemEl = document.createElement('div'); itemEl.className = 'conveyor-item'; itemEl.innerHTML = `<div class="conveyor-item-icon" id="conv-${index}"></div><div class="conveyor-item-name">${item.name}</div>`; conveyorTrack.appendChild(itemEl); });
+  trackItems.forEach((item, index) => { const el = document.getElementById(`conv-${index}`); if (el) { if (_renderImageToElement) _renderImageToElement(el, item.imagePath, item.icon, item.fallbackColor); } });
+  conveyorTitle.textContent = `Анализ ${g.name}...`; conveyorOverlay.classList.add('active');
   const stopPosition = -(targetSlot * ITEM_WIDTH) + (VISIBLE_ITEMS * ITEM_WIDTH / 2) - ITEM_WIDTH / 2;
-  
-  conveyorTrack.style.transition = 'none';
-  conveyorTrack.style.transform = 'translateX(0)';
-  conveyorTrack.offsetHeight;
-  
-  setTimeout(() => {
-    conveyorTrack.style.transition = 'transform 4.5s cubic-bezier(0.2, 0, 0.1, 1)';
-    conveyorTrack.style.transform = `translateX(${stopPosition}px)`;
-  }, 50);
-  
-  conveyorState.timeoutId = setTimeout(() => {
-    stopRoulette();
-  }, 4550);
+  conveyorTrack.style.transition = 'none'; conveyorTrack.style.transform = 'translateX(0)'; conveyorTrack.offsetHeight;
+  setTimeout(() => { conveyorTrack.style.transition = 'transform 4.5s cubic-bezier(0.2, 0, 0.1, 1)'; conveyorTrack.style.transform = `translateX(${stopPosition}px)`; }, 50);
+  conveyorState.timeoutId = setTimeout(() => { stopRoulette(); }, 4550);
 }
 
 function stopRoulette() {
   if (!conveyorState.isOpen || !playerState) return;
-  
-  const resultIngot = conveyorState.resultIngot;
-  const g = CONFIG_GEODES[conveyorState.geodeId];
-  
-  let xpGained = g.xpValue + (resultIngot?.xpValue || 0);
-  let isFirstDiscovery = false;
-  
-  if (playerState.minedStats[resultIngot.id] === 0) {
-    isFirstDiscovery = true;
-    xpGained = Math.floor(xpGained * 3);
-    if (_showToast) _showToast(`🎉 ПЕРВОЕ ОТКРЫТИЕ! +${xpGained} XP`, '🌟');
-  }
-  
-  playerState.ingots[resultIngot.id] = (playerState.ingots[resultIngot.id] || 0) + 1;
-  playerState.minedStats[resultIngot.id] = (playerState.minedStats[resultIngot.id] || 0) + 1;
-  playerState.player.totalIngots++;
-  
-  addXP(xpGained);
-  saveGame();
-  
-  cleanupConveyor();
-  isOpeningGeode = false;
-  
-  setTimeout(() => {
-    if (_showRewardPopup) _showRewardPopup(resultIngot);
-    if (_renderCurrentTab) _renderCurrentTab();
-  }, 100);
+  const resultIngot = conveyorState.resultIngot; const g = CONFIG_GEODES[conveyorState.geodeId];
+  let xpGained = g.xpValue + (resultIngot?.xpValue || 0); let isFirstDiscovery = false;
+  if (playerState.minedStats[resultIngot.id] === 0) { isFirstDiscovery = true; xpGained = Math.floor(xpGained * 3); if (_showToast) _showToast(`🎉 ПЕРВОЕ ОТКРЫТИЕ! +${xpGained} XP`, '🌟'); }
+  playerState.ingots[resultIngot.id] = (playerState.ingots[resultIngot.id] || 0) + 1; playerState.minedStats[resultIngot.id] = (playerState.minedStats[resultIngot.id] || 0) + 1; playerState.player.totalIngots++;
+  addXP(xpGained); saveGame(); cleanupConveyor(); isOpeningGeode = false;
+  setTimeout(() => { if (_showRewardPopup) _showRewardPopup(resultIngot); if (_renderCurrentTab) _renderCurrentTab(); }, 100);
 }
 
 // ---------- КУЗНИЦА ----------
-let brawlState = {
-  geodeId: null,
-  isSpecial: false,
-  tapsRemaining: 10,
-  isOpen: false
-};
-
+let brawlState = { geodeId: null, isSpecial: false, tapsRemaining: 10, isOpen: false };
 const brawlOverlay = document.getElementById('brawlOverlay');
 const brawlGeode = document.getElementById('brawlGeode');
 const brawlCounter = document.getElementById('brawlCounter');
@@ -1800,159 +1755,35 @@ const brawlResultRarity = document.getElementById('brawlResultRarity');
 const brawlCloseBtn = document.getElementById('brawlCloseBtn');
 
 export function openBrawlOverlay(geodeId, isSpecial) {
-  if (!playerState) return;
-  if (isOpeningGeode) return;
-  
-  if (playerState.geodes[geodeId] <= 0) {
-    if (_showToast) _showToast('Нет такой жеоды!', '⚠️');
-    return;
-  }
-  
-  if (isSpecial) {
-    const g = CONFIG_GEODES[geodeId];
-    const completed = isLocationCompleted(g.location);
-    if (completed) {
-      if (_showToast) _showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚');
-      return;
-    }
-  }
-  
-  isOpeningGeode = true;
-  
-  brawlState.geodeId = geodeId;
-  brawlState.isSpecial = isSpecial;
-  brawlState.tapsRemaining = 10;
-  brawlState.isOpen = true;
-
-  brawlCounter.textContent = '10';
-  brawlResult.classList.remove('show');
-  brawlCloseBtn.style.display = 'none';
-  brawlGeode.style.display = 'flex';
-  brawlGeode.classList.remove('explode-animation');
-  
-  if (isSpecial) {
-    brawlGeode.classList.add('special-geode');
-  } else {
-    brawlGeode.classList.remove('special-geode');
-  }
-  
-  document.querySelector('.brawl-hint').style.display = 'block';
-  brawlCounter.style.display = 'block';
-
-  if (_getGeodeStageImage && _renderImageToElement) {
-    const stage = _getGeodeStageImage(geodeId, 10);
-    _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
-  }
+  if (!playerState) return; if (isOpeningGeode) return;
+  if (playerState.geodes[geodeId] <= 0) { if (_showToast) _showToast('Нет такой жеоды!', '⚠️'); return; }
+  if (isSpecial) { const g = CONFIG_GEODES[geodeId]; const completed = isLocationCompleted(g.location); if (completed) { if (_showToast) _showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚'); return; } }
+  isOpeningGeode = true; brawlState.geodeId = geodeId; brawlState.isSpecial = isSpecial; brawlState.tapsRemaining = 10; brawlState.isOpen = true;
+  brawlCounter.textContent = '10'; brawlResult.classList.remove('show'); brawlCloseBtn.style.display = 'none'; brawlGeode.style.display = 'flex'; brawlGeode.classList.remove('explode-animation');
+  if (isSpecial) { brawlGeode.classList.add('special-geode'); } else { brawlGeode.classList.remove('special-geode'); }
+  document.querySelector('.brawl-hint').style.display = 'block'; brawlCounter.style.display = 'block';
+  if (_getGeodeStageImage && _renderImageToElement) { const stage = _getGeodeStageImage(geodeId, 10); _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355'); }
   brawlOverlay.classList.add('active');
 }
 
-function closeBrawlOverlay() {
-  brawlOverlay.classList.remove('active');
-  brawlState.isOpen = false;
-  isOpeningGeode = false;
-  if (_renderCurrentTab) _renderCurrentTab();
-}
+function closeBrawlOverlay() { brawlOverlay.classList.remove('active'); brawlState.isOpen = false; isOpeningGeode = false; if (_renderCurrentTab) _renderCurrentTab(); }
 
 function handleBrawlTap(e) {
   if (!brawlState.isOpen || brawlState.tapsRemaining <= 0) return;
-  
-  const rect = brawlGeode.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-  createParticles(centerX, centerY);
-  triggerScreenShake();
-  
-  brawlGeode.classList.add('shake-animation');
-  setTimeout(() => brawlGeode.classList.remove('shake-animation'), 300);
-  
-  brawlState.tapsRemaining--;
-  brawlCounter.textContent = brawlState.tapsRemaining;
-  
-  if (_getGeodeStageImage && _renderImageToElement) {
-    const stage = _getGeodeStageImage(brawlState.geodeId, brawlState.tapsRemaining);
-    _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
-  }
-  
+  const rect = brawlGeode.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2;
+  createParticles(centerX, centerY); triggerScreenShake(); brawlGeode.classList.add('shake-animation');
+  setTimeout(() => brawlGeode.classList.remove('shake-animation'), 300); brawlState.tapsRemaining--; brawlCounter.textContent = brawlState.tapsRemaining;
+  if (_getGeodeStageImage && _renderImageToElement) { const stage = _getGeodeStageImage(brawlState.geodeId, brawlState.tapsRemaining); _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355'); }
   if (brawlState.tapsRemaining <= 0) finishBrawlOpening();
 }
 
 function finishBrawlOpening() {
-  if (!playerState) return;
-  
-  const geodeId = brawlState.geodeId;
-  const isSpecial = brawlState.isSpecial;
-  
-  if (playerState.geodes[geodeId] > 0) {
-    playerState.geodes[geodeId]--;
-  }
-  playerState.player.totalOpened++;
-
-  let droppedIngot = null;
-  let xpGained = 0;
-
-  if (isSpecial) {
-    const g = CONFIG_GEODES[geodeId];
-    const loc = g.location;
-    
-    if (!playerState.collectedArtifacts[loc]) {
-      playerState.collectedArtifacts[loc] = [];
-    }
-    
-    const available = g.possibleIngots.filter((ingId) => !playerState.collectedArtifacts[loc].includes(ingId));
-    const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0];
-    droppedIngot = CONFIG_ITEMS[picked];
-    
-    playerState.ingots[picked] = (playerState.ingots[picked] || 0) + 1;
-    playerState.minedStats[picked] = (playerState.minedStats[picked] || 0) + 1;
-    if (!playerState.collectedArtifacts[loc].includes(picked)) {
-      playerState.collectedArtifacts[loc].push(picked);
-      playerState.player.totalArtifacts++;
-    }
-    if (!playerState.discoveredSpecialGeodes[loc]) playerState.discoveredSpecialGeodes[loc] = true;
-    xpGained = droppedIngot.xpValue;
-    
-    addXP(xpGained);
-    saveGame();
-    
-    const isFirstCollectible = droppedIngot.isCollectible && playerState.ingots[droppedIngot.id] === 1;
-    if (droppedIngot.isCollectible && isFirstCollectible) {
-      showCollectibleAnimation(droppedIngot);
-    }
-    
-    brawlGeode.classList.add('explode-animation');
-    brawlGeode.classList.remove('special-geode');
-    document.querySelector('.brawl-hint').style.display = 'none';
-    brawlCounter.style.display = 'none';
-    
-    setTimeout(() => {
-      brawlGeode.style.display = 'none';
-      if (_renderImageToElement) _renderImageToElement(brawlResultIcon, droppedIngot.imagePath, droppedIngot.icon, droppedIngot.fallbackColor);
-      brawlResultName.textContent = droppedIngot.name;
-      brawlResultRarity.textContent = droppedIngot.rarity;
-      brawlResultRarity.style.color = droppedIngot.rarityClass === 'collectible' ? '#FF64FF' : 
-                                      (droppedIngot.rarityClass === 'legendary' ? '#FFD700' : '#fff');
-      brawlResult.classList.add('show');
-      brawlCloseBtn.style.display = 'block';
-      isOpeningGeode = false;
-      if (_renderCurrentTab) _renderCurrentTab();
-    }, 500);
-    
-  } else {
-    brawlGeode.classList.add('explode-animation');
-    document.querySelector('.brawl-hint').style.display = 'none';
-    brawlCounter.style.display = 'none';
-    
-    setTimeout(() => {
-      brawlOverlay.classList.remove('active');
-      brawlState.isOpen = false;
-      initRoulette(geodeId);
-    }, 500);
-  }
+  if (!playerState) return; const geodeId = brawlState.geodeId; const isSpecial = brawlState.isSpecial;
+  if (playerState.geodes[geodeId] > 0) { playerState.geodes[geodeId]--; } playerState.player.totalOpened++;
+  let droppedIngot = null; let xpGained = 0;
+  if (isSpecial) { const g = CONFIG_GEODES[geodeId]; const loc = g.location; if (!playerState.collectedArtifacts[loc]) { playerState.collectedArtifacts[loc] = []; } const available = g.possibleIngots.filter((ingId) => !playerState.collectedArtifacts[loc].includes(ingId)); const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0]; droppedIngot = CONFIG_ITEMS[picked]; playerState.ingots[picked] = (playerState.ingots[picked] || 0) + 1; playerState.minedStats[picked] = (playerState.minedStats[picked] || 0) + 1; if (!playerState.collectedArtifacts[loc].includes(picked)) { playerState.collectedArtifacts[loc].push(picked); playerState.player.totalArtifacts++; } if (!playerState.discoveredSpecialGeodes[loc]) playerState.discoveredSpecialGeodes[loc] = true; xpGained = droppedIngot.xpValue; addXP(xpGained); saveGame(); const isFirstCollectible = droppedIngot.isCollectible && playerState.ingots[droppedIngot.id] === 1; if (droppedIngot.isCollectible && isFirstCollectible) { showCollectibleAnimation(droppedIngot); } brawlGeode.classList.add('explode-animation'); brawlGeode.classList.remove('special-geode'); document.querySelector('.brawl-hint').style.display = 'none'; brawlCounter.style.display = 'none'; setTimeout(() => { brawlGeode.style.display = 'none'; if (_renderImageToElement) _renderImageToElement(brawlResultIcon, droppedIngot.imagePath, droppedIngot.icon, droppedIngot.fallbackColor); brawlResultName.textContent = droppedIngot.name; brawlResultRarity.textContent = droppedIngot.rarity; brawlResultRarity.style.color = droppedIngot.rarityClass === 'collectible' ? '#FF64FF' : (droppedIngot.rarityClass === 'legendary' ? '#FFD700' : '#fff'); brawlResult.classList.add('show'); brawlCloseBtn.style.display = 'block'; isOpeningGeode = false; if (_renderCurrentTab) _renderCurrentTab(); }, 500); }
+  else { brawlGeode.classList.add('explode-animation'); document.querySelector('.brawl-hint').style.display = 'none'; brawlCounter.style.display = 'none'; setTimeout(() => { brawlOverlay.classList.remove('active'); brawlState.isOpen = false; initRoulette(geodeId); }, 500); }
 }
 
-if (brawlGeode) {
-  brawlGeode.addEventListener('click', handleBrawlTap);
-}
-if (brawlCloseBtn) {
-  brawlCloseBtn.addEventListener('click', closeBrawlOverlay);
-}
+if (brawlGeode) { brawlGeode.addEventListener('click', handleBrawlTap); }
+if (brawlCloseBtn) { brawlCloseBtn.addEventListener('click', closeBrawlOverlay); }
