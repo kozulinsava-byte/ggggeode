@@ -51,7 +51,7 @@ function toggleTheme() {
 
 initTheme();
 
-// ---------- УТИЛИТЫ РЕНДЕРИНГА ----------
+// ---------- УТИЛИТЫ РЕНДЕРИНГА (ЭМОДЗИ-ЗАГЛУШКИ) ----------
 export function renderImageToElement(el, src, fallbackIcon, fallbackColor) {
   if (!el) return;
   
@@ -127,7 +127,7 @@ export function showRewardPopup(ingot) {
   closeBtn.addEventListener('click', closeHandler);
 }
 
-// ---------- ОТКРЫТИЕ КАРТОЧКИ ИЗ ИНВЕНТАРЯ ----------
+// ---------- SHOWCASE (ОТКРЫТИЕ КАРТОЧКИ ИЗ ИНВЕНТАРЯ) ----------
 function openInventoryShowcase(ingotId) {
   const state = getPlayerState();
   const ingot = CONFIG_ITEMS[ingotId];
@@ -176,12 +176,14 @@ function openInventoryShowcase(ingotId) {
   `;
   
   showcaseContent.innerHTML = html;
-  renderImageToElement(document.getElementById('showcaseImage'), ingot.imagePath, ingot.icon, ingot.fallbackColor);
+  
+  const imgEl = document.getElementById('showcaseImage');
+  renderImageToElement(imgEl, ingot.imagePath, ingot.icon, ingot.fallbackColor);
   showcaseContent.style.opacity = '1';
   showcaseOverlay.classList.add('active');
 }
 
-// ---------- ОТКРЫТИЕ КАРТОЧКИ ИЗ КОЛЛЕКЦИИ ----------
+// ---------- SHOWCASE (ОТКРЫТИЕ КАРТОЧКИ ИЗ КОЛЛЕКЦИИ) ----------
 function openCollectionShowcase(ingotId) {
   const state = getPlayerState();
   const ingot = CONFIG_ITEMS[ingotId];
@@ -218,7 +220,7 @@ function openCollectionShowcase(ingotId) {
   
   let html = '';
 
-  if (!discovered && !isCollectible) {
+  if (!discovered && !ingot.isCollectible) {
     const locationName = CONFIG_EXPEDITIONS[ingot.location]?.name || 'неизвестной локации';
     html = `
       <div class="showcase-image" id="showcaseImage"></div>
@@ -359,25 +361,25 @@ function showAdminPanel() {
   openModal(html);
   
   setTimeout(() => {
-    document.getElementById('adminMaxXP')?.addEventListener('click', () => {
-      devGiveXP();
-      saveGame();
-      showToast('+1M XP!', '🌟');
-      closeModal();
+    document.getElementById('adminMaxXP')?.addEventListener('click', () => { 
+      devGiveXP(); 
+      saveGame(); 
+      showToast('+1M XP!', '🌟'); 
+      closeModal(); 
     });
     
-    document.getElementById('adminUnlockAll')?.addEventListener('click', () => {
-      devUnlockLocations();
-      saveGame();
-      showToast('Локации открыты (уровень 10)!', '🔓');
-      closeModal();
+    document.getElementById('adminUnlockAll')?.addEventListener('click', () => { 
+      devUnlockLocations(); 
+      saveGame(); 
+      showToast('Локации открыты (уровень 10)!', '🔓'); 
+      closeModal(); 
     });
     
-    document.getElementById('adminFillGeodes')?.addEventListener('click', () => {
-      devGiveGeodes();
-      saveGame();
-      showToast('+10 жеод всех типов!', '🪨');
-      closeModal();
+    document.getElementById('adminFillGeodes')?.addEventListener('click', () => { 
+      devGiveGeodes(); 
+      saveGame(); 
+      showToast('+10 жеод всех типов!', '🪨'); 
+      closeModal(); 
     });
     
     document.getElementById('adminFillIngots')?.addEventListener('click', () => {
@@ -389,9 +391,9 @@ function showAdminPanel() {
         }
       });
       state.player.totalIngots += Object.keys(CONFIG_ITEMS).filter(id => !CONFIG_ITEMS[id].isCollectible).length * 10;
-      saveGame();
-      showToast('+10 слитков каждого типа!', '✨');
-      closeModal();
+      saveGame(); 
+      showToast('+10 слитков каждого типа!', '✨'); 
+      closeModal(); 
     });
     
     document.getElementById('adminFillArtifacts')?.addEventListener('click', () => {
@@ -403,9 +405,9 @@ function showAdminPanel() {
         }
       });
       state.player.totalArtifacts += 8;
-      saveGame();
-      showToast('+1 артефакт каждого типа!', '💎');
-      closeModal();
+      saveGame(); 
+      showToast('+1 артефакт каждого типа!', '💎'); 
+      closeModal(); 
     });
     
     document.getElementById('adminStartSmelt')?.addEventListener('click', () => {
@@ -1070,25 +1072,19 @@ export function renderCollectionTab() {
     
     html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-gold);">⛏️ Шахты и Экспедиции</div>';
     html += '<div class="grid-container">';
-    regularIngots.filter(i => i.sourceType === 'expedition').forEach(ing => {
-      html += renderIngotCard(ing);
-    });
+    regularIngots.filter(i => i.sourceType === 'expedition').forEach(ing => { html += renderIngotCard(ing); });
     html += '</div>';
     
     html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-orange);">🔥 Мастерская Крафта</div>';
     html += '<div class="grid-container">';
-    regularIngots.filter(i => i.sourceType === 'crafted').forEach(ing => {
-      html += renderIngotCard(ing);
-    });
+    regularIngots.filter(i => i.sourceType === 'crafted').forEach(ing => { html += renderIngotCard(ing); });
     html += '</div>';
     
     const meteorIngots = regularIngots.filter(i => i.sourceType === 'meteor');
     if (meteorIngots.length > 0) {
       html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:16px; font-weight:700; margin:20px 0 12px; color:var(--accent-purple);">☄️ Метеоритный Шторм</div>';
       html += '<div class="grid-container">';
-      meteorIngots.forEach(ing => {
-        html += renderIngotCard(ing);
-      });
+      meteorIngots.forEach(ing => { html += renderIngotCard(ing); });
       html += '</div>';
     }
     
