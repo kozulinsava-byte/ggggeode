@@ -147,60 +147,26 @@ async function boot() {
     t.addEventListener('click', () => setActiveTab(t.dataset.tab))
   );
   
-  // 🆕 Привязка закрытия оверлеев мини-игр
+  // 🆕 Привязка закрытия мини-игр
   try {
-    const quenchOverlay = document.getElementById('quenchGameOverlay');
-    if (quenchOverlay) {
-      quenchOverlay.addEventListener('click', (e) => {
-        if (e.target === quenchOverlay) {
-          import('./core.js').then(core => {
-            if (core.miniGameState.quench.active) {
-              core.miniGameState.quench.active = false;
-              if (core.miniGameState.quench.gameLoop) {
-                cancelAnimationFrame(core.miniGameState.quench.gameLoop);
-                core.miniGameState.quench.gameLoop = null;
-              }
-              quenchOverlay.classList.remove('active', 'danger');
-              if (core.miniGameState.quench._handleTap) {
-                quenchOverlay.removeEventListener('click', core.miniGameState.quench._handleTap);
-                core.miniGameState.quench._handleTap = null;
-              }
-            }
-          });
-        }
-      });
-    }
+    const minigameCloseBtn = document.getElementById('minigameCloseBtn');
+    const minigameOverlay = document.getElementById('minigameOverlay');
     
-    const stackOverlay = document.getElementById('stackGameOverlay');
-    if (stackOverlay) {
-      stackOverlay.addEventListener('click', (e) => {
-        if (e.target === stackOverlay) {
-          import('./core.js').then(core => {
-            if (core.miniGameState.stack.active) {
-              core.miniGameState.stack.active = false;
-              if (core.miniGameState.stack.gameLoop) {
-                cancelAnimationFrame(core.miniGameState.stack.gameLoop);
-                core.miniGameState.stack.gameLoop = null;
-              }
-              stackOverlay.classList.remove('active');
-              if (core.miniGameState.stack._handleTap) {
-                stackOverlay.removeEventListener('click', core.miniGameState.stack._handleTap);
-                core.miniGameState.stack._handleTap = null;
-              }
-            }
-          });
-        }
+    if (minigameCloseBtn && minigameOverlay) {
+      minigameCloseBtn.addEventListener('click', () => {
+        import('./minigames.js').then(mg => {
+          if (mg.stopCurrentGame) mg.stopCurrentGame();
+        }).catch(() => {
+          minigameOverlay.classList.remove('active');
+        });
       });
-    }
-    
-    const upgradeOverlay = document.getElementById('upgradeGameOverlay');
-    if (upgradeOverlay) {
-      upgradeOverlay.addEventListener('click', (e) => {
-        if (e.target === upgradeOverlay) {
-          import('./core.js').then(core => {
-            if (core.miniGameState.upgrade.active && !core.miniGameState.upgrade.spinning) {
-              core.closeUpgradeGame();
-            }
+      
+      minigameOverlay.addEventListener('click', (e) => {
+        if (e.target === minigameOverlay) {
+          import('./minigames.js').then(mg => {
+            if (mg.stopCurrentGame) mg.stopCurrentGame();
+          }).catch(() => {
+            minigameOverlay.classList.remove('active');
           });
         }
       });
