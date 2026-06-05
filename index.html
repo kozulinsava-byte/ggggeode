@@ -387,6 +387,76 @@
     .storm-float-text { position:absolute; font-family:'Unbounded',sans-serif; font-weight:800; font-size:22px; z-index:610; pointer-events:none; animation:floatUp 0.5s ease-out forwards; text-shadow:0 0 10px currentColor; }
     @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1);} 100%{opacity:0;transform:translateY(-50px) scale(1.8);} }
 
+    /* ========== МИНИ-ИГРА: ЗАКАЛКА ========== */
+    .quench-overlay { position:fixed; top:0;left:0;right:0;bottom:0; background:radial-gradient(circle at center, #1a1a1c 0%, #0a0a0c 100%); z-index:520; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; visibility:hidden; transition:opacity 0.3s; cursor:pointer; }
+    [data-theme="light"] .quench-overlay { background:radial-gradient(circle at center, #f0f0f2 0%, #d0d0d5 100%); }
+    .quench-overlay.active { opacity:1; visibility:visible; }
+    .quench-overlay.danger { animation: dangerShake 0.1s infinite; }
+    @keyframes dangerShake { 0%,100%{transform:translate(0,0);} 25%{transform:translate(-1px,0.5px);} 50%{transform:translate(1px,-0.5px);} 75%{transform:translate(-0.5px,1px);} }
+    
+    .quench-score { font-family:'Unbounded',sans-serif; font-size:48px; font-weight:800; color:var(--accent-gold); text-shadow:0 0 30px rgba(255,215,0,0.4); margin-bottom:30px; z-index:521; }
+    .quench-arena { width:100%; max-width:360px; height:60vh; position:relative; overflow:hidden; z-index:521; }
+    
+    .quench-plate { position:absolute; left:10%; width:80%; height:12px; border-radius:6px; z-index:522; transition: top 0.05s linear, bottom 0.05s linear; }
+    .quench-plate.top { 
+      top: 5%; 
+      background: linear-gradient(180deg, #FF4500 0%, #FF8C00 50%, #FFD700 100%);
+      box-shadow: 0 0 30px rgba(255,100,0,0.8), 0 0 60px rgba(255,69,0,0.4);
+    }
+    .quench-plate.bottom { 
+      bottom: 5%; 
+      background: linear-gradient(0deg, #00BFFF 0%, #1E90FF 50%, #87CEEB 100%);
+      box-shadow: 0 0 30px rgba(0,191,255,0.8), 0 0 60px rgba(30,144,255,0.4);
+    }
+    
+    .quench-ingot { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:80px; height:80px; background:linear-gradient(135deg, #B87333, #FFD700, #B87333); border-radius:16px; z-index:523; box-shadow:0 0 40px rgba(255,215,0,0.6), inset 0 0 20px rgba(255,255,255,0.1); transition:transform 0.1s; }
+    
+    .quench-spark { position:absolute; width:4px; height:4px; border-radius:50%; background:#FFD700; box-shadow:0 0 8px #FFD700; z-index:524; pointer-events:none; animation: sparkFly 0.6s ease-out forwards; }
+    @keyframes sparkFly { 
+      0%{opacity:1;transform:translate(0,0) scale(1);} 
+      100%{opacity:0;transform:translate(calc(cos(var(--angle)) * var(--distance)), calc(sin(var(--angle)) * var(--distance))) scale(0);} 
+    }
+
+    /* ========== МИНИ-ИГРА: СТОПКА ========== */
+    .stack-overlay { position:fixed; top:0;left:0;right:0;bottom:0; background:radial-gradient(circle at center, #1a1a1c 0%, #0a0a0c 100%); z-index:530; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; opacity:0; visibility:hidden; transition:opacity 0.3s; cursor:pointer; }
+    [data-theme="light"] .stack-overlay { background:radial-gradient(circle at center, #f0f0f2 0%, #d0d0d5 100%); }
+    .stack-overlay.active { opacity:1; visibility:visible; }
+    
+    .stack-score { font-family:'Unbounded',sans-serif; font-size:36px; font-weight:800; color:var(--accent-gold); margin-bottom:16px; z-index:531; }
+    .stack-game-area { width:100%; max-width:360px; height:65vh; position:relative; overflow:hidden; z-index:531; }
+    
+    .stack-base { position:absolute; bottom:0; left:10%; width:80%; height:20px; background:linear-gradient(180deg, #607D8B, #455A64); border-radius:4px 4px 0 0; box-shadow:0 0 20px rgba(96,125,139,0.4); z-index:532; }
+    
+    .stack-moving-block { position:absolute; top:40px; height:24px; background:linear-gradient(135deg, #B87333, #FFD700); border-radius:4px; z-index:533; box-shadow:0 0 15px rgba(255,215,0,0.4); transition: left 0.016s linear; }
+    
+    .stack-block { position:absolute; height:24px; border-radius:4px; z-index:532; transition: all 0.1s ease-out; }
+    .stack-block.perfect { box-shadow:0 0 20px rgba(255,215,0,0.8); }
+    
+    .stack-hint { color:var(--text-secondary); font-size:14px; margin-bottom:20px; z-index:531; }
+
+    /* ========== МИНИ-ИГРА: АПГРЕЙД ========== */
+    .upgrade-overlay { position:fixed; top:0;left:0;right:0;bottom:0; background:radial-gradient(circle at center, #1a0a1a 0%, #0a0a0c 100%); z-index:540; display:flex; flex-direction:column; align-items:center; justify-content:center; opacity:0; visibility:hidden; transition:opacity 0.3s; }
+    [data-theme="light"] .upgrade-overlay { background:radial-gradient(circle at center, #f5f0f5 0%, #e0d8e0 100%); }
+    .upgrade-overlay.active { opacity:1; visibility:visible; }
+    
+    .upgrade-content { width:100%; max-width:360px; padding:20px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px; }
+    
+    .upgrade-vs { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:8px; }
+    .upgrade-slot { width:80px; height:80px; background:var(--card-bg); border-radius:20px; display:flex; align-items:center; justify-content:center; border:2px solid var(--card-border); }
+    .upgrade-slot img { width:70%;height:70%; object-fit:contain; }
+    .upgrade-vs-arrow { font-size:32px; color:var(--accent-gold); }
+    
+    .upgrade-wheel-container { position:relative; width:220px; height:220px; margin:8px auto; }
+    .upgrade-wheel { width:100%; height:100%; border-radius:50%; position:relative; overflow:hidden; }
+    .upgrade-wheel-success { position:absolute; top:0;left:0; width:100%; height:100%; background:conic-gradient(#50C878 0deg, #50C878 var(--success-angle), #FF4444 var(--success-angle), #FF4444 360deg); }
+    .upgrade-wheel-pointer { position:absolute; top:-12px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent; border-top:28px solid var(--accent-gold); z-index:542; filter:drop-shadow(0 0 8px rgba(255,215,0,0.8)); }
+    
+    .upgrade-chance-display { font-family:'Unbounded',sans-serif; font-size:22px; font-weight:800; margin:4px 0; }
+    
+    .upgrade-result { display:none; flex-direction:column; align-items:center; gap:12px; padding:20px; }
+    .upgrade-result-icon { font-size:64px; }
+    .upgrade-result-text { font-family:'Unbounded',sans-serif; font-size:18px; font-weight:700; }
+
     .mt-4 { margin-top:16px; }
   </style>
 
@@ -494,6 +564,50 @@
       <div class="storm-timer" id="stormTimerDisplay">20</div>
       <div class="storm-shards" id="stormShardsDisplay">Осколков: 0</div>
       <div class="storm-area" id="meteorStormArea"></div>
+    </div>
+
+    <!-- 🔨 ЗАКАЛКА -->
+    <div class="quench-overlay" id="quenchGameOverlay">
+      <div class="quench-score" id="quenchScore">0</div>
+      <div class="quench-arena" id="quenchArena">
+        <div class="quench-plate top" id="quenchTopPlate"></div>
+        <div class="quench-ingot" id="quenchIngot"></div>
+        <div class="quench-plate bottom" id="quenchBottomPlate"></div>
+        <div id="quenchSparkContainer"></div>
+      </div>
+    </div>
+
+    <!-- 🧱 СТОПКА -->
+    <div class="stack-overlay" id="stackGameOverlay">
+      <div class="stack-score" id="stackScore">0</div>
+      <div class="stack-game-area" id="stackGameArea">
+        <div class="stack-moving-block" id="stackMovingBlock"></div>
+        <div class="stack-base"></div>
+        <div id="stackContainer"></div>
+      </div>
+      <div class="stack-hint">Тапни, чтобы сбросить слиток</div>
+    </div>
+
+    <!-- 🎰 АПГРЕЙД -->
+    <div class="upgrade-overlay" id="upgradeGameOverlay">
+      <div class="upgrade-content">
+        <div style="font-family:'Unbounded',sans-serif; font-size:16px; font-weight:700; color:var(--accent-purple);">🎰 Кузнечный Апгрейд</div>
+        <div class="upgrade-vs">
+          <div class="upgrade-slot" id="upgradeSacrificeDisplay"></div>
+          <div class="upgrade-vs-arrow">→</div>
+          <div class="upgrade-slot" id="upgradeTargetDisplay"></div>
+        </div>
+        <div class="upgrade-wheel-container">
+          <div class="upgrade-wheel-pointer"></div>
+          <div class="upgrade-wheel" id="upgradeWheel">
+            <div class="upgrade-wheel-success" id="upgradeWheelSuccess" style="--success-angle: 90deg;"></div>
+          </div>
+        </div>
+        <div class="upgrade-chance-display" id="upgradeChanceDisplay2">50%</div>
+        <button class="forge-smelt-btn" id="upgradeSpinBtn" style="width:100%;">🎰 ЗАПУСТИТЬ ПЕРЕПЛАВКУ</button>
+        <div class="upgrade-result" id="upgradeResultDisplay"></div>
+        <button class="brawl-close-btn" id="upgradeCloseBtn" style="display:none;">Продолжить</button>
+      </div>
     </div>
   </div>
 
