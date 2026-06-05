@@ -1,5 +1,5 @@
 // ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
-import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS, MINI_GAMES_CONFIG, calculateUpgradeChance } from './config.js';
+import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS, MINI_GAMES_CONFIG } from './config.js';
 
 // ========== ЗАГЛУШКИ UI ФУНКЦИЙ ==========
 let _showToast = null;
@@ -57,9 +57,10 @@ export let playerState = {
   questRefreshTime: null,
   completedQuests: [],
   questCooldownEnd: null,
-  miniGameStats: {
-    forge_strike_highscore: 0,
-    perfect_stack_highscore: 0
+  // 🆕 Рекорды мини-игр
+  miniGameRecords: {
+    quench: 0,
+    stack: 0
   }
 };
 
@@ -91,6 +92,37 @@ export const meteorStormState = {
   cooldownDuration: 60000
 };
 
+// 🆕 СОСТОЯНИЕ МИНИ-ИГР
+export const miniGameState = {
+  quench: {
+    active: false,
+    score: 0,
+    position: 0.5,
+    speed: 1.0,
+    gameLoop: null,
+    lastTime: null
+  },
+  stack: {
+    active: false,
+    score: 0,
+    blockWidth: 100,
+    currentX: 0,
+    direction: 1,
+    speed: 2.0,
+    blocks: [],
+    gameLoop: null,
+    falling: false
+  },
+  upgrade: {
+    active: false,
+    sacrificeIngotId: null,
+    targetIngotId: null,
+    chance: 0,
+    spinning: false,
+    result: null
+  }
+};
+
 export function sendBotNotification(message) {
   console.log('[StarForge Bot Notification]', message);
 }
@@ -117,7 +149,9 @@ const activeTimers = {
   signal: null,
   signalTimeout: null,
   meteorSpawn: null,
-  meteorRound: null
+  meteorRound: null,
+  quench: null,
+  stack: null
 };
 
 function clearTimer(timerName) {
@@ -151,8 +185,8 @@ function setTimerTimeout(timerName, callback, delay) {
 
 // ---------- УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР (РОТАЦИЯ ПО СИСТЕМНОМУ ВРЕМЕНИ) ----------
 const EVENT_LIST = ['great_smelt', 'meteor_storm'];
-const EVENT_DURATION = 15 * 60 * 1000;
-const ROTATION_INTERVAL = 30 * 60 * 1000;
+const EVENT_DURATION = 15 * 60 * 1000; // 15 минут
+const ROTATION_INTERVAL = 30 * 60 * 1000; // 30 минут
 
 const EVENT_DEFINITIONS = {
   great_smelt: {
@@ -179,6 +213,7 @@ const EVENT_DEFINITIONS = {
   }
 };
 
+// 🆕 Ускоренный режим для тестов
 let speedMode = false;
 const SPEED_MULTIPLIER = 60;
 
@@ -265,13 +300,16 @@ export const eventsManager = {
   
   startEventByIdInternal(eventId, endTime) {
     if (!EVENT_DEFINITIONS[eventId]) return;
+    
     const def = EVENT_DEFINITIONS[eventId];
     this.activeEventId = eventId;
     this.eventEndTime = endTime;
     this.lastEventId = eventId;
+    
     if (_showToast) _showToast(def.startMessage, def.startToast);
     sendBotNotification(`🚀 Ивент запущен: ${def.name}`);
     saveGame();
+    
     if (_renderEventsTab) _renderEventsTab();
   },
   
@@ -279,10 +317,13 @@ export const eventsManager = {
     if (!this.activeEventId) return;
     const def = EVENT_DEFINITIONS[this.activeEventId];
     if (!def) return;
+    
     if (_showToast) _showToast(def.endMessage, def.endToast);
     sendBotNotification(`❄️ Ивент завершён: ${def.name}`);
+    
     this.activeEventId = null;
     this.eventEndTime = null;
+    
     saveGame();
     if (_renderEventsTab) _renderEventsTab();
   },
@@ -290,14 +331,17 @@ export const eventsManager = {
   startEventById(eventId) {
     if (!EVENT_DEFINITIONS[eventId]) return;
     if (this.activeEventId) this.forceEndEvent();
+    
     const def = EVENT_DEFINITIONS[eventId];
     const duration = getEffectiveDuration();
     this.activeEventId = eventId;
     this.eventEndTime = Date.now() + duration;
     this.lastEventId = eventId;
+    
     if (_showToast) _showToast(def.startMessage, def.startToast);
     sendBotNotification(`🚀 Ивент запущен вручную: ${def.name}`);
     saveGame();
+    
     if (_renderEventsTab) _renderEventsTab();
   },
   
@@ -306,8 +350,10 @@ export const eventsManager = {
       if (_showToast) _showToast('В данный момент нет активных событий', '⚠️');
       return;
     }
+    
     const def = EVENT_DEFINITIONS[this.activeEventId];
     if (!def) return;
+    
     if (this.activeEventId === 'meteor_storm') {
       if (meteorStormState.active) {
         meteorStormState.active = false;
@@ -320,10 +366,13 @@ export const eventsManager = {
         document.getElementById('meteorStormOverlay')?.classList.remove('active');
       }
     }
+    
     if (_showToast) _showToast(def.endMessage, def.endToast);
     sendBotNotification(`❄️ Ивент завершён принудительно: ${def.name}`);
+    
     this.activeEventId = null;
     this.eventEndTime = null;
+    
     saveGame();
     if (_renderEventsTab) _renderEventsTab();
   }
@@ -344,17 +393,21 @@ export function openForge() {
     if (_showToast) _showToast('Плавильня закрыта! Дождитесь Великой Переплавки.', '❄️');
     return;
   }
+  
   if (forgeState.active) return;
   forgeState.active = true;
   forgeState.selectedRecipe = null;
+  
   const overlay = document.getElementById('forgeOverlay');
   const content = document.getElementById('forgeContent');
+  
   renderForgeInterface(content);
   overlay.classList.add('active');
 }
 
 function renderForgeInterface(container) {
   const recipes = getCraftableRecipes();
+  
   let html = `
     <div class="forge-title-section">
       <span class="forge-title-icon">🔥</span>
@@ -365,6 +418,7 @@ function renderForgeInterface(container) {
     </div>
     <div class="recipe-grid">
   `;
+  
   if (recipes.length === 0) {
     html += '<div class="empty-state" style="grid-column:1/-1;">Нет доступных рецептов</div>';
   } else {
@@ -372,17 +426,20 @@ function renderForgeInterface(container) {
       const isActive = forgeState.selectedRecipe && forgeState.selectedRecipe.id === recipe.id;
       const isLocked = recipe.reqLevel && playerState.player.level < recipe.reqLevel;
       const cardClass = isActive ? 'recipe-card active' : (isLocked ? 'recipe-card disabled' : (recipe.canCraft ? 'recipe-card' : 'recipe-card disabled'));
+      
       html += `
         <div class="${cardClass}" data-recipe="${recipe.id}">
           <div class="recipe-card-icon">${recipe.icon}</div>
           <div class="recipe-card-name">${recipe.name} ${isLocked ? '🔒' : ''}</div>
           <div class="recipe-card-ingredients">
       `;
+      
       for (let ingId in recipe.ingredients) {
         const required = recipe.ingredients[ingId];
         const owned = playerState.ingots[ingId] || 0;
         const hasEnough = owned >= required;
         const ing = CONFIG_ITEMS[ingId];
+        
         html += `
           <div class="recipe-card-ingredient-row">
             ${ing.icon} ${ing.name}: 
@@ -392,17 +449,20 @@ function renderForgeInterface(container) {
           </div>
         `;
       }
+      
       if (isLocked) {
         html += `<div class="recipe-card-xp" style="color: #FF4444;">🔒 Требуется ${recipe.reqLevel} уровень</div>`;
       } else {
         html += `<div class="recipe-card-xp">+${recipe.xpReward} XP · ${recipe.smeltTime}с</div>`;
       }
+      
       html += `
           </div>
         </div>
       `;
     });
   }
+  
   html += `
     </div>
     <div class="forge-action-area">
@@ -412,7 +472,9 @@ function renderForgeInterface(container) {
       <button class="forge-exit-btn" id="forgeExitBtn">Выйти из Плавильни</button>
     </div>
   `;
+  
   container.innerHTML = html;
+  
   container.querySelectorAll('.recipe-card:not(.disabled)').forEach((el) => {
     el.addEventListener('click', () => {
       const recipeId = el.dataset.recipe;
@@ -423,6 +485,7 @@ function renderForgeInterface(container) {
       }
     });
   });
+  
   const smeltBtn = container.querySelector('#forgeSmeltBtn');
   if (smeltBtn) {
     smeltBtn.addEventListener('click', () => {
@@ -431,6 +494,7 @@ function renderForgeInterface(container) {
       }
     });
   }
+  
   const exitBtn = container.querySelector('#forgeExitBtn');
   if (exitBtn) {
     exitBtn.addEventListener('click', () => {
@@ -442,9 +506,12 @@ function renderForgeInterface(container) {
 function closeForge() {
   const overlay = document.getElementById('forgeOverlay');
   const content = document.getElementById('forgeContent');
+  
   overlay.classList.remove('active');
   content.innerHTML = '';
+  
   clearTimer('forge');
+  
   forgeState.active = false;
   forgeState.selectedRecipe = null;
 }
@@ -452,25 +519,32 @@ function closeForge() {
 function startSmeltProcess(recipe) {
   document.getElementById('forgeOverlay').classList.remove('active');
   document.getElementById('forgeContent').innerHTML = '';
+  
   const progressOverlay = document.getElementById('forgeProgressOverlay');
   const progressLabel = document.getElementById('forgeProgressLabel');
   const progressFill = document.getElementById('forgeProgressFill');
   const progressTime = document.getElementById('forgeProgressTime');
   const moltenEl = document.getElementById('forgeMolten');
+  
   forgeState.smeltMaxSeconds = recipe.smeltTime || 15;
   forgeState.smeltSeconds = forgeState.smeltMaxSeconds;
+  
   progressLabel.textContent = `Плавим ${recipe.name}...`;
   progressFill.style.width = '0%';
   progressTime.textContent = `${forgeState.smeltSeconds}с`;
   moltenEl.style.height = '0%';
   progressOverlay.classList.add('active');
+  
   setTimerInterval('forge', () => {
     forgeState.smeltSeconds--;
+    
     const elapsed = forgeState.smeltMaxSeconds - forgeState.smeltSeconds;
     const progress = (elapsed / forgeState.smeltMaxSeconds) * 100;
+    
     progressFill.style.width = progress + '%';
     progressTime.textContent = `${forgeState.smeltSeconds}с`;
     moltenEl.style.height = progress + '%';
+    
     if (forgeState.smeltSeconds <= 0) {
       clearTimer('forge');
       finishSmeltProcess(recipe);
@@ -480,18 +554,24 @@ function startSmeltProcess(recipe) {
 
 function finishSmeltProcess(recipe) {
   clearTimer('forge');
+  
   document.getElementById('forgeProgressOverlay').classList.remove('active');
+  
   for (let ingId in recipe.ingredients) {
     playerState.ingots[ingId] -= recipe.ingredients[ingId];
   }
+  
   playerState.ingots[recipe.resultIngotId] = (playerState.ingots[recipe.resultIngotId] || 0) + 1;
   playerState.minedStats[recipe.resultIngotId] = (playerState.minedStats[recipe.resultIngotId] || 0) + 1;
   playerState.player.totalIngots++;
+  
   addXP(recipe.xpReward);
   saveGame();
+  
   const resultItem = CONFIG_ITEMS[recipe.resultIngotId];
   if (_showToast) _showToast(`Создано: ${resultItem?.name || recipe.name}! +${recipe.xpReward} XP`, recipe.icon);
   sendBotNotification(`⚡ Игрок создал ${resultItem?.name || recipe.name} в Плавильне!`);
+  
   forgeState.active = false;
   forgeState.selectedRecipe = null;
   if (_renderCurrentTab) _renderCurrentTab();
@@ -500,9 +580,11 @@ function finishSmeltProcess(recipe) {
 // ---------- СИСТЕМА КРАФТА ----------
 export function getCraftableRecipes() {
   const recipes = [];
+  
   for (let recipeId in CRAFT_RECIPES) {
     const recipe = CRAFT_RECIPES[recipeId];
     let canCraft = true;
+    
     for (let ingId in recipe.ingredients) {
       const required = recipe.ingredients[ingId];
       const owned = playerState.ingots[ingId] || 0;
@@ -511,8 +593,10 @@ export function getCraftableRecipes() {
         break;
       }
     }
+    
     recipes.push({ ...recipe, canCraft });
   }
+  
   return recipes;
 }
 
@@ -522,27 +606,33 @@ export function craftItem(recipeId) {
     if (_showToast) _showToast('Рецепт не найден!', '⚠️');
     return false;
   }
+  
   if (recipe.reqLevel && playerState.player.level < recipe.reqLevel) {
     if (_showToast) _showToast(`Требуется ${recipe.reqLevel} уровень!`, '🔒');
     return false;
   }
+  
   const recipes = getCraftableRecipes();
   const found = recipes.find(r => r.id === recipeId);
   if (!found || !found.canCraft) {
     if (_showToast) _showToast('Недостаточно ресурсов!', '⚠️');
     return false;
   }
+  
   return craftItemDirect(found);
 }
 
 function craftItemDirect(recipe) {
   if (!recipe) return false;
+  
   for (let ingId in recipe.ingredients) {
     playerState.ingots[ingId] -= recipe.ingredients[ingId];
   }
+  
   playerState.ingots[recipe.resultIngotId] = (playerState.ingots[recipe.resultIngotId] || 0) + 1;
   playerState.minedStats[recipe.resultIngotId] = (playerState.minedStats[recipe.resultIngotId] || 0) + 1;
   playerState.player.totalIngots++;
+  
   addXP(recipe.xpReward);
   saveGame();
   return true;
@@ -596,11 +686,13 @@ export function getExpeditionTimeLeft(expId) {
 
 export function addXP(amount) {
   playerState.player.xp += amount;
+  
   while (playerState.player.level < LEVELS.length - 1 && playerState.player.xp >= LEVELS[playerState.player.level]) {
     playerState.player.level++;
     if (_showToast) _showToast(`🎉 Уровень ${playerState.player.level}!`, '⬆️');
     sendBotNotification(`⭐ Игрок достиг ${playerState.player.level} уровня!`);
   }
+  
   if (_updateProfileUI) _updateProfileUI();
   if (_updateCollectionProgress) _updateCollectionProgress();
   saveGame();
@@ -608,19 +700,24 @@ export function addXP(amount) {
 
 export function sellIngot(ingotId) {
   const ingot = CONFIG_ITEMS[ingotId];
+  
   if (ingot.isCollectible) {
     if (_showToast) _showToast('Коллекционные артефакты нельзя сдавать!', '⚠️');
     return;
   }
+  
   if (playerState.ingots[ingotId] <= 0) {
     if (_showToast) _showToast('Нет слитков для сдачи!', '⚠️');
     return;
   }
+  
   const count = playerState.ingots[ingotId];
   const xpEarned = ingot.sellValue * count;
+  
   playerState.ingots[ingotId] = 0;
   addXP(xpEarned);
   saveGame();
+  
   if (_showToast) _showToast(`Сдано ${count} ${ingot.name}! +${xpEarned} XP`, '💰');
   if (_renderCurrentTab) _renderCurrentTab();
 }
@@ -630,20 +727,176 @@ export function exchangeSpecialGeodeForXP(geodeId) {
     if (_showToast) _showToast('Нет такой жеоды!', '⚠️');
     return;
   }
+  
   const g = CONFIG_GEODES[geodeId];
   if (!g.isSpecial) return;
+  
   const loc = g.location;
   const completed = isLocationCompleted(loc);
   if (!completed) {
     if (_showToast) _showToast('Сначала соберите все артефакты локации!', '⚠️');
     return;
   }
+  
   playerState.geodes[geodeId]--;
   const xpGained = 800;
   addXP(xpGained);
   saveGame();
+  
   if (_showToast) _showToast(`Жеода изучена! +${xpGained} XP`, '📚');
   if (_renderCurrentTab) _renderCurrentTab();
+}
+
+// ---------- 🆕 ПЕРЕРАБОТАННЫЕ ЗАКАЗЫ ГИЛЬДИИ ----------
+export function getAvailableQuests() {
+  const playerLevel = playerState.player.level;
+  return GUILD_QUESTS.filter(q => q.reqLevel >= playerLevel - 1 && q.reqLevel <= playerLevel + 1);
+}
+
+export function refreshActiveQuests() {
+  const now = Date.now();
+  
+  if (playerState.questCooldownEnd && now < playerState.questCooldownEnd) {
+    return false;
+  }
+  
+  const playerLevel = playerState.player.level;
+  const available = getAvailableQuests();
+  const completed = playerState.completedQuests || [];
+  
+  const uncompleted = available.filter(q => !completed.includes(q.id));
+  
+  if (uncompleted.length === 0) {
+    playerState.activeQuests = [];
+    saveGame();
+    return true;
+  }
+  
+  const atLevel = uncompleted.filter(q => q.reqLevel === playerLevel);
+  const belowLevel = uncompleted.filter(q => q.reqLevel === playerLevel - 1);
+  const aboveLevel = uncompleted.filter(q => q.reqLevel === playerLevel + 1);
+  
+  const selected = [];
+  
+  const pool1 = [...atLevel, ...belowLevel];
+  if (pool1.length > 0) {
+    const pick1 = pool1[Math.floor(Math.random() * pool1.length)];
+    selected.push(pick1.id);
+  }
+  
+  const pool2 = uncompleted.filter(q => !selected.includes(q.id) && q.reqLevel <= playerLevel);
+  if (pool2.length > 0) {
+    const pick2 = pool2[Math.floor(Math.random() * pool2.length)];
+    selected.push(pick2.id);
+  }
+  
+  const pool3 = aboveLevel.length > 0 ? aboveLevel : uncompleted.filter(q => !selected.includes(q.id) && q.reqLevel === playerLevel);
+  if (pool3.length > 0) {
+    const pick3 = pool3[Math.floor(Math.random() * pool3.length)];
+    selected.push(pick3.id);
+  }
+  
+  if (selected.length < 3) {
+    const remaining = uncompleted.filter(q => !selected.includes(q.id));
+    const shuffled = [...remaining].sort(() => Math.random() - 0.5);
+    for (let q of shuffled) {
+      if (selected.length >= 3) break;
+      selected.push(q.id);
+    }
+  }
+  
+  playerState.activeQuests = selected.slice(0, 3);
+  playerState.questRefreshTime = now + 10 * 60 * 1000;
+  playerState.questCooldownEnd = null;
+  
+  saveGame();
+  return true;
+}
+
+export function checkAndRefreshQuests() {
+  const now = Date.now();
+  
+  if (playerState.questCooldownEnd && now < playerState.questCooldownEnd) {
+    return false;
+  }
+  
+  if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
+    return refreshActiveQuests();
+  }
+  
+  const allCompleted = playerState.activeQuests.every(qId => 
+    (playerState.completedQuests || []).includes(qId)
+  );
+  
+  if (allCompleted) {
+    return refreshActiveQuests();
+  }
+  
+  if (playerState.questRefreshTime && now >= playerState.questRefreshTime) {
+    return refreshActiveQuests();
+  }
+  
+  return false;
+}
+
+export function getQuestCooldownRemaining() {
+  if (!playerState.questCooldownEnd) return 0;
+  return Math.max(0, playerState.questCooldownEnd - Date.now());
+}
+
+export function completeQuest(questId) {
+  const quest = GUILD_QUESTS.find(q => q.id === questId);
+  if (!quest) return false;
+  
+  if (!playerState.activeQuests || !playerState.activeQuests.includes(questId)) {
+    if (_showToast) _showToast('Этот заказ уже не активен!', '⚠️');
+    return false;
+  }
+  
+  if (playerState.player.level < quest.reqLevel) {
+    if (_showToast) _showToast(`Требуется ${quest.reqLevel} уровень!`, '🔒');
+    return false;
+  }
+  
+  for (let ingId in quest.ingredients) {
+    const required = quest.ingredients[ingId];
+    const owned = playerState.ingots[ingId] || 0;
+    if (owned < required) {
+      if (_showToast) _showToast(`Недостаточно ${CONFIG_ITEMS[ingId]?.name || ingId}!`, '⚠️');
+      return false;
+    }
+  }
+  
+  for (let ingId in quest.ingredients) {
+    playerState.ingots[ingId] -= quest.ingredients[ingId];
+  }
+  
+  addXP(quest.rewardXP);
+  
+  if (quest.rewardGeode) {
+    playerState.geodes[quest.rewardGeode] = (playerState.geodes[quest.rewardGeode] || 0) + 1;
+    const geodeName = CONFIG_GEODES[quest.rewardGeode]?.name || 'жеода';
+    if (_showToast) _showToast(`Заказ выполнен! +${quest.rewardXP} XP, +1 ${geodeName}`, '📜');
+  } else {
+    if (_showToast) _showToast(`Заказ выполнен! +${quest.rewardXP} XP`, '📜');
+  }
+  
+  if (!playerState.completedQuests) playerState.completedQuests = [];
+  playerState.completedQuests.push(questId);
+  
+  saveGame();
+  
+  const allCompleted = playerState.activeQuests.every(qId => 
+    playerState.completedQuests.includes(qId)
+  );
+  
+  if (allCompleted) {
+    playerState.questCooldownEnd = Date.now() + 10 * 60 * 1000;
+    saveGame();
+  }
+  
+  if (_renderEventsTab) _renderEventsTab();
+  return true;
 }
 
 // ---------- МИНИ-ИГРА "АКТИВНАЯ РАЗВЕДКА" ----------
@@ -654,41 +907,47 @@ let activeSignalGame = {
   points: [],
   collected: 0,
   totalPoints: 8,
-  timer: 10
-};
+  timer: 10};
 
 export function startSignalGame(expId, bonusType) {
   if (activeSignalGame.active) {
     cleanupSignalGame();
   }
+  
   activeSignalGame.active = true;
   activeSignalGame.expId = expId;
   activeSignalGame.bonusType = bonusType;
   activeSignalGame.collected = 0;
   activeSignalGame.timer = 10;
   activeSignalGame.points = [];
+  
   const overlay = document.getElementById('signalGameOverlay');
   const timerEl = document.getElementById('signalTimer');
   const counterEl = document.getElementById('signalCounter');
   const area = document.getElementById('signalGameArea');
+  
   overlay.classList.add('active');
   timerEl.textContent = '10';
   counterEl.textContent = `Сигналов: 0 / 8`;
   area.innerHTML = '';
+  
   for (let i = 0; i < 8; i++) {
     setTimeout(() => {
       if (!activeSignalGame.active) return;
       createSignalPoint(area);
     }, i * 480);
   }
+  
   setTimerInterval('signal', () => {
     if (!activeSignalGame.active) return;
     activeSignalGame.timer--;
     timerEl.textContent = activeSignalGame.timer;
+    
     if (activeSignalGame.timer <= 0) {
       signalGameFail();
     }
   }, 1000);
+  
   setTimerTimeout('signalTimeout', () => {
     if (activeSignalGame.active) {
       signalGameFail();
@@ -698,23 +957,30 @@ export function startSignalGame(expId, bonusType) {
 
 function createSignalPoint(area) {
   if (!activeSignalGame.active) return;
+  
   const point = document.createElement('div');
   point.className = 'signal-point';
+  
   const x = Math.random() * (area.clientWidth - 60) + 30;
   const y = Math.random() * (area.clientHeight - 60) + 30;
+  
   point.style.left = x + 'px';
   point.style.top = y + 'px';
+  
   point.addEventListener('click', () => {
     if (!activeSignalGame.active) return;
     point.remove();
     activeSignalGame.collected++;
     document.getElementById('signalCounter').textContent = `Сигналов: ${activeSignalGame.collected} / 8`;
+    
     if (activeSignalGame.collected >= 8) {
       signalGameSuccess();
     }
   });
+  
   area.appendChild(point);
   activeSignalGame.points.push(point);
+  
   setTimeout(() => {
     if (point.parentNode) {
       point.remove();
@@ -725,12 +991,15 @@ function createSignalPoint(area) {
 
 function signalGameSuccess() {
   if (!activeSignalGame.active) return;
+  
   const { expId, bonusType } = activeSignalGame;
+  
   if (bonusType === 'echo') {
     applyEchoBonus(expId);
   } else if (bonusType === 'scan') {
     applyScanBonus(expId);
   }
+  
   cleanupSignalGame();
   document.getElementById('signalGameOverlay').classList.remove('active');
   if (_showToast) _showToast('✅ Все сигналы пойманы! Бонус применён!', '📡');
@@ -738,9 +1007,12 @@ function signalGameSuccess() {
 
 function signalGameFail() {
   if (!activeSignalGame.active) return;
+  
   const { expId } = activeSignalGame;
+  
   playerState.echoCooldowns[expId] = Date.now() + 30000;
   saveGame();
+  
   cleanupSignalGame();
   document.getElementById('signalGameOverlay').classList.remove('active');
   if (_showToast) _showToast('❌ Сбой системы... Разведка ушла на перезарядку', '📡');
@@ -759,9 +1031,11 @@ function cleanupSignalGame() {
 function applyEchoBonus(expId) {
   const exp = playerState.expeditions[expId];
   if (!exp || !exp.active) return;
+  
   const reduction = Math.floor((exp.endTime - Date.now()) * 0.15);
   exp.endTime -= reduction;
   playerState.expeditionBonuses[expId] = 'echo';
+  
   saveGame();
   if (_showToast) _showToast(`Время экспедиции сокращено на ${Math.floor(reduction / 1000)}с!`, '📡');
 }
@@ -769,134 +1043,13 @@ function applyEchoBonus(expId) {
 function applyScanBonus(expId) {
   const exp = playerState.expeditions[expId];
   if (!exp || !exp.active) return;
+  
   exp.scanUsed = true;
   exp.specialChanceBoost = 1.2;
   playerState.expeditionBonuses[expId] = 'scan';
+  
   saveGame();
   if (_showToast) _showToast('Глубинное сканирование активировано! +20% к шансу особой жеоды', '🔬');
-}
-
-// ---------- 🆕 ПЕРЕРАБОТАННЫЕ ЗАКАЗЫ ГИЛЬДИИ ----------
-export function getAvailableQuests() {
-  const playerLevel = playerState.player.level;
-  return GUILD_QUESTS.filter(q => q.reqLevel >= playerLevel - 1 && q.reqLevel <= playerLevel + 1);
-}
-
-export function refreshActiveQuests() {
-  const now = Date.now();
-  if (playerState.questCooldownEnd && now < playerState.questCooldownEnd) {
-    return false;
-  }
-  const playerLevel = playerState.player.level;
-  const available = getAvailableQuests();
-  const completed = playerState.completedQuests || [];
-  const uncompleted = available.filter(q => !completed.includes(q.id));
-  if (uncompleted.length === 0) {
-    playerState.activeQuests = [];
-    saveGame();
-    return true;
-  }
-  const atLevel = uncompleted.filter(q => q.reqLevel === playerLevel);
-  const belowLevel = uncompleted.filter(q => q.reqLevel === playerLevel - 1);
-  const aboveLevel = uncompleted.filter(q => q.reqLevel === playerLevel + 1);
-  const selected = [];
-  const pool1 = [...atLevel, ...belowLevel];
-  if (pool1.length > 0) {
-    const pick1 = pool1[Math.floor(Math.random() * pool1.length)];
-    selected.push(pick1.id);
-  }
-  const pool2 = uncompleted.filter(q => !selected.includes(q.id) && q.reqLevel <= playerLevel);
-  if (pool2.length > 0) {
-    const pick2 = pool2[Math.floor(Math.random() * pool2.length)];
-    selected.push(pick2.id);
-  }
-  const pool3 = aboveLevel.length > 0 ? aboveLevel : uncompleted.filter(q => !selected.includes(q.id) && q.reqLevel === playerLevel);
-  if (pool3.length > 0) {
-    const pick3 = pool3[Math.floor(Math.random() * pool3.length)];
-    selected.push(pick3.id);
-  }
-  if (selected.length < 3) {
-    const remaining = uncompleted.filter(q => !selected.includes(q.id));
-    const shuffled = [...remaining].sort(() => Math.random() - 0.5);
-    for (let q of shuffled) {
-      if (selected.length >= 3) break;
-      selected.push(q.id);
-    }
-  }
-  playerState.activeQuests = selected.slice(0, 3);
-  playerState.questRefreshTime = now + 10 * 60 * 1000;
-  playerState.questCooldownEnd = null;
-  saveGame();
-  return true;
-}
-
-export function checkAndRefreshQuests() {
-  const now = Date.now();
-  if (playerState.questCooldownEnd && now < playerState.questCooldownEnd) {
-    return false;
-  }
-  if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
-    return refreshActiveQuests();
-  }
-  const allCompleted = playerState.activeQuests.every(qId =>
-    (playerState.completedQuests || []).includes(qId)
-  );
-  if (allCompleted) {
-    return refreshActiveQuests();
-  }
-  if (playerState.questRefreshTime && now >= playerState.questRefreshTime) {
-    return refreshActiveQuests();
-  }
-  return false;
-}
-
-export function getQuestCooldownRemaining() {
-  if (!playerState.questCooldownEnd) return 0;
-  return Math.max(0, playerState.questCooldownEnd - Date.now());
-}
-
-export function completeQuest(questId) {
-  const quest = GUILD_QUESTS.find(q => q.id === questId);
-  if (!quest) return false;
-  if (!playerState.activeQuests || !playerState.activeQuests.includes(questId)) {
-    if (_showToast) _showToast('Этот заказ уже не активен!', '⚠️');
-    return false;
-  }
-  if (playerState.player.level < quest.reqLevel) {
-    if (_showToast) _showToast(`Требуется ${quest.reqLevel} уровень!`, '🔒');
-    return false;
-  }
-  for (let ingId in quest.ingredients) {
-    const required = quest.ingredients[ingId];
-    const owned = playerState.ingots[ingId] || 0;
-    if (owned < required) {
-      if (_showToast) _showToast(`Недостаточно ${CONFIG_ITEMS[ingId]?.name || ingId}!`, '⚠️');
-      return false;
-    }
-  }
-  for (let ingId in quest.ingredients) {
-    playerState.ingots[ingId] -= quest.ingredients[ingId];
-  }
-  addXP(quest.rewardXP);
-  if (quest.rewardGeode) {
-    playerState.geodes[quest.rewardGeode] = (playerState.geodes[quest.rewardGeode] || 0) + 1;
-    const geodeName = CONFIG_GEODES[quest.rewardGeode]?.name || 'жеода';
-    if (_showToast) _showToast(`Заказ выполнен! +${quest.rewardXP} XP, +1 ${geodeName}`, '📜');
-  } else {
-    if (_showToast) _showToast(`Заказ выполнен! +${quest.rewardXP} XP`, '📜');
-  }
-  if (!playerState.completedQuests) playerState.completedQuests = [];
-  playerState.completedQuests.push(questId);
-  saveGame();
-  const allCompleted = playerState.activeQuests.every(qId =>
-    playerState.completedQuests.includes(qId)
-  );
-  if (allCompleted) {
-    playerState.questCooldownEnd = Date.now() + 10 * 60 * 1000;
-    saveGame();
-  }
-  if (_renderEventsTab) _renderEventsTab();
-  return true;
 }
 
 // ---------- ☄️ МЕТЕОРИТНЫЙ ШТОРМ ----------
@@ -918,9 +1071,11 @@ export function canStartMeteorStorm() {
 
 function getMeteorType() {
   const rand = Math.random();
+  
   const hasOrion = playerState.ingots['orion'] > 0;
   const hasAndromeda = playerState.ingots['andromeda'] > 0;
   const canSpawnSecret = !hasOrion || !hasAndromeda;
+  
   if (canSpawnSecret && rand < 0.01) {
     return { type: 'secret', shards: 100, speed: 1.0, color: '#FF00FF', emoji: '💜', size: 70 };
   }
@@ -935,14 +1090,18 @@ function getMeteorType() {
 
 function spawnMeteor(container) {
   if (!meteorStormState.active) return;
+  
   const meteorData = getMeteorType();
   meteorStormState.meteorsSpawned++;
+  
   const meteor = document.createElement('div');
   meteor.className = 'storm-meteor';
   meteor.dataset.type = meteorData.type;
   meteor.dataset.shards = meteorData.shards;
+  
   const x = Math.random() * (container.clientWidth - 80) + 20;
   const size = meteorData.size;
+  
   meteor.style.left = x + 'px';
   meteor.style.top = '-70px';
   meteor.style.width = size + 'px';
@@ -951,19 +1110,24 @@ function spawnMeteor(container) {
   meteor.textContent = meteorData.emoji;
   meteor.style.animationDuration = meteorData.speed + 's';
   meteor.style.padding = '10px';
+  
   if (meteorData.type === 'secret') {
     meteor.style.animationName = 'meteorFallSecret';
     meteor.style.setProperty('--drift', (Math.random() * 100 - 50) + 'px');
   }
+  
   meteor.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!meteorStormState.active) return;
+    
     meteorStormState.meteorsCaught++;
     meteorStormState.shardsCollected += meteorData.shards;
+    
     const shardsDisplay = document.getElementById('stormShardsDisplay');
     if (shardsDisplay) {
       shardsDisplay.textContent = `Осколков: ${meteorStormState.shardsCollected}`;
     }
+    
     const floatText = document.createElement('div');
     floatText.className = 'storm-float-text';
     floatText.textContent = '+' + meteorData.shards;
@@ -972,16 +1136,21 @@ function spawnMeteor(container) {
     floatText.style.color = meteorData.color;
     container.appendChild(floatText);
     setTimeout(() => floatText.remove(), 500);
+    
     if (meteorData.type === 'secret') {
       meteorStormState.secretMeteorCaught = true;
       sendBotNotification('🌟 Игрок поймал секретный метеорит!');
     }
+    
     meteor.remove();
   });
+  
   meteor.addEventListener('animationend', () => {
     meteor.remove();
   });
+  
   container.appendChild(meteor);
+  
   setTimeout(() => {
     if (meteor.parentNode) meteor.remove();
   }, meteorData.speed * 1000 + 500);
@@ -998,49 +1167,65 @@ function scheduleNextMeteor(container) {
 
 export function startMeteorStorm() {
   if (!canStartMeteorStorm()) return;
+  
   const container = document.getElementById('meteorStormArea');
   if (!container) return;
+  
   container.innerHTML = '';
+  
   meteorStormState.active = true;
   meteorStormState.shardsCollected = 0;
   meteorStormState.meteorsSpawned = 0;
   meteorStormState.meteorsCaught = 0;
   meteorStormState.secretMeteorCaught = false;
   meteorStormState.roundStartTime = Date.now();
+  
   document.getElementById('meteorStormOverlay').classList.add('active');
   document.getElementById('stormTimerDisplay').textContent = '20';
   document.getElementById('stormShardsDisplay').textContent = 'Осколков: 0';
+  
   let secondsLeft = 20;
   const countdownInterval = setInterval(() => {
     secondsLeft--;
     const display = document.getElementById('stormTimerDisplay');
     if (display) display.textContent = secondsLeft;
+    
     if (secondsLeft <= 0) {
       clearInterval(countdownInterval);
       endMeteorStorm();
     }
   }, 1000);
+  
   activeTimers['meteorRound'] = countdownInterval;
+  
   scheduleNextMeteor(container);
+  
   playerState.meteorCooldownEnd = Date.now() + meteorStormState.cooldownDuration;
   saveGame();
+  
   if (_renderEventsTab) _renderEventsTab();
 }
 
 function endMeteorStorm() {
   meteorStormState.active = false;
+  
   clearTimer('meteorSpawn');
   clearTimer('meteorRound');
+  
   const container = document.getElementById('meteorStormArea');
   if (container) {
     container.querySelectorAll('.storm-meteor, .storm-float-text').forEach(el => el.remove());
   }
+  
   playerState.meteorShards += meteorStormState.shardsCollected;
   saveGame();
+  
   document.getElementById('meteorStormOverlay').classList.remove('active');
+  
   import('./ui.js').then(ui => {
     ui.showMeteorStormResults(meteorStormState.shardsCollected, meteorStormState.meteorsCaught, meteorStormState.secretMeteorCaught);
   });
+  
   if (_renderEventsTab) _renderEventsTab();
 }
 
@@ -1057,103 +1242,469 @@ export function buyMeteorGeode(shopItemId) {
     if (_showToast) _showToast('Товар не найден!', '⚠️');
     return false;
   }
+  
   if (playerState.meteorShards < item.price) {
     if (_showToast) _showToast(`Недостаточно осколков! Нужно ${item.price} 💎`, '⚠️');
     return false;
   }
+  
   playerState.meteorShards -= item.price;
   playerState.geodes[item.geodeId] = (playerState.geodes[item.geodeId] || 0) + 1;
+  
   saveGame();
+  
   if (_showToast) _showToast(`Куплено: ${item.name}!`, item.icon);
   sendBotNotification(`🛒 Игрок купил ${item.name} за ${item.price} осколков`);
+  
   if (_renderEventsTab) _renderEventsTab();
   return true;
 }
 
-// ---------- 🆕 НАГРАДЫ МИНИ-ИГР ----------
-export function getRandomCommonIngot() {
-  const commonIngots = Object.entries(CONFIG_ITEMS).filter(
-    ([id, ing]) => ing.rarityLevel === 'common' && !ing.isCollectible
-  );
-  if (commonIngots.length === 0) return null;
-  const random = commonIngots[Math.floor(Math.random() * commonIngots.length)];
-  return random[0];
+// 🆕 ========== МИНИ-ИГРА №1: ЗАКАЛКА (QUENCH) ==========
+export function startQuenchGame() {
+  if (miniGameState.quench.active) return;
+  
+  const config = MINI_GAMES_CONFIG.quench;
+  if (playerState.player.level < config.reqLevel) {
+    if (_showToast) _showToast(`Требуется ${config.reqLevel} уровень!`, '🔒');
+    return;
+  }
+  
+  miniGameState.quench.active = true;
+  miniGameState.quench.score = 0;
+  miniGameState.quench.position = 0.5;
+  miniGameState.quench.speed = config.initialSpeed;
+  miniGameState.quench.lastTime = Date.now();
+  
+  const overlay = document.getElementById('quenchGameOverlay');
+  const scoreEl = document.getElementById('quenchScore');
+  const topPlate = document.getElementById('quenchTopPlate');
+  const bottomPlate = document.getElementById('quenchBottomPlate');
+  const ingotEl = document.getElementById('quenchIngot');
+  
+  if (overlay) overlay.classList.add('active');
+  if (scoreEl) scoreEl.textContent = '0';
+  
+  const gameLoop = () => {
+    if (!miniGameState.quench.active) return;
+    
+    const now = Date.now();
+    const dt = (now - miniGameState.quench.lastTime) / 1000;
+    miniGameState.quench.lastTime = now;
+    
+    miniGameState.quench.position -= miniGameState.quench.speed * dt;
+    miniGameState.quench.position = Math.max(0, Math.min(1, miniGameState.quench.position));
+    
+    miniGameState.quench.speed += config.speedIncrement * dt;
+    
+    if (miniGameState.quench.position <= config.dangerZone || miniGameState.quench.position >= 1 - config.dangerZone) {
+      if (overlay) overlay.classList.add('danger');
+    } else {
+      if (overlay) overlay.classList.remove('danger');
+    }
+    
+    if (miniGameState.quench.position <= 0 || miniGameState.quench.position >= 1) {
+      endQuenchGame();
+      return;
+    }
+    
+    miniGameState.quench.score++;
+    if (scoreEl) scoreEl.textContent = miniGameState.quench.score;
+    
+    if (topPlate) topPlate.style.top = (miniGameState.quench.position * 40) + '%';
+    if (bottomPlate) bottomPlate.style.bottom = (miniGameState.quench.position * 40) + '%';
+    
+    if (ingotEl) {
+      ingotEl.style.transform = `scaleX(${0.5 + miniGameState.quench.position * 0.5}) scaleY(${0.5 + (1 - miniGameState.quench.position) * 0.5})`;
+    }
+    
+    requestAnimationFrame(gameLoop);
+  };
+  
+  miniGameState.quench.gameLoop = requestAnimationFrame(gameLoop);
+  
+  const handleTap = (e) => {
+    e.preventDefault();
+    if (!miniGameState.quench.active) return;
+    miniGameState.quench.position += config.tapPushback;
+    miniGameState.quench.position = Math.min(1, miniGameState.quench.position);
+    
+    const sparkContainer = document.getElementById('quenchSparkContainer');
+    if (sparkContainer) {
+      for (let i = 0; i < 8; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'quench-spark';
+        spark.style.left = (40 + Math.random() * 20) + '%';
+        spark.style.top = (40 + Math.random() * 20) + '%';
+        spark.style.setProperty('--angle', (i * 45 + Math.random() * 20) + 'deg');
+        spark.style.setProperty('--distance', (30 + Math.random() * 50) + 'px');
+        sparkContainer.appendChild(spark);
+        setTimeout(() => spark.remove(), 600);
+      }
+    }
+  };
+  
+  if (overlay) overlay.addEventListener('click', handleTap);
+  miniGameState.quench._handleTap = handleTap;
 }
 
-export function awardMiniGameReward(gameId, score) {
-  if (gameId === 'forge_strike') {
-    const ingotsEarned = Math.floor(score / 50);
-    if (ingotsEarned > 0) {
-      const rewardIngot = getRandomCommonIngot();
-      if (rewardIngot) {
-        playerState.ingots[rewardIngot] = (playerState.ingots[rewardIngot] || 0) + ingotsEarned;
-        playerState.minedStats[rewardIngot] = (playerState.minedStats[rewardIngot] || 0) + ingotsEarned;
-        playerState.player.totalIngots += ingotsEarned;
-      }
-      addXP(ingotsEarned * 15);
+function endQuenchGame() {
+  miniGameState.quench.active = false;
+  if (miniGameState.quench.gameLoop) {
+    cancelAnimationFrame(miniGameState.quench.gameLoop);
+    miniGameState.quench.gameLoop = null;
+  }
+  
+  const overlay = document.getElementById('quenchGameOverlay');
+  if (overlay) {
+    overlay.classList.remove('active', 'danger');
+    if (miniGameState.quench._handleTap) {
+      overlay.removeEventListener('click', miniGameState.quench._handleTap);
+      miniGameState.quench._handleTap = null;
     }
-    if (score > (playerState.miniGameStats?.forge_strike_highscore || 0)) {
-      if (!playerState.miniGameStats) playerState.miniGameStats = {};
-      playerState.miniGameStats.forge_strike_highscore = score;
-      playerState.geodes.mine = (playerState.geodes.mine || 0) + 1;
-      if (_showToast) _showToast(`🏆 Новый рекорд! +1 Жеода Шахт в награду!`, '⛏️');
+  }
+  
+  const config = MINI_GAMES_CONFIG.quench;
+  const score = miniGameState.quench.score;
+  const rewards = Math.floor(score / config.scoreInterval);
+  
+  if (rewards > 0) {
+    const xpGained = rewards * config.xpPerScore;
+    addXP(xpGained);
+    
+    const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
+    for (let i = 0; i < rewards; i++) {
+      const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
+      playerState.ingots[randomIngot.id] = (playerState.ingots[randomIngot.id] || 0) + 1;
+      playerState.minedStats[randomIngot.id] = (playerState.minedStats[randomIngot.id] || 0) + 1;
+      playerState.player.totalIngots++;
     }
-    saveGame();
-  } else if (gameId === 'perfect_stack') {
-    const xpEarned = score * 10;
-    const shardsEarned = score * 2;
-    if (score > 0) {
-      const rewardIngot = getRandomCommonIngot();
-      if (rewardIngot) {
-        playerState.ingots[rewardIngot] = (playerState.ingots[rewardIngot] || 0) + score;
-        playerState.minedStats[rewardIngot] = (playerState.minedStats[rewardIngot] || 0) + score;
-        playerState.player.totalIngots += score;
-      }
-      addXP(xpEarned);
-      playerState.meteorShards = (playerState.meteorShards || 0) + shardsEarned;
+    
+    if (_showToast) _showToast(`Закалка завершена! ${rewards} наград, +${xpGained} XP`, '🔨');
+  }
+  
+  const isNewRecord = score > (playerState.miniGameRecords?.quench || 0);
+  if (isNewRecord) {
+    if (!playerState.miniGameRecords) playerState.miniGameRecords = { quench: 0, stack: 0 };
+    playerState.miniGameRecords.quench = score;
+    playerState.geodes[config.bonusGeodeForRecord] = (playerState.geodes[config.bonusGeodeForRecord] || 0) + 1;
+    if (_showToast) _showToast(`Новый рекорд: ${score}! +1 ${CONFIG_GEODES[config.bonusGeodeForRecord].name}`, '🏆');
+  }
+  
+  saveGame();
+  if (_renderCurrentTab) _renderCurrentTab();
+}
+
+export function getQuenchRecord() {
+  return playerState.miniGameRecords?.quench || 0;
+}
+
+// 🆕 ========== МИНИ-ИГРА №2: ИДЕАЛЬНАЯ СТОПКА (STACK) ==========
+export function startStackGame() {
+  if (miniGameState.stack.active) return;
+  
+  const config = MINI_GAMES_CONFIG.stack;
+  if (playerState.player.level < config.reqLevel) {
+    if (_showToast) _showToast(`Требуется ${config.reqLevel} уровень!`, '🔒');
+    return;
+  }
+  
+  miniGameState.stack.active = true;
+  miniGameState.stack.score = 0;
+  miniGameState.stack.blockWidth = config.baseBlockWidth;
+  miniGameState.stack.currentX = 0;
+  miniGameState.stack.direction = 1;
+  miniGameState.stack.speed = config.initialSpeed;
+  miniGameState.stack.blocks = [];
+  miniGameState.stack.falling = false;
+  
+  const overlay = document.getElementById('stackGameOverlay');
+  const scoreEl = document.getElementById('stackScore');
+  const gameArea = document.getElementById('stackGameArea');
+  const movingBlock = document.getElementById('stackMovingBlock');
+  const stackContainer = document.getElementById('stackContainer');
+  
+  if (overlay) overlay.classList.add('active');
+  if (scoreEl) scoreEl.textContent = '0';
+  if (stackContainer) stackContainer.innerHTML = '';
+  if (movingBlock) movingBlock.style.width = config.baseBlockWidth + 'px';
+  
+  const gameLoop = () => {
+    if (!miniGameState.stack.active || miniGameState.stack.falling) return;
+    
+    const areaWidth = gameArea ? gameArea.clientWidth : 300;
+    const maxX = areaWidth - miniGameState.stack.blockWidth;
+    
+    miniGameState.stack.currentX += miniGameState.stack.speed * miniGameState.stack.direction;
+    
+    if (miniGameState.stack.currentX >= maxX) {
+      miniGameState.stack.currentX = maxX;
+      miniGameState.stack.direction = -1;
+    } else if (miniGameState.stack.currentX <= 0) {
+      miniGameState.stack.currentX = 0;
+      miniGameState.stack.direction = 1;
     }
-    if (score > (playerState.miniGameStats?.perfect_stack_highscore || 0)) {
-      if (!playerState.miniGameStats) playerState.miniGameStats = {};
-      playerState.miniGameStats.perfect_stack_highscore = score;
-      playerState.geodes.mine = (playerState.geodes.mine || 0) + 1;
-      if (_showToast) _showToast(`🏆 Новый рекорд! +1 Жеода Шахт в награду!`, '🧱');
+    
+    if (movingBlock) {
+      movingBlock.style.left = miniGameState.stack.currentX + 'px';
+      movingBlock.style.width = miniGameState.stack.blockWidth + 'px';
     }
-    saveGame();
+    
+    requestAnimationFrame(gameLoop);
+  };
+  
+  miniGameState.stack.gameLoop = requestAnimationFrame(gameLoop);
+  
+  const handleTap = (e) => {
+    e.preventDefault();
+    if (!miniGameState.stack.active || miniGameState.stack.falling) return;
+    dropBlock();
+  };
+  
+  if (overlay) overlay.addEventListener('click', handleTap);
+  miniGameState.stack._handleTap = handleTap;
+}
+
+function dropBlock() {
+  miniGameState.stack.falling = true;
+  
+  const config = MINI_GAMES_CONFIG.stack;
+  const movingBlock = document.getElementById('stackMovingBlock');
+  const stackContainer = document.getElementById('stackContainer');
+  const scoreEl = document.getElementById('stackScore');
+  
+  if (!movingBlock || !stackContainer) return;
+  
+  const currentX = miniGameState.stack.currentX;
+  const blockWidth = miniGameState.stack.blockWidth;
+  const prevBlock = miniGameState.stack.blocks.length > 0 ? miniGameState.stack.blocks[miniGameState.stack.blocks.length - 1] : null;
+  
+  let newWidth = blockWidth;
+  let newX = currentX;
+  let perfect = false;
+  
+  if (prevBlock) {
+    const overlapLeft = Math.max(prevBlock.x, currentX);
+    const overlapRight = Math.min(prevBlock.x + prevBlock.width, currentX + blockWidth);
+    newWidth = overlapRight - overlapLeft;
+    newX = overlapLeft;
+    
+    if (newWidth <= 0) {
+      endStackGame();
+      return;
+    }
+    
+    if (Math.abs(currentX - prevBlock.x) < 3 && Math.abs(blockWidth - prevBlock.width) < 3) {
+      perfect = true;
+    }
+  }
+  
+  const placedBlock = document.createElement('div');
+  placedBlock.className = 'stack-block placed';
+  placedBlock.style.left = newX + 'px';
+  placedBlock.style.width = newWidth + 'px';
+  placedBlock.style.bottom = (miniGameState.stack.blocks.length * 24) + 'px';
+  placedBlock.style.height = '24px';
+  placedBlock.style.background = perfect 
+    ? 'linear-gradient(135deg, #FFD700, #FFA500)' 
+    : 'linear-gradient(135deg, #B87333, #8B4513)';
+  
+  if (perfect) {
+    placedBlock.style.boxShadow = '0 0 15px rgba(255,215,0,0.6)';
+  }
+  
+  stackContainer.appendChild(placedBlock);
+  
+  miniGameState.stack.blocks.push({ x: newX, width: newWidth });
+  miniGameState.stack.blockWidth = Math.max(newWidth, config.minBlockWidth);
+  miniGameState.stack.score++;
+  miniGameState.stack.speed += config.speedIncrement;
+  miniGameState.stack.currentX = 0;
+  miniGameState.stack.direction = 1;
+  miniGameState.stack.falling = false;
+  
+  if (scoreEl) scoreEl.textContent = miniGameState.stack.score;
+  
+  if (movingBlock) {
+    movingBlock.style.width = miniGameState.stack.blockWidth + 'px';
+    movingBlock.style.left = '0px';
   }
 }
 
-// ---------- 🆕 КУЗНЕЧНЫЙ АПГРЕЙД ----------
-export function performUpgrade(sacrificeId, targetId) {
+function endStackGame() {
+  miniGameState.stack.active = false;
+  if (miniGameState.stack.gameLoop) {
+    cancelAnimationFrame(miniGameState.stack.gameLoop);
+    miniGameState.stack.gameLoop = null;
+  }
+  
+  const overlay = document.getElementById('stackGameOverlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    if (miniGameState.stack._handleTap) {
+      overlay.removeEventListener('click', miniGameState.stack._handleTap);
+      miniGameState.stack._handleTap = null;
+    }
+  }
+  
+  const config = MINI_GAMES_CONFIG.stack;
+  const score = miniGameState.stack.score;
+  
+  const xpGained = score * config.xpPerBlock + Math.floor(score / 10) * config.xpBonusPer10;
+  const meteorShardsGained = Math.floor(score / 5) * config.meteorShardsPer5;
+  
+  if (xpGained > 0) {
+    addXP(xpGained);
+    if (_showToast) _showToast(`Стопка: ${score} блоков! +${xpGained} XP`, '🧱');
+  }
+  
+  if (meteorShardsGained > 0) {
+    playerState.meteorShards += meteorShardsGained;
+    if (_showToast) _showToast(`+${meteorShardsGained} осколков метеоритов!`, '💎');
+  }
+  
+  const isNewRecord = score > (playerState.miniGameRecords?.stack || 0);
+  if (isNewRecord) {
+    if (!playerState.miniGameRecords) playerState.miniGameRecords = { quench: 0, stack: 0 };
+    playerState.miniGameRecords.stack = score;
+    if (_showToast) _showToast(`Новый рекорд в Стопке: ${score}!`, '🏆');
+  }
+  
+  saveGame();
+  if (_renderCurrentTab) _renderCurrentTab();
+}
+
+export function getStackRecord() {
+  return playerState.miniGameRecords?.stack || 0;
+}
+
+// 🆕 ========== МИНИ-ИГРА №3: КУЗНЕЧНЫЙ АПГРЕЙД (UPGRADE) ==========
+export function calculateUpgradeChance(sacrificeId, targetId) {
+  const sacrifice = CONFIG_ITEMS[sacrificeId];
+  const target = CONFIG_ITEMS[targetId];
+  
+  if (!sacrifice || !target) return 0;
+  if (sacrifice.isCollectible || target.isCollectible) return 0;
+  
+  const sacrificeValue = sacrifice.sellValue;
+  const targetValue = target.sellValue;
+  
+  if (targetValue <= sacrificeValue) {
+    return MINI_GAMES_CONFIG.upgrade.maxChance;
+  }
+  
+  const ratio = sacrificeValue / targetValue;
+  const chance = Math.floor(ratio * MINI_GAMES_CONFIG.upgrade.maxChance);
+  
+  return Math.max(MINI_GAMES_CONFIG.upgrade.minChance, Math.min(MINI_GAMES_CONFIG.upgrade.maxChance, chance));
+}
+
+export function startUpgradeGame(sacrificeId, targetId) {
+  if (miniGameState.upgrade.active) return;
+  
+  const config = MINI_GAMES_CONFIG.upgrade;
+  if (playerState.player.level < config.reqLevel) {
+    if (_showToast) _showToast(`Требуется ${config.reqLevel} уровень!`, '🔒');
+    return;
+  }
+  
   if (sacrificeId === targetId) {
     if (_showToast) _showToast('Нельзя обменять слиток на такой же!', '⚠️');
-    return false;
+    return;
   }
-  const owned = playerState.ingots[sacrificeId] || 0;
-  if (owned <= 0) {
-    if (_showToast) _showToast('У вас нет этого слитка!', '⚠️');
-    return false;
+  
+  if (!playerState.ingots[sacrificeId] || playerState.ingots[sacrificeId] <= 0) {
+    if (_showToast) _showToast('У вас нет выбранного слитка для жертвы!', '⚠️');
+    return;
   }
+  
   const chance = calculateUpgradeChance(sacrificeId, targetId);
-  const roll = Math.random() * 100;
-  playerState.ingots[sacrificeId]--;
-  saveGame();
-  if (roll < chance) {
+  
+  miniGameState.upgrade.active = true;
+  miniGameState.upgrade.sacrificeIngotId = sacrificeId;
+  miniGameState.upgrade.targetIngotId = targetId;
+  miniGameState.upgrade.chance = chance;
+  miniGameState.upgrade.spinning = false;
+  miniGameState.upgrade.result = null;
+  
+  import('./ui.js').then(ui => {
+    ui.showUpgradeGameOverlay(sacrificeId, targetId, chance);
+  });
+}
+
+export function spinUpgradeWheel() {
+  if (!miniGameState.upgrade.active || miniGameState.upgrade.spinning) return;
+  
+  miniGameState.upgrade.spinning = true;
+  
+  const chance = miniGameState.upgrade.chance;
+  const isSuccess = Math.random() * 100 < chance;
+  
+  const spinDuration = MINI_GAMES_CONFIG.upgrade.spinDuration * 1000;
+  const totalRotation = 720 + Math.random() * 1080;
+  const targetAngle = isSuccess 
+    ? (chance / 100) * 360 * 0.5
+    : (chance / 100) * 360 + (1 - chance / 100) * 360 * 0.5;
+  const finalRotation = totalRotation + targetAngle;
+  
+  const wheel = document.getElementById('upgradeWheel');
+  if (wheel) {
+    wheel.style.transition = `transform ${spinDuration}ms cubic-bezier(0.2, 0, 0.1, 1)`;
+    wheel.style.transform = `rotate(${finalRotation}deg)`;
+  }
+  
+  setTimeout(() => {
+    finishUpgradeGame(isSuccess);
+  }, spinDuration + 100);
+}
+
+function finishUpgradeGame(isSuccess) {
+  const sacrificeId = miniGameState.upgrade.sacrificeIngotId;
+  const targetId = miniGameState.upgrade.targetIngotId;
+  
+  if (isSuccess) {
+    playerState.ingots[sacrificeId]--;
     playerState.ingots[targetId] = (playerState.ingots[targetId] || 0) + 1;
     playerState.minedStats[targetId] = (playerState.minedStats[targetId] || 0) + 1;
     playerState.player.totalIngots++;
-    saveGame();
-    if (_showToast) _showToast(`🎉 Успех! ${CONFIG_ITEMS[targetId]?.name || targetId} получен!`, '🎰');
-    return { success: true, chance, targetId, sacrificeId };
+    
+    const targetIngot = CONFIG_ITEMS[targetId];
+    if (_showToast) _showToast(`Успех! Получен ${targetIngot.name}!`, targetIngot.icon);
+    sendBotNotification(`🎰 Игрок успешно обменял ${CONFIG_ITEMS[sacrificeId]?.name} на ${targetIngot.name}!`);
   } else {
-    saveGame();
-    if (_showToast) _showToast(`💔 Неудача. ${CONFIG_ITEMS[sacrificeId]?.name || sacrificeId} сгорел в печи.`, '🔥');
-    return { success: false, chance, targetId, sacrificeId };
+    playerState.ingots[sacrificeId]--;
+    
+    if (_showToast) _showToast(`Неудача! ${CONFIG_ITEMS[sacrificeId]?.name} сгорел в печи.`, '🔥');
   }
+  
+  saveGame();
+  
+  miniGameState.upgrade.active = false;
+  miniGameState.upgrade.spinning = false;
+  miniGameState.upgrade.result = isSuccess ? 'success' : 'fail';
+  
+  import('./ui.js').then(ui => {
+    ui.showUpgradeResult(isSuccess, sacrificeId, targetId);
+  });
+}
+
+export function closeUpgradeGame() {
+  miniGameState.upgrade.active = false;
+  miniGameState.upgrade.spinning = false;
+  miniGameState.upgrade.sacrificeIngotId = null;
+  miniGameState.upgrade.targetIngotId = null;
+  miniGameState.upgrade.result = null;
+  
+  const overlay = document.getElementById('upgradeGameOverlay');
+  if (overlay) overlay.classList.remove('active');
+  
+  if (_renderCurrentTab) _renderCurrentTab();
 }
 
 // ---------- СИСТЕМА СОХРАНЕНИЙ ----------
 export function saveGame() {
   if (!playerState) return;
+  
   const saveData = JSON.stringify({
     playerState: {
       expeditions: playerState.expeditions,
@@ -1171,7 +1722,7 @@ export function saveGame() {
       questRefreshTime: playerState.questRefreshTime,
       completedQuests: playerState.completedQuests,
       questCooldownEnd: playerState.questCooldownEnd,
-      miniGameStats: playerState.miniGameStats
+      miniGameRecords: playerState.miniGameRecords
     },
     collectibleSerials,
     nextSerial,
@@ -1179,9 +1730,11 @@ export function saveGame() {
     eventEndTime: eventsManager.eventEndTime,
     lastEventId: eventsManager.lastEventId
   });
+  
   try {
     localStorage.setItem('starforge_v1', saveData);
   } catch (e) {}
+  
   if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.setItem === 'function') {
     try {
       tg.CloudStorage.setItem('starforge_save', saveData, () => {});
@@ -1192,7 +1745,9 @@ export function saveGame() {
 function applySaveData(data) {
   if (!playerState) return;
   if (!data || !data.playerState) return;
+  
   const saved = data.playerState;
+  
   if (saved.geodes && typeof saved.geodes === 'object') {
     for (let k in saved.geodes) {
       playerState.geodes[k] = saved.geodes[k];
@@ -1218,6 +1773,7 @@ function applySaveData(data) {
       playerState.expeditionBonuses[k] = saved.expeditionBonuses[k];
     }
   }
+  
   if (saved.expeditions && typeof saved.expeditions === 'object') {
     for (let k in saved.expeditions) {
       if (playerState.expeditions[k] && saved.expeditions[k]) {
@@ -1228,6 +1784,7 @@ function applySaveData(data) {
       }
     }
   }
+  
   if (saved.player && typeof saved.player === 'object' && typeof saved.player.level === 'number' && typeof saved.player.xp === 'number') {
     playerState.player.level = saved.player.level;
     playerState.player.xp = saved.player.xp;
@@ -1235,6 +1792,7 @@ function applySaveData(data) {
     playerState.player.totalIngots = saved.player.totalIngots || 0;
     playerState.player.totalArtifacts = saved.player.totalArtifacts || 0;
   }
+  
   if (saved.collectedArtifacts && typeof saved.collectedArtifacts === 'object') {
     if (Array.isArray(saved.collectedArtifacts.mine)) {
       playerState.collectedArtifacts.mine = [...saved.collectedArtifacts.mine];
@@ -1249,17 +1807,20 @@ function applySaveData(data) {
       playerState.collectedArtifacts.meteor = [...saved.collectedArtifacts.meteor];
     }
   }
+  
   if (saved.discoveredSpecialGeodes && typeof saved.discoveredSpecialGeodes === 'object') {
     for (let k in saved.discoveredSpecialGeodes) {
       playerState.discoveredSpecialGeodes[k] = saved.discoveredSpecialGeodes[k];
     }
   }
+  
   if (typeof saved.meteorShards === 'number') {
     playerState.meteorShards = saved.meteorShards;
   }
   if (typeof saved.meteorCooldownEnd === 'number' || saved.meteorCooldownEnd === null) {
     playerState.meteorCooldownEnd = saved.meteorCooldownEnd;
   }
+  
   if (Array.isArray(saved.activeQuests)) {
     playerState.activeQuests = [...saved.activeQuests];
   }
@@ -1272,11 +1833,14 @@ function applySaveData(data) {
   if (typeof saved.questCooldownEnd === 'number' || saved.questCooldownEnd === null) {
     playerState.questCooldownEnd = saved.questCooldownEnd;
   }
-  if (saved.miniGameStats && typeof saved.miniGameStats === 'object') {
-    if (!playerState.miniGameStats) playerState.miniGameStats = {};
-    playerState.miniGameStats.forge_strike_highscore = saved.miniGameStats.forge_strike_highscore || 0;
-    playerState.miniGameStats.perfect_stack_highscore = saved.miniGameStats.perfect_stack_highscore || 0;
+  
+  if (saved.miniGameRecords && typeof saved.miniGameRecords === 'object') {
+    playerState.miniGameRecords = {
+      quench: saved.miniGameRecords.quench || 0,
+      stack: saved.miniGameRecords.stack || 0
+    };
   }
+  
   if (data.collectibleSerials) {
     for (let k in data.collectibleSerials) {
       collectibleSerials[k] = data.collectibleSerials[k];
@@ -1293,6 +1857,7 @@ export const saveToLocalStorage = saveGame;
 // ========== АСИНХРОННАЯ ИНИЦИАЛИЗАЦИЯ ==========
 (function applyDefaultStateImmediately() {
   const d = DEFAULT_STATE;
+  
   playerState.expeditions = {
     mine: { ...d.expeditions.mine },
     jungle: { ...d.expeditions.jungle },
@@ -1321,10 +1886,11 @@ export const saveToLocalStorage = saveGame;
   playerState.questRefreshTime = null;
   playerState.completedQuests = [];
   playerState.questCooldownEnd = null;
-  playerState.miniGameStats = {
-    forge_strike_highscore: 0,
-    perfect_stack_highscore: 0
+  playerState.miniGameRecords = {
+    quench: d.miniGameRecords?.quench || 0,
+    stack: d.miniGameRecords?.stack || 0
   };
+  
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
 
@@ -1332,8 +1898,10 @@ let initPromise = null;
 
 export async function initializeState() {
   if (initPromise) return initPromise;
+  
   initPromise = (async () => {
     console.log('[Boot] Инициализация состояния (загрузка сохранений)...');
+    
     try {
       const localData = localStorage.getItem('starforge_v1');
       if (localData) {
@@ -1341,6 +1909,7 @@ export async function initializeState() {
         console.log('[Boot] Local save loaded');
       }
     } catch (e) {}
+    
     if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
       try {
         await new Promise((resolve) => {
@@ -1356,16 +1925,20 @@ export async function initializeState() {
         });
       } catch(e) {}
     }
+    
     console.log('[Boot] Инициализация завершена');
     eventsManager.startEventCycle();
+    
     if (!playerState.activeQuests || playerState.activeQuests.length === 0) {
       const now = Date.now();
       if (!playerState.questCooldownEnd || now >= playerState.questCooldownEnd) {
         refreshActiveQuests();
       }
     }
+    
     return true;
   })();
+  
   return initPromise;
 }
 
@@ -1373,24 +1946,30 @@ export async function initializeState() {
 function getRandomDropFromExpedition(expId) {
   const exp = CONFIG_EXPEDITIONS[expId];
   if (!exp) return { geodeId: 'mine', isSpecial: false };
+  
   const playerExp = playerState.expeditions[expId];
   let specialChance = exp.specialGeodeChance;
+  
   if (playerExp?.scanUsed && playerExp?.specialChanceBoost) {
     specialChance *= playerExp.specialChanceBoost;
   }
+  
   if (!isLocationCompleted(expId)) {
     const rand = Math.random();
     if (rand < specialChance) {
       return { geodeId: exp.specialGeodeId, isSpecial: true };
     }
   }
+  
   return { geodeId: expId, isSpecial: false };
 }
 
 function checkCompletedExpeditions() {
   if (!playerState) return;
+  
   let changed = false;
   const now = Date.now();
+  
   for (let k in playerState.expeditions) {
     const exp = playerState.expeditions[k];
     if (exp && exp.active && exp.endTime && now >= exp.endTime) {
@@ -1399,6 +1978,7 @@ function checkCompletedExpeditions() {
       exp.scanUsed = false;
       exp.specialChanceBoost = null;
       delete playerState.expeditionBonuses[k];
+      
       const drop = getRandomDropFromExpedition(k);
       if (drop.isSpecial) {
         if (!playerState.discoveredSpecialGeodes[k]) {
@@ -1414,6 +1994,7 @@ function checkCompletedExpeditions() {
       changed = true;
     }
   }
+  
   if (changed) {
     saveGame();
     if (_renderCurrentTab) _renderCurrentTab();
@@ -1431,6 +2012,7 @@ export function startGlobalTimer() {
 
 function updateExpeditionTimers() {
   if (!playerState) return;
+  
   const now = Date.now();
   for (let k in CONFIG_EXPEDITIONS) {
     const exp = playerState.expeditions[k];
@@ -1454,13 +2036,16 @@ function updateEventTimer() {
 
 export function startExpedition(expId) {
   if (!playerState) return;
+  
   const exp = playerState.expeditions[expId];
   if (!exp || exp.active) return;
+  
   exp.active = true;
   exp.endTime = Date.now() + CONFIG_EXPEDITIONS[expId].timer * 1000;
   exp.scanUsed = false;
   exp.specialChanceBoost = null;
   delete playerState.expeditionBonuses[expId];
+  
   saveGame();
   if (_renderExpeditionsTab) _renderExpeditionsTab();
   if (_showToast) _showToast(`Экспедиция началась!`, CONFIG_EXPEDITIONS[expId].fallbackIcon);
@@ -1471,19 +2056,26 @@ export function startExpedition(expId) {
 function createParticles(x, y) {
   const container = document.getElementById('app');
   const particleCount = 12;
+  
   for (let i = 0; i < particleCount; i++) {
     const particle = document.createElement('div');
     particle.className = 'particle';
+    
     const angle = (i / particleCount) * Math.PI * 2;
     const distance = 40 + Math.random() * 60;
     const tx = Math.cos(angle) * distance;
     const ty = Math.sin(angle) * distance;
+    
     particle.style.left = x + 'px';
     particle.style.top = y + 'px';
     particle.style.setProperty('--tx', tx + 'px');
     particle.style.setProperty('--ty', ty + 'px');
+    
     container.appendChild(particle);
-    setTimeout(() => { particle.remove(); }, 800);
+    
+    setTimeout(() => {
+      particle.remove();
+    }, 800);
   }
 }
 
@@ -1492,41 +2084,59 @@ function createEliteParticles() {
   const particleCount = 16;
   const centerX = window.innerWidth / 2;
   const centerY = window.innerHeight / 2;
+  
   for (let i = 0; i < particleCount; i++) {
     const particle = document.createElement('div');
     particle.className = 'elite-particle';
+    
     particle.style.left = centerX + 'px';
     particle.style.top = centerY + 'px';
     particle.style.animationDelay = (i * 0.1) + 's';
+    
     container.appendChild(particle);
-    setTimeout(() => { particle.remove(); }, 2500);
+    
+    setTimeout(() => {
+      particle.remove();
+    }, 2500);
   }
 }
 
 function triggerScreenShake() {
   const app = document.getElementById('app');
   app.classList.add('screen-shake');
-  setTimeout(() => { app.classList.remove('screen-shake'); }, 120);
+  setTimeout(() => {
+    app.classList.remove('screen-shake');
+  }, 120);
 }
 
 function showCollectibleAnimation(ingot) {
   const flash = document.createElement('div');
   flash.className = 'collectible-flash';
   document.body.appendChild(flash);
+  
   createEliteParticles();
+  
   const appear = document.createElement('div');
   appear.className = 'collectible-appear';
+  
   const icon = document.createElement('div');
   icon.className = 'collectible-appear-icon';
   icon.textContent = ingot.icon;
   icon.style.color = ingot.fallbackColor;
+  
   const text = document.createElement('div');
   text.className = 'collectible-appear-text';
   text.textContent = ingot.name;
+  
   appear.appendChild(icon);
   appear.appendChild(text);
   document.body.appendChild(appear);
-  setTimeout(() => { flash.remove(); appear.remove(); }, 2500);
+  
+  setTimeout(() => {
+    flash.remove();
+    appear.remove();
+  }, 2500);
+  
   sendBotNotification(`🏆 Игрок получил коллекционный артефакт: ${ingot.name} ${ingot.icon}!`);
 }
 
@@ -1536,31 +2146,30 @@ export async function updateLeaderboard() {
     if (_showToast) _showToast('Лидерборд доступен только в Telegram', '⚠️');
     return;
   }
+  
   renderTestLeaderboard();
 }
 
 function renderTestLeaderboard() {
   const userName = tg?.initDataUnsafe?.user?.first_name || 'Старатель';
   const testData = [
-    { rank: 1, name: '⛏️ Шахтёр_Бог', xp: 15000 },
-    { rank: 2, name: '💎 Алмазный_Лорд', xp: 12000 },
-    { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 },
-    { rank: 4, name: userName, xp: playerState.player.xp, isPlayer: true },
-    { rank: 5, name: '🪨 Геолог_777', xp: 3200 },
-    { rank: 6, name: '🔥 Лавовый_Копатель', xp: 2100 },
-    { rank: 7, name: '❄️ Ледяной_Бур', xp: 900 },
-    { rank: 8, name: '🌟 Звёздный_Путник', xp: 450 },
-    { rank: 9, name: '🪐 Астероидный_Волк', xp: 200 },
-    { rank: 10, name: '⛏️ Новичок_2026', xp: 50 }
+    { rank: 1, name: '⛏️ Шахтёр_Бог', xp: 15000 }, { rank: 2, name: '💎 Алмазный_Лорд', xp: 12000 },
+    { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 }, { rank: 4, name: userName, xp: playerState.player.xp, isPlayer: true },
+    { rank: 5, name: '🪨 Геолог_777', xp: 3200 }, { rank: 6, name: '🔥 Лавовый_Копатель', xp: 2100 },
+    { rank: 7, name: '❄️ Ледяной_Бур', xp: 900 }, { rank: 8, name: '🌟 Звёздный_Путник', xp: 450 },
+    { rank: 9, name: '🪐 Астероидный_Волк', xp: 200 }, { rank: 10, name: '⛏️ Новичок_2026', xp: 50 }
   ];
+  
   testData.sort((a, b) => b.xp - a.xp);
   testData.forEach((entry, i) => entry.rank = i + 1);
+  
   let html = `<div class="modal-header"><div class="modal-title">🏆 ТОП ИГРОКОВ</div><button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button></div><div class="modal-content" style="text-align:left; padding:10px;">`;
   testData.forEach((entry) => {
     const isPlayer = entry.isPlayer;
     html += `<div style="display:flex; align-items:center; gap:12px; padding:12px; background:${isPlayer ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius:16px; margin-bottom:8px;"><span style="font-size:20px; font-weight:700; width:30px;">${entry.rank}</span><span style="flex:1; font-weight:600;">${entry.name} ${isPlayer ? '👈' : ''}</span><span style="color:#FFD700; font-weight:700;">${entry.xp} XP</span></div>`;
   });
   html += '</div>';
+  
   import('./ui.js').then(ui => ui.openModal(html));
 }
 
@@ -1569,118 +2178,44 @@ const conveyorOverlay = document.getElementById('conveyorOverlay');
 const conveyorTrack = document.getElementById('conveyorTrack');
 const conveyorTitle = document.getElementById('conveyorTitle');
 
-let conveyorState = {
-  geodeId: null,
-  isOpen: false,
-  resultIngot: null,
-  items: [],
-  trackItems: [],
-  timeoutId: null
-};
-
+let conveyorState = { geodeId: null, isOpen: false, resultIngot: null, items: [], trackItems: [], timeoutId: null };
 const ITEM_WIDTH = 96;
 const VISIBLE_ITEMS = 3;
 
-function cleanupConveyor() {
-  if (conveyorState.timeoutId) {
-    clearTimeout(conveyorState.timeoutId);
-    conveyorState.timeoutId = null;
-  }
-  conveyorOverlay.classList.remove('active');
-  conveyorState.isOpen = false;
-}
+function cleanupConveyor() { if (conveyorState.timeoutId) { clearTimeout(conveyorState.timeoutId); conveyorState.timeoutId = null; } conveyorOverlay.classList.remove('active'); conveyorState.isOpen = false; }
 
 export function initRoulette(geodeId) {
   if (!playerState) return;
-  const g = CONFIG_GEODES[geodeId];
-  if (!g || g.isSpecial) return;
-  const rand = Math.random();
-  let cum = 0;
-  let droppedId = g.lootTable[0].ingotId;
-  for (let e of g.lootTable) {
-    cum += e.chance;
-    if (rand < cum) {
-      droppedId = e.ingotId;
-      break;
-    }
-  }
-  const resultIngot = CONFIG_ITEMS[droppedId];
-  const items = g.lootTable.map(e => CONFIG_ITEMS[e.ingotId]);
-  const totalLength = 30;
-  const trackItems = [];
-  for (let i = 0; i < totalLength; i++) {
-    trackItems.push(items[i % items.length]);
-  }
-  const targetSlot = 19;
-  trackItems[targetSlot] = resultIngot;
-  conveyorState.geodeId = geodeId;
-  conveyorState.isOpen = true;
-  conveyorState.resultIngot = resultIngot;
-  conveyorState.items = items;
-  conveyorState.trackItems = trackItems;
+  const g = CONFIG_GEODES[geodeId]; if (!g || g.isSpecial) return;
+  const rand = Math.random(); let cum = 0; let droppedId = g.lootTable[0].ingotId;
+  for (let e of g.lootTable) { cum += e.chance; if (rand < cum) { droppedId = e.ingotId; break; } }
+  const resultIngot = CONFIG_ITEMS[droppedId]; const items = g.lootTable.map(e => CONFIG_ITEMS[e.ingotId]);
+  const totalLength = 30; const trackItems = [];
+  for (let i = 0; i < totalLength; i++) { trackItems.push(items[i % items.length]); }
+  const targetSlot = 19; trackItems[targetSlot] = resultIngot;
+  conveyorState.geodeId = geodeId; conveyorState.isOpen = true; conveyorState.resultIngot = resultIngot; conveyorState.items = items; conveyorState.trackItems = trackItems;
   conveyorTrack.innerHTML = '';
-  trackItems.forEach((item, index) => {
-    const itemEl = document.createElement('div');
-    itemEl.className = 'conveyor-item';
-    itemEl.innerHTML = `
-      <div class="conveyor-item-icon" id="conv-${index}"></div>
-      <div class="conveyor-item-name">${item.name}</div>
-    `;
-    conveyorTrack.appendChild(itemEl);
-  });
-  trackItems.forEach((item, index) => {
-    const el = document.getElementById(`conv-${index}`);
-    if (el) {
-      if (_renderImageToElement) _renderImageToElement(el, item.imagePath, item.icon, item.fallbackColor);
-    }
-  });
-  conveyorTitle.textContent = `Анализ ${g.name}...`;
-  conveyorOverlay.classList.add('active');
+  trackItems.forEach((item, index) => { const itemEl = document.createElement('div'); itemEl.className = 'conveyor-item'; itemEl.innerHTML = `<div class="conveyor-item-icon" id="conv-${index}"></div><div class="conveyor-item-name">${item.name}</div>`; conveyorTrack.appendChild(itemEl); });
+  trackItems.forEach((item, index) => { const el = document.getElementById(`conv-${index}`); if (el) { if (_renderImageToElement) _renderImageToElement(el, item.imagePath, item.icon, item.fallbackColor); } });
+  conveyorTitle.textContent = `Анализ ${g.name}...`; conveyorOverlay.classList.add('active');
   const stopPosition = -(targetSlot * ITEM_WIDTH) + (VISIBLE_ITEMS * ITEM_WIDTH / 2) - ITEM_WIDTH / 2;
-  conveyorTrack.style.transition = 'none';
-  conveyorTrack.style.transform = 'translateX(0)';
-  conveyorTrack.offsetHeight;
-  setTimeout(() => {
-    conveyorTrack.style.transition = 'transform 4.5s cubic-bezier(0.2, 0, 0.1, 1)';
-    conveyorTrack.style.transform = `translateX(${stopPosition}px)`;
-  }, 50);
-  conveyorState.timeoutId = setTimeout(() => {
-    stopRoulette();
-  }, 4550);
+  conveyorTrack.style.transition = 'none'; conveyorTrack.style.transform = 'translateX(0)'; conveyorTrack.offsetHeight;
+  setTimeout(() => { conveyorTrack.style.transition = 'transform 4.5s cubic-bezier(0.2, 0, 0.1, 1)'; conveyorTrack.style.transform = `translateX(${stopPosition}px)`; }, 50);
+  conveyorState.timeoutId = setTimeout(() => { stopRoulette(); }, 4550);
 }
 
 function stopRoulette() {
   if (!conveyorState.isOpen || !playerState) return;
-  const resultIngot = conveyorState.resultIngot;
-  const g = CONFIG_GEODES[conveyorState.geodeId];
-  let xpGained = g.xpValue + (resultIngot?.xpValue || 0);
-  let isFirstDiscovery = false;
-  if (playerState.minedStats[resultIngot.id] === 0) {
-    isFirstDiscovery = true;
-    xpGained = Math.floor(xpGained * 3);
-    if (_showToast) _showToast(`🎉 ПЕРВОЕ ОТКРЫТИЕ! +${xpGained} XP`, '🌟');
-  }
-  playerState.ingots[resultIngot.id] = (playerState.ingots[resultIngot.id] || 0) + 1;
-  playerState.minedStats[resultIngot.id] = (playerState.minedStats[resultIngot.id] || 0) + 1;
-  playerState.player.totalIngots++;
-  addXP(xpGained);
-  saveGame();
-  cleanupConveyor();
-  isOpeningGeode = false;
-  setTimeout(() => {
-    if (_showRewardPopup) _showRewardPopup(resultIngot);
-    if (_renderCurrentTab) _renderCurrentTab();
-  }, 100);
+  const resultIngot = conveyorState.resultIngot; const g = CONFIG_GEODES[conveyorState.geodeId];
+  let xpGained = g.xpValue + (resultIngot?.xpValue || 0); let isFirstDiscovery = false;
+  if (playerState.minedStats[resultIngot.id] === 0) { isFirstDiscovery = true; xpGained = Math.floor(xpGained * 3); if (_showToast) _showToast(`🎉 ПЕРВОЕ ОТКРЫТИЕ! +${xpGained} XP`, '🌟'); }
+  playerState.ingots[resultIngot.id] = (playerState.ingots[resultIngot.id] || 0) + 1; playerState.minedStats[resultIngot.id] = (playerState.minedStats[resultIngot.id] || 0) + 1; playerState.player.totalIngots++;
+  addXP(xpGained); saveGame(); cleanupConveyor(); isOpeningGeode = false;
+  setTimeout(() => { if (_showRewardPopup) _showRewardPopup(resultIngot); if (_renderCurrentTab) _renderCurrentTab(); }, 100);
 }
 
 // ---------- КУЗНИЦА ----------
-let brawlState = {
-  geodeId: null,
-  isSpecial: false,
-  tapsRemaining: 10,
-  isOpen: false
-};
-
+let brawlState = { geodeId: null, isSpecial: false, tapsRemaining: 10, isOpen: false };
 const brawlOverlay = document.getElementById('brawlOverlay');
 const brawlGeode = document.getElementById('brawlGeode');
 const brawlCounter = document.getElementById('brawlCounter');
@@ -1691,117 +2226,34 @@ const brawlResultRarity = document.getElementById('brawlResultRarity');
 const brawlCloseBtn = document.getElementById('brawlCloseBtn');
 
 export function openBrawlOverlay(geodeId, isSpecial) {
-  if (!playerState) return;
-  if (isOpeningGeode) return;
-  if (playerState.geodes[geodeId] <= 0) {
-    if (_showToast) _showToast('Нет такой жеоды!', '⚠️');
-    return;
-  }
-  if (isSpecial) {
-    const g = CONFIG_GEODES[geodeId];
-    const completed = isLocationCompleted(g.location);
-    if (completed) {
-      if (_showToast) _showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚');
-      return;
-    }
-  }
-  isOpeningGeode = true;
-  brawlState.geodeId = geodeId;
-  brawlState.isSpecial = isSpecial;
-  brawlState.tapsRemaining = 10;
-  brawlState.isOpen = true;
-  brawlCounter.textContent = '10';
-  brawlResult.classList.remove('show');
-  brawlCloseBtn.style.display = 'none';
-  brawlGeode.style.display = 'flex';
-  brawlGeode.classList.remove('explode-animation');
+  if (!playerState) return; if (isOpeningGeode) return;
+  if (playerState.geodes[geodeId] <= 0) { if (_showToast) _showToast('Нет такой жеоды!', '⚠️'); return; }
+  if (isSpecial) { const g = CONFIG_GEODES[geodeId]; const completed = isLocationCompleted(g.location); if (completed) { if (_showToast) _showToast('Все артефакты собраны! Используйте "Изучить" для обмена на XP.', '📚'); return; } }
+  isOpeningGeode = true; brawlState.geodeId = geodeId; brawlState.isSpecial = isSpecial; brawlState.tapsRemaining = 10; brawlState.isOpen = true;
+  brawlCounter.textContent = '10'; brawlResult.classList.remove('show'); brawlCloseBtn.style.display = 'none'; brawlGeode.style.display = 'flex'; brawlGeode.classList.remove('explode-animation');
   if (isSpecial) { brawlGeode.classList.add('special-geode'); } else { brawlGeode.classList.remove('special-geode'); }
-  document.querySelector('.brawl-hint').style.display = 'block';
-  brawlCounter.style.display = 'block';
-  if (_getGeodeStageImage && _renderImageToElement) {
-    const stage = _getGeodeStageImage(geodeId, 10);
-    _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
-  }
+  document.querySelector('.brawl-hint').style.display = 'block'; brawlCounter.style.display = 'block';
+  if (_getGeodeStageImage && _renderImageToElement) { const stage = _getGeodeStageImage(geodeId, 10); _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355'); }
   brawlOverlay.classList.add('active');
 }
 
-function closeBrawlOverlay() {
-  brawlOverlay.classList.remove('active');
-  brawlState.isOpen = false;
-  isOpeningGeode = false;
-  if (_renderCurrentTab) _renderCurrentTab();
-}
+function closeBrawlOverlay() { brawlOverlay.classList.remove('active'); brawlState.isOpen = false; isOpeningGeode = false; if (_renderCurrentTab) _renderCurrentTab(); }
 
 function handleBrawlTap(e) {
   if (!brawlState.isOpen || brawlState.tapsRemaining <= 0) return;
-  const rect = brawlGeode.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-  createParticles(centerX, centerY);
-  triggerScreenShake();
-  brawlGeode.classList.add('shake-animation');
-  setTimeout(() => brawlGeode.classList.remove('shake-animation'), 300);
-  brawlState.tapsRemaining--;
-  brawlCounter.textContent = brawlState.tapsRemaining;
-  if (_getGeodeStageImage && _renderImageToElement) {
-    const stage = _getGeodeStageImage(brawlState.geodeId, brawlState.tapsRemaining);
-    _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355');
-  }
+  const rect = brawlGeode.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2;
+  createParticles(centerX, centerY); triggerScreenShake(); brawlGeode.classList.add('shake-animation');
+  setTimeout(() => brawlGeode.classList.remove('shake-animation'), 300); brawlState.tapsRemaining--; brawlCounter.textContent = brawlState.tapsRemaining;
+  if (_getGeodeStageImage && _renderImageToElement) { const stage = _getGeodeStageImage(brawlState.geodeId, brawlState.tapsRemaining); _renderImageToElement(brawlGeode, stage.imagePath, stage.fallbackIcon, '#8B7355'); }
   if (brawlState.tapsRemaining <= 0) finishBrawlOpening();
 }
 
 function finishBrawlOpening() {
-  if (!playerState) return;
-  const geodeId = brawlState.geodeId;
-  const isSpecial = brawlState.isSpecial;
-  if (playerState.geodes[geodeId] > 0) { playerState.geodes[geodeId]--; }
-  playerState.player.totalOpened++;
-  let droppedIngot = null;
-  let xpGained = 0;
-  if (isSpecial) {
-    const g = CONFIG_GEODES[geodeId];
-    const loc = g.location;
-    if (!playerState.collectedArtifacts[loc]) { playerState.collectedArtifacts[loc] = []; }
-    const available = g.possibleIngots.filter((ingId) => !playerState.collectedArtifacts[loc].includes(ingId));
-    const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0];
-    droppedIngot = CONFIG_ITEMS[picked];
-    playerState.ingots[picked] = (playerState.ingots[picked] || 0) + 1;
-    playerState.minedStats[picked] = (playerState.minedStats[picked] || 0) + 1;
-    if (!playerState.collectedArtifacts[loc].includes(picked)) {
-      playerState.collectedArtifacts[loc].push(picked);
-      playerState.player.totalArtifacts++;
-    }
-    if (!playerState.discoveredSpecialGeodes[loc]) playerState.discoveredSpecialGeodes[loc] = true;
-    xpGained = droppedIngot.xpValue;
-    addXP(xpGained);
-    saveGame();
-    const isFirstCollectible = droppedIngot.isCollectible && playerState.ingots[droppedIngot.id] === 1;
-    if (droppedIngot.isCollectible && isFirstCollectible) { showCollectibleAnimation(droppedIngot); }
-    brawlGeode.classList.add('explode-animation');
-    brawlGeode.classList.remove('special-geode');
-    document.querySelector('.brawl-hint').style.display = 'none';
-    brawlCounter.style.display = 'none';
-    setTimeout(() => {
-      brawlGeode.style.display = 'none';
-      if (_renderImageToElement) _renderImageToElement(brawlResultIcon, droppedIngot.imagePath, droppedIngot.icon, droppedIngot.fallbackColor);
-      brawlResultName.textContent = droppedIngot.name;
-      brawlResultRarity.textContent = droppedIngot.rarity;
-      brawlResultRarity.style.color = droppedIngot.rarityClass === 'collectible' ? '#FF64FF' : (droppedIngot.rarityClass === 'legendary' ? '#FFD700' : '#fff');
-      brawlResult.classList.add('show');
-      brawlCloseBtn.style.display = 'block';
-      isOpeningGeode = false;
-      if (_renderCurrentTab) _renderCurrentTab();
-    }, 500);
-  } else {
-    brawlGeode.classList.add('explode-animation');
-    document.querySelector('.brawl-hint').style.display = 'none';
-    brawlCounter.style.display = 'none';
-    setTimeout(() => {
-      brawlOverlay.classList.remove('active');
-      brawlState.isOpen = false;
-      initRoulette(geodeId);
-    }, 500);
-  }
+  if (!playerState) return; const geodeId = brawlState.geodeId; const isSpecial = brawlState.isSpecial;
+  if (playerState.geodes[geodeId] > 0) { playerState.geodes[geodeId]--; } playerState.player.totalOpened++;
+  let droppedIngot = null; let xpGained = 0;
+  if (isSpecial) { const g = CONFIG_GEODES[geodeId]; const loc = g.location; if (!playerState.collectedArtifacts[loc]) { playerState.collectedArtifacts[loc] = []; } const available = g.possibleIngots.filter((ingId) => !playerState.collectedArtifacts[loc].includes(ingId)); const picked = available.length > 0 ? available[Math.floor(Math.random() * available.length)] : g.possibleIngots[0]; droppedIngot = CONFIG_ITEMS[picked]; playerState.ingots[picked] = (playerState.ingots[picked] || 0) + 1; playerState.minedStats[picked] = (playerState.minedStats[picked] || 0) + 1; if (!playerState.collectedArtifacts[loc].includes(picked)) { playerState.collectedArtifacts[loc].push(picked); playerState.player.totalArtifacts++; } if (!playerState.discoveredSpecialGeodes[loc]) playerState.discoveredSpecialGeodes[loc] = true; xpGained = droppedIngot.xpValue; addXP(xpGained); saveGame(); const isFirstCollectible = droppedIngot.isCollectible && playerState.ingots[droppedIngot.id] === 1; if (droppedIngot.isCollectible && isFirstCollectible) { showCollectibleAnimation(droppedIngot); } brawlGeode.classList.add('explode-animation'); brawlGeode.classList.remove('special-geode'); document.querySelector('.brawl-hint').style.display = 'none'; brawlCounter.style.display = 'none'; setTimeout(() => { brawlGeode.style.display = 'none'; if (_renderImageToElement) _renderImageToElement(brawlResultIcon, droppedIngot.imagePath, droppedIngot.icon, droppedIngot.fallbackColor); brawlResultName.textContent = droppedIngot.name; brawlResultRarity.textContent = droppedIngot.rarity; brawlResultRarity.style.color = droppedIngot.rarityClass === 'collectible' ? '#FF64FF' : (droppedIngot.rarityClass === 'legendary' ? '#FFD700' : '#fff'); brawlResult.classList.add('show'); brawlCloseBtn.style.display = 'block'; isOpeningGeode = false; if (_renderCurrentTab) _renderCurrentTab(); }, 500); }
+  else { brawlGeode.classList.add('explode-animation'); document.querySelector('.brawl-hint').style.display = 'none'; brawlCounter.style.display = 'none'; setTimeout(() => { brawlOverlay.classList.remove('active'); brawlState.isOpen = false; initRoulette(geodeId); }, 500); }
 }
 
 if (brawlGeode) { brawlGeode.addEventListener('click', handleBrawlTap); }
