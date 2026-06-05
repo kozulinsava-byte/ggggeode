@@ -1,6 +1,25 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
-import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES, GUILD_QUESTS, MINI_GAMES_CONFIG } from './config.js';
-import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState, buyMeteorGeode, METEOR_SHOP_ITEMS, completeQuest, refreshActiveQuests, toggleSpeedMode, getQuestCooldownRemaining, startQuenchGame, startStackGame, startUpgradeGame, spinUpgradeWheel, closeUpgradeGame, getQuenchRecord, getStackRecord, calculateUpgradeChance, miniGameState } from './core.js';
+import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES, GUILD_QUESTS } from './config.js';
+import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState, buyMeteorGeode, METEOR_SHOP_ITEMS, completeQuest, refreshActiveQuests, toggleSpeedMode, getQuestCooldownRemaining } from './core.js';
+
+// 🆕 Точка входа для мини-игр
+let _startQuenchGame = null;
+let _startStackGame = null;
+let _startUpgradeGame = null;
+
+async function loadMiniGames() {
+  try {
+    const module = await import('./minigames.js');
+    _startQuenchGame = module.startQuenchGame;
+    _startStackGame = module.startStackGame;
+    _startUpgradeGame = module.startUpgradeGame;
+  } catch(e) {
+    console.warn('[UI] Failed to load minigames module:', e);
+  }
+}
+
+// Загружаем мини-игры при старте
+loadMiniGames();
 
 // Регистрируем UI функции в core.js
 registerUIFunctions({
@@ -1276,33 +1295,33 @@ export function renderGamesTab() {
   // ===== ЗОНА 3: МИНИ-ИГРЫ =====
   html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:14px; font-weight:700; margin:20px 0 8px; color:var(--accent-gold);">🎰 Мини-игры</div>';
   
+  // 🆕 Карточки мини-игр с проверкой уровня
   const miniGames = [
-    { config: MINI_GAMES_CONFIG.quench, record: getQuenchRecord() },
-    { config: MINI_GAMES_CONFIG.stack, record: getStackRecord() },
-    { config: MINI_GAMES_CONFIG.upgrade, record: null }
+    { id: 'quench', name: 'Закалка: Точный Удар', icon: '🔨', description: 'Сжимай раскалённый слиток между прессом и наковальней. Тапай, чтобы отбивать плиты!', reqLevel: 1 },
+    { id: 'stack', name: 'Идеальная Стопка', icon: '🧱', description: 'Строй башню из слитков! Тапай, чтобы сбросить слиток. Чем точнее — тем выше!', reqLevel: 5 },
+    { id: 'upgrade', name: 'Кузнечный Апгрейд', icon: '🎰', description: 'Рискни слитком ради шанса получить более редкий! Выбери жертву и цель.', reqLevel: 10 }
   ];
   
-  miniGames.forEach(({ config, record }) => {
-    const isLocked = state.player.level < config.reqLevel;
+  miniGames.forEach(game => {
+    const isLocked = state.player.level < game.reqLevel;
     
     html += `
-      <div class="card mini-game-card ${isLocked ? 'locked' : ''}" style="position: relative; overflow: hidden; ${isLocked ? 'opacity: 0.5;' : ''}">
+      <div class="card mini-game-card" style="position: relative; overflow: hidden; ${isLocked ? 'opacity: 0.5;' : ''}">
         ${isLocked ? `
           <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(2px); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 28px;">
             <div style="font-size: 36px; margin-bottom: 4px;">🔒</div>
-            <div style="font-size: 11px; color: var(--text-secondary); text-align: center; padding: 0 20px;">Открывается на ${config.reqLevel} уровне металлурга</div>
+            <div style="font-size: 11px; color: var(--text-secondary); text-align: center; padding: 0 20px;">Открывается на ${game.reqLevel} уровне металлурга</div>
           </div>
         ` : ''}
         <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="font-size: 40px; min-width: 50px; text-align: center;">${config.icon}</div>
+          <div style="font-size: 40px; min-width: 50px; text-align: center;">${game.icon}</div>
           <div style="flex: 1;">
-            <div style="font-weight: 700; font-size: 15px; color: var(--text-primary); margin-bottom: 4px;">${config.name}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">${config.description}</div>
-            ${record !== null && record > 0 ? `<div style="font-size: 10px; color: var(--accent-gold); margin-top: 4px;">🏆 Рекорд: ${record}</div>` : ''}
+            <div style="font-weight: 700; font-size: 15px; color: var(--text-primary); margin-bottom: 4px;">${game.name}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">${game.description}</div>
           </div>
         </div>
         ${!isLocked ? `
-          <button class="btn mini-game-play-btn" data-game="${config.id}" style="margin-top: 12px; width: 100%;">${config.id === 'upgrade' ? '🎰 ОТКРЫТЬ' : '▶️ ИГРАТЬ'}</button>
+          <button class="btn mini-game-play-btn" data-game="${game.id}" style="margin-top: 12px; width: 100%;">▶️ ИГРАТЬ</button>
         ` : ''}
       </div>
     `;
@@ -1340,13 +1359,15 @@ export function renderGamesTab() {
     });
   });
   
+  // 🆕 Обработчики кнопок мини-игр
   document.querySelectorAll('.mini-game-play-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const gameId = btn.dataset.game;
-      if (gameId === 'quench') startQuenchGame();
-      else if (gameId === 'stack') startStackGame();
-      else if (gameId === 'upgrade') showUpgradeModal();
+      if (gameId === 'quench' && _startQuenchGame) _startQuenchGame();
+      else if (gameId === 'stack' && _startStackGame) _startStackGame();
+      else if (gameId === 'upgrade' && _startUpgradeGame) _startUpgradeGame();
+      else showToast('Мини-игра загружается...', '⏳');
     });
   });
   
@@ -1405,206 +1426,6 @@ function showMeteorShop() {
       });
     });
   }, 10);
-}
-
-// 🆕 МОДАЛКА ВЫБОРА СЛИТКОВ ДЛЯ АПГРЕЙДА
-function showUpgradeModal() {
-  const state = getPlayerState();
-  
-  const availableIngots = Object.entries(state.ingots)
-    .filter(([id, count]) => count > 0 && !CONFIG_ITEMS[id].isCollectible)
-    .map(([id, count]) => ({ id, count, ingot: CONFIG_ITEMS[id] }));
-  
-  if (availableIngots.length === 0) {
-    showToast('Нет слитков для жертвы!', '⚠️');
-    return;
-  }
-  
-  let sacrificeOptions = '';
-  availableIngots.forEach(({ id, count, ingot }) => {
-    sacrificeOptions += `
-      <option value="${id}">${ingot.icon} ${ingot.name} (${count} шт.) — Ценность: ${ingot.sellValue}</option>
-    `;
-  });
-  
-  let targetOptions = '';
-  Object.entries(CONFIG_ITEMS).forEach(([id, ingot]) => {
-    if (!ingot.isCollectible) {
-      targetOptions += `
-        <option value="${id}">${ingot.icon} ${ingot.name} (${ingot.rarity}) — Ценность: ${ingot.sellValue}</option>
-      `;
-    }
-  });
-  
-  const html = `
-    <div class="modal-header">
-      <div class="modal-title">🎰 Кузнечный Апгрейд</div>
-      <button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button>
-    </div>
-    <div class="modal-content">
-      <div class="modal-description">Выбери слиток-жертву и целевой слиток. Шанс зависит от разницы в ценности!</div>
-      
-      <div style="text-align: left; margin-bottom: 16px;">
-        <label style="font-weight: 700; font-size: 13px; color: var(--text-secondary);">Жертва (будет потрачена):</label>
-        <select id="upgradeSacrifice" style="width: 100%; padding: 10px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 12px; margin-top: 6px; font-size: 13px;">
-          ${sacrificeOptions}
-        </select>
-      </div>
-      
-      <div style="text-align: left; margin-bottom: 16px;">
-        <label style="font-weight: 700; font-size: 13px; color: var(--text-secondary);">Цель (хочешь получить):</label>
-        <select id="upgradeTarget" style="width: 100%; padding: 10px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 12px; margin-top: 6px; font-size: 13px;">
-          ${targetOptions}
-        </select>
-      </div>
-      
-      <div id="upgradeChanceDisplay" style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 14px; margin-bottom: 16px; text-align: center;">
-        <div style="font-size: 13px; color: var(--text-secondary);">Шанс успеха:</div>
-        <div style="font-family: 'Unbounded', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent-gold);" id="upgradeChanceValue">—</div>
-      </div>
-      
-      <button class="btn" id="upgradeStartBtn" style="background: linear-gradient(135deg, #FF00FF, #B400FF); box-shadow: 0 4px 20px rgba(180,0,255,0.4);">🎰 ЗАПУСТИТЬ ПЕРЕПЛАВКУ</button>
-    </div>
-  `;
-  
-  openModal(html);
-  
-  setTimeout(() => {
-    const sacrificeSelect = document.getElementById('upgradeSacrifice');
-    const targetSelect = document.getElementById('upgradeTarget');
-    const chanceDisplay = document.getElementById('upgradeChanceValue');
-    
-    function updateChance() {
-      const sacrificeId = sacrificeSelect.value;
-      const targetId = targetSelect.value;
-      if (sacrificeId && targetId) {
-        const chance = calculateUpgradeChance(sacrificeId, targetId);
-        chanceDisplay.textContent = chance + '%';
-        chanceDisplay.style.color = chance >= 50 ? '#50C878' : chance >= 20 ? '#FFA500' : '#FF4444';
-      }
-    }
-    
-    sacrificeSelect.addEventListener('change', updateChance);
-    targetSelect.addEventListener('change', updateChance);
-    updateChance();
-    
-    document.getElementById('upgradeStartBtn').addEventListener('click', () => {
-      const sacrificeId = sacrificeSelect.value;
-      const targetId = targetSelect.value;
-      if (sacrificeId && targetId) {
-        closeModal();
-        startUpgradeGame(sacrificeId, targetId);
-      }
-    });
-  }, 10);
-}
-
-// 🆕 ОВЕРЛЕЙ ИГРЫ "ЗАКАЛКА"
-export function showQuenchGameOverlay() {
-  // Оверлей создаётся в index.html, здесь только активируется через startQuenchGame
-}
-
-// 🆕 ОВЕРЛЕЙ ИГРЫ "СТОПКА"
-export function showStackGameOverlay() {
-  // Оверлей создаётся в index.html, здесь только активируется через startStackGame
-}
-
-// 🆕 ОВЕРЛЕЙ ИГРЫ "АПГРЕЙД"
-export function showUpgradeGameOverlay(sacrificeId, targetId, chance) {
-  const overlay = document.getElementById('upgradeGameOverlay');
-  const sacrificeEl = document.getElementById('upgradeSacrificeDisplay');
-  const targetEl = document.getElementById('upgradeTargetDisplay');
-  const chanceEl = document.getElementById('upgradeChanceDisplay2');
-  const wheel = document.getElementById('upgradeWheel');
-  
-  if (!overlay) return;
-  
-  const sacrifice = CONFIG_ITEMS[sacrificeId];
-  const target = CONFIG_ITEMS[targetId];
-  
-  if (sacrificeEl) {
-    sacrificeEl.innerHTML = '';
-    renderImageToElement(sacrificeEl, sacrifice.imagePath, sacrifice.icon, sacrifice.fallbackColor);
-  }
-  
-  if (targetEl) {
-    targetEl.innerHTML = '';
-    renderImageToElement(targetEl, target.imagePath, target.icon, target.fallbackColor);
-  }
-  
-  if (chanceEl) {
-    chanceEl.textContent = chance + '%';
-    chanceEl.style.color = chance >= 50 ? '#50C878' : chance >= 20 ? '#FFA500' : '#FF4444';
-  }
-  
-  if (wheel) {
-    wheel.style.transition = 'none';
-    wheel.style.transform = 'rotate(0deg)';
-  }
-  
-  overlay.classList.add('active');
-  
-  const spinBtn = document.getElementById('upgradeSpinBtn');
-  if (spinBtn) {
-    spinBtn.onclick = () => {
-      spinUpgradeWheel();
-    };
-  }
-}
-
-export function showUpgradeResult(isSuccess, sacrificeId, targetId) {
-  const overlay = document.getElementById('upgradeGameOverlay');
-  const resultEl = document.getElementById('upgradeResultDisplay');
-  
-  if (!overlay || !resultEl) return;
-  
-  const sacrifice = CONFIG_ITEMS[sacrificeId];
-  const target = CONFIG_ITEMS[targetId];
-  
-  if (isSuccess) {
-    resultEl.innerHTML = `
-      <div style="font-size: 60px; margin-bottom: 12px;">🎉</div>
-      <div style="font-family: 'Unbounded', sans-serif; font-size: 20px; font-weight: 800; color: #50C878; margin-bottom: 8px;">УСПЕХ!</div>
-      <div style="font-size: 14px; color: var(--text-primary);">
-        ${sacrifice?.icon} ${sacrifice?.name} → <strong>${target?.icon} ${target?.name}</strong>
-      </div>
-    `;
-    
-    const flash = document.createElement('div');
-    flash.className = 'collectible-flash';
-    overlay.appendChild(flash);
-    setTimeout(() => flash.remove(), 1500);
-  } else {
-    resultEl.innerHTML = `
-      <div style="font-size: 60px; margin-bottom: 12px;">💔</div>
-      <div style="font-family: 'Unbounded', sans-serif; font-size: 20px; font-weight: 800; color: #FF4444; margin-bottom: 8px;">НЕУДАЧА</div>
-      <div style="font-size: 14px; color: var(--text-primary);">
-        ${sacrifice?.icon} ${sacrifice?.name} сгорел в печи!
-      </div>
-    `;
-    
-    overlay.style.animation = 'none';
-    overlay.offsetHeight;
-    overlay.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
-    setTimeout(() => {
-      overlay.style.backgroundColor = '';
-    }, 400);
-  }
-  
-  resultEl.style.display = 'flex';
-  
-  const closeBtn = document.getElementById('upgradeCloseBtn');
-  if (closeBtn) {
-    closeBtn.style.display = 'block';
-    closeBtn.onclick = () => {
-      closeUpgradeGame();
-      resultEl.style.display = 'none';
-      closeBtn.style.display = 'none';
-    };
-  }
-  
-  const spinBtn = document.getElementById('upgradeSpinBtn');
-  if (spinBtn) spinBtn.style.display = 'none';
 }
 
 let meteorCooldownInterval = null;
