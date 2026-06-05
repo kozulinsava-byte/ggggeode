@@ -40,7 +40,7 @@ function cleanupGame() {
     cancelAnimationFrame(animationId);
     animationId = null;
   }
-  
+
   if (boundHandlers.click) {
     canvas?.removeEventListener('click', boundHandlers.click);
     boundHandlers.click = null;
@@ -53,7 +53,7 @@ function cleanupGame() {
     document.removeEventListener('keydown', boundHandlers.keydown);
     boundHandlers.keydown = null;
   }
-  
+
   hideResult();
   currentGame = null;
   gameState = {};
@@ -68,13 +68,13 @@ function closeOverlay() {
 // Настройка Canvas
 function setupCanvas() {
   if (!canvas || !overlay) return false;
-  
+
   const maxWidth = Math.min(window.innerWidth - 32, 400);
   const maxHeight = Math.min(window.innerHeight - 120, 600);
-  
+
   canvas.width = maxWidth;
   canvas.height = maxHeight;
-  
+
   return true;
 }
 
@@ -88,43 +88,38 @@ export function stopCurrentGame() {
 export function startQuenchGame() {
   initDOM();
   if (!setupCanvas()) return;
-  
+
   const state = getPlayerState();
   if (state.player.level < 1) {
     import('./ui.js').then(ui => ui.showToast('Требуется 1 уровень!', '🔒'));
     return;
   }
-  
+
   cleanupGame();
   currentGame = 'quench';
-  
+
   gameState = {
     score: 0,
     position: 0.5,
     speed: 0.008,
-    lastTapTime: 0,
-    tapCooldown: 200,
     dangerZone: 0.12,
     tapPushback: 0.06,
-    scoreInterval: 50,
     scoreCounter: 0,
     ingotHeight: 60,
     ingotWidth: 80,
     shakeAmount: 0,
     sparks: []
   };
-  
+
   overlay.classList.add('active');
-  
+
   const handleTap = (e) => {
     e.preventDefault();
-    const now = Date.now();
-    if (now - gameState.lastTapTime < gameState.tapCooldown) return;
-    gameState.lastTapTime = now;
-    
+    if (currentGame !== 'quench') return;
+
     gameState.position += gameState.tapPushback;
     gameState.position = Math.min(1, gameState.position);
-    
+
     for (let i = 0; i < 5; i++) {
       gameState.sparks.push({
         x: canvas.width / 2 + (Math.random() - 0.5) * gameState.ingotWidth,
@@ -136,55 +131,54 @@ export function startQuenchGame() {
       });
     }
   };
-  
+
   canvas.addEventListener('click', handleTap);
   boundHandlers.click = handleTap;
-  
+
   function gameLoop() {
     if (currentGame !== 'quench') return;
-    
+
     gameState.position -= gameState.speed;
     gameState.speed += 0.00003;
     gameState.position = Math.max(0, Math.min(1, gameState.position));
-    
+
     if (gameState.position <= 0 || gameState.position >= 1) {
       endQuenchGame();
       return;
     }
-    
+
     gameState.scoreCounter++;
     gameState.score = Math.floor(gameState.scoreCounter / 10);
-    
+
     const inDanger = gameState.position <= gameState.dangerZone || gameState.position >= 1 - gameState.dangerZone;
     gameState.shakeAmount = inDanger ? (1 - gameState.position / gameState.dangerZone) * 3 : 0;
-    
-    // Обновление искр
+
     gameState.sparks = gameState.sparks.filter(s => {
       s.x += s.vx;
       s.y += s.vy;
       s.life -= 0.03;
       return s.life > 0;
     });
-    
+
     renderQuench();
     animationId = requestAnimationFrame(gameLoop);
   }
-  
+
   animationId = requestAnimationFrame(gameLoop);
 }
 
 function renderQuench() {
   if (!ctx || !canvas) return;
-  
+
   const { width, height } = canvas;
   const gs = gameState;
-  
+
   const shakeX = (Math.random() - 0.5) * gs.shakeAmount * 2;
   const shakeY = (Math.random() - 0.5) * gs.shakeAmount * 2;
-  
+
   ctx.save();
   ctx.translate(shakeX, shakeY);
-  
+
   // Фон
   const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
   bgGrad.addColorStop(0, '#2a2a2e');
@@ -192,7 +186,7 @@ function renderQuench() {
   bgGrad.addColorStop(1, '#2a2a2e');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
-  
+
   // Зона идеального удара
   const zoneHeight = 30;
   const zoneY = height / 2 - zoneHeight / 2;
@@ -204,13 +198,19 @@ function renderQuench() {
   ctx.strokeRect(width * 0.05, zoneY, width * 0.9, zoneHeight);
   ctx.setLineDash([]);
   ctx.lineWidth = 1;
-  
-  // Score
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
-  ctx.font = 'bold 48px Unbounded, sans-serif';
+
+  // Score — крупный и яркий
+  ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+  ctx.font = 'bold 56px Unbounded, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(gs.score, width / 2, height / 2 + 18);
-  
+  ctx.textBaseline = 'middle';
+  ctx.fillText(gs.score, width / 2, height / 2);
+
+  // Обводка счёта для читаемости
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 14px Unbounded, sans-serif';
+  ctx.fillText('SCORE', width / 2, height / 2 - 40);
+
   // Верхняя плита
   const topY = gs.position * (height / 2 - 60);
   const plateGradTop = ctx.createLinearGradient(0, topY - 10, 0, topY + 10);
@@ -222,7 +222,7 @@ function renderQuench() {
   ctx.shadowBlur = 20 + gs.shakeAmount * 10;
   ctx.fillRect(width * 0.1, topY - 10, width * 0.8, 12);
   ctx.shadowBlur = 0;
-  
+
   // Нижняя плита
   const bottomY = height - gs.position * (height / 2 - 60);
   const plateGradBottom = ctx.createLinearGradient(0, bottomY - 2, 0, bottomY + 10);
@@ -234,7 +234,7 @@ function renderQuench() {
   ctx.shadowBlur = 20 + gs.shakeAmount * 10;
   ctx.fillRect(width * 0.1, bottomY - 2, width * 0.8, 12);
   ctx.shadowBlur = 0;
-  
+
   // Слиток
   const ingotX = width / 2 - gs.ingotWidth / 2;
   const ingotY = height / 2 - gs.ingotHeight / 2;
@@ -243,7 +243,7 @@ function renderQuench() {
   ingotGrad.addColorStop(0.3, '#FFD700');
   ingotGrad.addColorStop(0.7, '#FFA500');
   ingotGrad.addColorStop(1, '#8B4513');
-  
+
   ctx.fillStyle = ingotGrad;
   ctx.shadowColor = 'rgba(255, 215, 0, 0.6)';
   ctx.shadowBlur = 15;
@@ -251,15 +251,11 @@ function renderQuench() {
   ctx.roundRect(ingotX, ingotY, gs.ingotWidth, gs.ingotHeight, 8);
   ctx.fill();
   ctx.shadowBlur = 0;
-  
+
   ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  
-  // Сжатие слитка
-  const scaleX = 0.5 + gs.position * 0.5;
-  const scaleY = 0.5 + (1 - gs.position) * 0.5;
-  
+
   // Искры
   gs.sparks.forEach(s => {
     ctx.fillStyle = `rgba(255, 215, 0, ${s.life})`;
@@ -270,18 +266,18 @@ function renderQuench() {
     ctx.fill();
   });
   ctx.shadowBlur = 0;
-  
+
   ctx.restore();
 }
 
 function endQuenchGame() {
   const score = gameState.score;
   const rewards = Math.floor(score / 50);
-  
+
   if (rewards > 0) {
     const xpGained = rewards * 15;
     addXP(xpGained);
-    
+
     const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
     const state = getPlayerState();
     for (let i = 0; i < rewards; i++) {
@@ -295,9 +291,9 @@ function endQuenchGame() {
   } else {
     showResult('Закалка завершена!', score, 'Не набрано очков для награды');
   }
-  
+
   currentGame = null;
-  
+
   import('./ui.js').then(ui => ui.renderCurrentTab());
 }
 
@@ -305,18 +301,19 @@ function endQuenchGame() {
 export function startStackGame() {
   initDOM();
   if (!setupCanvas()) return;
-  
+
   const state = getPlayerState();
   if (state.player.level < 5) {
     import('./ui.js').then(ui => ui.showToast('Требуется 5 уровень!', '🔒'));
     return;
   }
-  
+
   cleanupGame();
   currentGame = 'stack';
-  
+
   const blockHeight = 28;
-  
+  const baseY = canvas.height - 30;
+
   gameState = {
     score: 0,
     blockWidth: 120,
@@ -327,107 +324,128 @@ export function startStackGame() {
     blocks: [],
     blockHeight: blockHeight,
     falling: false,
-    fallAnim: null,
-    baseY: canvas.height - 30,
-    movingY: 60,
-    startX: 0
+    fallBlock: null,
+    fallProgress: 0,
+    fallStartY: 60,
+    fallTargetY: baseY - blockHeight,
+    baseY: baseY,
+    movingY: 60
   };
-  
+
   gameState.currentX = 0;
-  gameState.startX = 0;
-  
+  gameState.fallTargetY = baseY - blockHeight;
+
   overlay.classList.add('active');
-  
+
   const handleTap = (e) => {
     e.preventDefault();
     if (!currentGame || gameState.falling) return;
     dropStackBlock();
   };
-  
+
   canvas.addEventListener('click', handleTap);
   boundHandlers.click = handleTap;
-  
+
   function gameLoop() {
-    if (currentGame !== 'stack' || gameState.falling) {
-      animationId = requestAnimationFrame(gameLoop);
-      return;
+    if (currentGame !== 'stack') return;
+
+    if (!gameState.falling) {
+      const maxX = canvas.width - gameState.blockWidth;
+      gameState.currentX += gameState.speed * gameState.direction;
+
+      if (gameState.currentX >= maxX) {
+        gameState.currentX = maxX;
+        gameState.direction = -1;
+      } else if (gameState.currentX <= 0) {
+        gameState.currentX = 0;
+        gameState.direction = 1;
+      }
+    } else {
+      gameState.fallProgress += 0.06;
+      if (gameState.fallProgress >= 1) {
+        gameState.fallProgress = 1;
+        placeBlock();
+      }
     }
-    
-    const maxX = canvas.width - gameState.blockWidth;
-    gameState.currentX += gameState.speed * gameState.direction;
-    
-    if (gameState.currentX >= maxX) {
-      gameState.currentX = maxX;
-      gameState.direction = -1;
-    } else if (gameState.currentX <= 0) {
-      gameState.currentX = 0;
-      gameState.direction = 1;
-    }
-    
+
     renderStack();
     animationId = requestAnimationFrame(gameLoop);
   }
-  
+
   animationId = requestAnimationFrame(gameLoop);
 }
 
 function dropStackBlock() {
   gameState.falling = true;
-  
+  gameState.fallProgress = 0;
+
   const prevBlock = gameState.blocks.length > 0 ? gameState.blocks[gameState.blocks.length - 1] : null;
+
   let newWidth = gameState.blockWidth;
   let newX = gameState.currentX;
-  
+
   if (prevBlock) {
     const overlapLeft = Math.max(prevBlock.x, newX);
     const overlapRight = Math.min(prevBlock.x + prevBlock.width, newX + gameState.blockWidth);
     newWidth = Math.max(0, overlapRight - overlapLeft);
     newX = overlapLeft;
-    
+
     if (newWidth <= 0) {
       endStackGame();
       return;
     }
-    
-    const cutWidth = gameState.blockWidth - newWidth;
-    if (cutWidth > 3) {
-      newWidth = Math.max(gameState.minBlockWidth, newWidth);
-    }
+
+    newWidth = Math.max(gameState.minBlockWidth, newWidth);
   }
-  
-  gameState.blocks.push({ x: newX, width: newWidth });
-  gameState.blockWidth = Math.max(gameState.minBlockWidth, newWidth);
+
+  const placedBlocksCount = gameState.blocks.length;
+  gameState.fallStartY = gameState.movingY;
+  gameState.fallTargetY = gameState.baseY - (placedBlocksCount + 1) * gameState.blockHeight;
+
+  gameState.fallBlock = {
+    x: newX,
+    width: newWidth,
+    currentY: gameState.fallStartY
+  };
+}
+
+function placeBlock() {
+  if (!gameState.fallBlock) return;
+
+  gameState.blocks.push({
+    x: gameState.fallBlock.x,
+    width: gameState.fallBlock.width
+  });
+
+  gameState.blockWidth = Math.max(gameState.minBlockWidth, gameState.fallBlock.width);
   gameState.score++;
   gameState.speed += 0.25;
   gameState.currentX = 0;
   gameState.direction = 1;
-  
-  setTimeout(() => {
-    if (currentGame === 'stack') {
-      gameState.falling = false;
-    }
-  }, 150);
+  gameState.falling = false;
+  gameState.fallBlock = null;
+  gameState.fallProgress = 0;
 }
 
 function renderStack() {
   if (!ctx || !canvas) return;
-  
+
   const { width, height } = canvas;
   const gs = gameState;
-  
+
   // Фон
   const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
   bgGrad.addColorStop(0, '#1a1a2e');
   bgGrad.addColorStop(1, '#0a0a14');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
-  
-  // Score
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
-  ctx.font = 'bold 20px Unbounded, sans-serif';
+
+  // Score — крупный и яркий
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 22px Unbounded, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`Башня: ${gs.score}`, width / 2, 36);
-  
+  ctx.fillText(`🏆 Башня: ${gs.score}`, width / 2, 40);
+
   // Основание
   const baseY = gs.baseY;
   ctx.fillStyle = '#455A64';
@@ -435,35 +453,28 @@ function renderStack() {
   ctx.shadowBlur = 10;
   ctx.fillRect(width * 0.05, baseY, width * 0.9, 12);
   ctx.shadowBlur = 0;
-  
+
   // Размещённые блоки
   gs.blocks.forEach((block, index) => {
     const blockY = baseY - (index + 1) * gs.blockHeight;
-    const blockGrad = ctx.createLinearGradient(block.x, blockY, block.x, blockY + gs.blockHeight);
-    blockGrad.addColorStop(0, '#B87333');
-    blockGrad.addColorStop(1, '#FFD700');
-    
-    ctx.fillStyle = blockGrad;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(block.x, blockY, block.width, gs.blockHeight - 1, 3);
-    ctx.fill();
-    ctx.stroke();
-    
-    if (block.width >= 60) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.fillRect(block.x + 4, blockY + 4, block.width - 8, gs.blockHeight - 10);
-    }
+    drawBlock(block.x, blockY, block.width, gs.blockHeight);
   });
-  
+
+  // Падающий блок (анимация)
+  if (gs.falling && gs.fallBlock) {
+    const fb = gs.fallBlock;
+    const currentY = gs.fallStartY + (gs.fallTargetY - gs.fallStartY) * gs.fallProgress;
+    fb.currentY = currentY;
+    drawBlock(fb.x, currentY, fb.width, gs.blockHeight);
+  }
+
   // Движущийся блок
   if (!gs.falling) {
     const movingY = gs.movingY;
     const blockGrad = ctx.createLinearGradient(gs.currentX, movingY, gs.currentX, movingY + gs.blockHeight);
     blockGrad.addColorStop(0, '#FF8C00');
     blockGrad.addColorStop(1, '#FFD700');
-    
+
     ctx.fillStyle = blockGrad;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.lineWidth = 2;
@@ -477,11 +488,32 @@ function renderStack() {
   }
 }
 
+function drawBlock(x, y, w, h) {
+  if (!ctx) return;
+
+  const blockGrad = ctx.createLinearGradient(x, y, x, y + h);
+  blockGrad.addColorStop(0, '#B87333');
+  blockGrad.addColorStop(1, '#FFD700');
+
+  ctx.fillStyle = blockGrad;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h - 1, 3);
+  ctx.fill();
+  ctx.stroke();
+
+  if (w >= 60) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fillRect(x + 4, y + 4, w - 8, h - 10);
+  }
+}
+
 function endStackGame() {
   const score = gameState.score;
   const xpGained = score * 5 + Math.floor(score / 10) * 25;
   const meteorShardsGained = Math.floor(score / 5) * 2;
-  
+
   if (score > 0) {
     addXP(xpGained);
     const state = getPlayerState();
@@ -491,7 +523,7 @@ function endStackGame() {
   } else {
     showResult('Башня рухнула!', 0, 'Попробуй снова');
   }
-  
+
   currentGame = null;
   import('./ui.js').then(ui => ui.renderCurrentTab());
 }
@@ -499,23 +531,22 @@ function endStackGame() {
 // ========== 🆕 ЭКСПОРТ: ЗАПУСК АПГРЕЙДА ==========
 export function startUpgradeGame() {
   initDOM();
-  
+
   const state = getPlayerState();
   if (state.player.level < 10) {
     import('./ui.js').then(ui => ui.showToast('Требуется 10 уровень!', '🔒'));
     return;
   }
-  
+
   const availableIngots = Object.entries(state.ingots)
     .filter(([id, count]) => count > 0 && !CONFIG_ITEMS[id].isCollectible)
     .map(([id, count]) => ({ id, count, ingot: CONFIG_ITEMS[id] }));
-  
+
   if (availableIngots.length === 0) {
     import('./ui.js').then(ui => ui.showToast('Нет слитков для жертвы!', '⚠️'));
     return;
   }
-  
-  // Открываем модалку выбора
+
   showUpgradeSelectionModal(availableIngots);
 }
 
@@ -524,14 +555,14 @@ function showUpgradeSelectionModal(availableIngots) {
   availableIngots.forEach(({ id, count, ingot }) => {
     sacrificeOptions += `<option value="${id}">${ingot.icon} ${ingot.name} (${count} шт.) — Ценность: ${ingot.sellValue}</option>`;
   });
-  
+
   let targetOptions = '';
   Object.entries(CONFIG_ITEMS).forEach(([id, ingot]) => {
     if (!ingot.isCollectible) {
       targetOptions += `<option value="${id}">${ingot.icon} ${ingot.name} (${ingot.rarity}) — Ценность: ${ingot.sellValue}</option>`;
     }
   });
-  
+
   const html = `
     <div class="modal-header">
       <div class="modal-title">🎰 Кузнечный Апгрейд</div>
@@ -562,15 +593,15 @@ function showUpgradeSelectionModal(availableIngots) {
       <button class="btn" id="upgradeStartBtn2" style="background: linear-gradient(135deg, #FF00FF, #B400FF); box-shadow: 0 4px 20px rgba(180,0,255,0.4);">🎰 ЗАПУСТИТЬ ПЕРЕПЛАВКУ</button>
     </div>
   `;
-  
+
   import('./ui.js').then(ui => {
     ui.openModal(html);
-    
+
     setTimeout(() => {
       const sacrificeSelect = document.getElementById('upgradeSacrifice');
       const targetSelect = document.getElementById('upgradeTarget');
       const chanceDisplay = document.getElementById('upgradeChanceValue2');
-      
+
       function updateChance() {
         const sacrificeId = sacrificeSelect.value;
         const targetId = targetSelect.value;
@@ -580,11 +611,11 @@ function showUpgradeSelectionModal(availableIngots) {
           chanceDisplay.style.color = chance >= 50 ? '#50C878' : chance >= 20 ? '#FFA500' : '#FF4444';
         }
       }
-      
+
       sacrificeSelect.addEventListener('change', updateChance);
       targetSelect.addEventListener('change', updateChance);
       updateChance();
-      
+
       document.getElementById('upgradeStartBtn2').addEventListener('click', () => {
         const sacrificeId = sacrificeSelect.value;
         const targetId = targetSelect.value;
@@ -600,126 +631,141 @@ function showUpgradeSelectionModal(availableIngots) {
 function calculateUpgradeChance(sacrificeId, targetId) {
   const sacrifice = CONFIG_ITEMS[sacrificeId];
   const target = CONFIG_ITEMS[targetId];
-  
+
   if (!sacrifice || !target) return 0;
   if (sacrifice.isCollectible || target.isCollectible) return 0;
-  
+
   const sacrificeValue = sacrifice.sellValue;
   const targetValue = target.sellValue;
-  
+
   if (targetValue <= sacrificeValue) return 90;
-  
+
   const ratio = sacrificeValue / targetValue;
   const chance = Math.floor(ratio * 90);
-  
+
   return Math.max(1, Math.min(90, chance));
 }
 
 function launchUpgradeWheel(sacrificeId, targetId, chance) {
   if (!setupCanvas()) return;
-  
+
   cleanupGame();
   currentGame = 'upgrade';
-  
+
+  // Рассчитываем результат ДО анимации
+  const isSuccess = Math.random() * 100 < chance;
+  const successAngleDeg = (chance / 100) * 360;
+
+  // Угол остановки: если успех — внутри зелёной зоны, если неудача — внутри красной
+  let stopAngleDeg;
+  if (isSuccess) {
+    // Зелёная зона: от 0 до successAngleDeg
+    stopAngleDeg = Math.random() * successAngleDeg * 0.8 + successAngleDeg * 0.1;
+  } else {
+    // Красная зона: от successAngleDeg до 360
+    stopAngleDeg = successAngleDeg + Math.random() * (360 - successAngleDeg) * 0.8 + (360 - successAngleDeg) * 0.1;
+  }
+
+  // Стрелка сверху — вращаем колесо
+  const totalRotation = 720 + Math.random() * 1440;
+  const targetRotation = totalRotation + (360 - stopAngleDeg);
+
   gameState = {
     sacrificeId,
     targetId,
     chance,
+    isSuccess,
     spinning: false,
     result: null,
     rotation: 0,
-    targetRotation: 0,
+    targetRotation,
     spinStart: 0,
-    spinDuration: 4000
+    spinDuration: 4000,
+    successAngleDeg
   };
-  
+
   overlay.classList.add('active');
-  
+
   const handleTap = (e) => {
     e.preventDefault();
     if (gameState.spinning || gameState.result !== null) return;
     spinWheel();
   };
-  
+
   canvas.addEventListener('click', handleTap);
   boundHandlers.click = handleTap;
-  
+
   renderUpgradeWheel();
 }
 
 function spinWheel() {
   if (gameState.spinning) return;
-  
+
   gameState.spinning = true;
   gameState.spinStart = Date.now();
-  
-  const isSuccess = Math.random() * 100 < gameState.chance;
-  const totalRotation = 720 + Math.random() * 1440;
-  const successAngle = (gameState.chance / 100) * 360;
-  const failAngle = successAngle + (1 - gameState.chance / 100) * 360;
-  const targetAngle = isSuccess ? successAngle * 0.5 : failAngle * 0.5;
-  
-  gameState.targetRotation = totalRotation + (360 - targetAngle);
-  gameState.result = isSuccess;
-  
+
   function animateSpin() {
     if (currentGame !== 'upgrade') return;
-    
+
     const elapsed = Date.now() - gameState.spinStart;
     const progress = Math.min(1, elapsed / gameState.spinDuration);
+    // Плавное замедление cubic-bezier
     const eased = 1 - Math.pow(1 - progress, 3);
-    
+
     gameState.rotation = eased * gameState.targetRotation;
     renderUpgradeWheel();
-    
+
     if (progress < 1) {
       animationId = requestAnimationFrame(animateSpin);
     } else {
-      finishUpgrade();
+      gameState.rotation = gameState.targetRotation;
+      renderUpgradeWheel();
+      gameState.result = gameState.isSuccess;
+      setTimeout(() => finishUpgrade(), 600);
     }
   }
-  
+
   animationId = requestAnimationFrame(animateSpin);
 }
 
 function renderUpgradeWheel() {
   if (!ctx || !canvas) return;
-  
+
   const { width, height } = canvas;
   const centerX = width / 2;
   const centerY = height / 2;
   const wheelRadius = Math.min(width, height) * 0.38;
-  
+
   // Фон
   ctx.fillStyle = '#1a0a1a';
   ctx.fillRect(0, 0, width, height);
-  
+
   // Заголовок
   ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
   ctx.font = 'bold 16px Unbounded, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('🎰 Кузнечный Апгрейд', centerX, 40);
-  
+
   const sacrifice = CONFIG_ITEMS[gameState.sacrificeId];
   const target = CONFIG_ITEMS[gameState.targetId];
-  
+
   // Жертва
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
   ctx.font = 'bold 13px Montserrat, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(`Жертва: ${sacrifice?.icon || ''}`, 16, 80);
-  
+
   // Цель
   ctx.textAlign = 'right';
   ctx.fillText(`Цель: ${target?.icon || ''}`, width - 16, 80);
-  
+
   // Колесо
   ctx.save();
   ctx.translate(centerX, centerY);
   ctx.rotate(gameState.rotation * Math.PI / 180);
-  
+
   const successAngle = (gameState.chance / 100) * 360;
-  
+
   // Зелёный сектор
   ctx.fillStyle = 'rgba(80, 200, 120, 0.5)';
   ctx.beginPath();
@@ -730,7 +776,7 @@ function renderUpgradeWheel() {
   ctx.strokeStyle = 'rgba(80, 200, 120, 0.8)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  
+
   // Красный сектор
   ctx.fillStyle = 'rgba(255, 68, 68, 0.5)';
   ctx.beginPath();
@@ -740,17 +786,17 @@ function renderUpgradeWheel() {
   ctx.fill();
   ctx.strokeStyle = 'rgba(255, 68, 68, 0.8)';
   ctx.stroke();
-  
+
   // Обод
   ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(0, 0, wheelRadius, 0, Math.PI * 2);
   ctx.stroke();
-  
+
   ctx.restore();
-  
-  // Стрелка
+
+  // Стрелка сверху
   ctx.fillStyle = '#FFD700';
   ctx.shadowColor = 'rgba(255, 215, 0, 0.8)';
   ctx.shadowBlur = 10;
@@ -761,20 +807,28 @@ function renderUpgradeWheel() {
   ctx.closePath();
   ctx.fill();
   ctx.shadowBlur = 0;
-  
+
   // Шанс
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 28px Unbounded, sans-serif';
-  ctx.textAlign = 'center';
   const chanceColor = gameState.chance >= 50 ? '#50C878' : gameState.chance >= 20 ? '#FFA500' : '#FF4444';
   ctx.fillStyle = chanceColor;
+  ctx.font = 'bold 28px Unbounded, sans-serif';
+  ctx.textAlign = 'center';
   ctx.fillText(`Шанс: ${gameState.chance}%`, centerX, height - 60);
-  
+
   // Подсказка
   if (!gameState.spinning && gameState.result === null) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.font = '14px Montserrat, sans-serif';
     ctx.fillText('Тапни, чтобы запустить', centerX, height - 24);
+  }
+
+  // Результат после остановки
+  if (gameState.result !== null) {
+    const resultColor = gameState.result ? '#50C878' : '#FF4444';
+    const resultText = gameState.result ? '🎉 УСПЕХ!' : '💔 НЕУДАЧА';
+    ctx.fillStyle = resultColor;
+    ctx.font = 'bold 24px Unbounded, sans-serif';
+    ctx.fillText(resultText, centerX, height - 90);
   }
 }
 
@@ -782,14 +836,14 @@ function finishUpgrade() {
   const state = getPlayerState();
   const sacrificeId = gameState.sacrificeId;
   const targetId = gameState.targetId;
-  const isSuccess = gameState.result;
-  
+  const isSuccess = gameState.isSuccess;
+
   if (isSuccess) {
     state.ingots[sacrificeId]--;
     state.ingots[targetId] = (state.ingots[targetId] || 0) + 1;
     state.minedStats[targetId] = (state.minedStats[targetId] || 0) + 1;
     state.player.totalIngots++;
-    
+
     const targetIngot = CONFIG_ITEMS[targetId];
     import('./ui.js').then(ui => ui.showToast(`Успех! Получен ${targetIngot.name}!`, targetIngot.icon));
     showResult('🎉 Успех!', 0, `${CONFIG_ITEMS[sacrificeId]?.name} → ${targetIngot.name}`);
@@ -798,9 +852,9 @@ function finishUpgrade() {
     import('./ui.js').then(ui => ui.showToast(`Неудача! ${CONFIG_ITEMS[sacrificeId]?.name} сгорел.`, '🔥'));
     showResult('💔 Неудача', 0, `${CONFIG_ITEMS[sacrificeId]?.name} сгорел в печи`);
   }
-  
+
   saveGame();
-  
+
   setTimeout(() => {
     cleanupGame();
     if (overlay) overlay.classList.remove('active');
@@ -809,26 +863,6 @@ function finishUpgrade() {
 }
 
 // ========== Polyfill для roundRect ==========
-if (!ctx || !ctx.roundRect) {
-  if (ctx) {
-    ctx.roundRect = function(x, y, w, h, r) {
-      if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
-      ctx.beginPath();
-      ctx.moveTo(x + r.tl, y);
-      ctx.lineTo(x + w - r.tr, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
-      ctx.lineTo(x + w, y + h - r.br);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
-      ctx.lineTo(x + r.bl, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
-      ctx.lineTo(x, y + r.tl);
-      ctx.quadraticCurveTo(x, y, x + r.tl, y);
-      ctx.closePath();
-    };
-  }
-}
-
-// Polyfill при загрузке
 initDOM();
 if (ctx && !ctx.roundRect) {
   ctx.roundRect = function(x, y, w, h, r) {
