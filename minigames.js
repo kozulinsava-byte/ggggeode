@@ -59,12 +59,6 @@ function cleanupGame() {
   gameState = {};
 }
 
-// Закрыть оверлей
-function closeOverlay() {
-  cleanupGame();
-  if (overlay) overlay.classList.remove('active');
-}
-
 // Настройка Canvas
 function setupCanvas() {
   if (!canvas || !overlay) return false;
@@ -101,10 +95,11 @@ export function startQuenchGame() {
   gameState = {
     score: 0,
     position: 0.5,
-    speed: 0.008,
+    speed: 0.005,
     dangerZone: 0.12,
-    tapPushback: 0.06,
-    scoreCounter: 0,
+    tapPushback: 0.07,
+    elapsedTime: 0,
+    lastTime: Date.now(),
     ingotHeight: 60,
     ingotWidth: 80,
     shakeAmount: 0,
@@ -138,8 +133,11 @@ export function startQuenchGame() {
   function gameLoop() {
     if (currentGame !== 'quench') return;
 
-    gameState.position -= gameState.speed;
-    gameState.speed += 0.00003;
+    const now = Date.now();
+    const dt = (now - gameState.lastTime) / 1000;
+    gameState.lastTime = now;
+
+    gameState.position -= gameState.speed * dt * 60;
     gameState.position = Math.max(0, Math.min(1, gameState.position));
 
     if (gameState.position <= 0 || gameState.position >= 1) {
@@ -147,8 +145,12 @@ export function startQuenchGame() {
       return;
     }
 
-    gameState.scoreCounter++;
-    gameState.score = Math.floor(gameState.scoreCounter / 10);
+    gameState.elapsedTime += dt;
+    gameState.score = Math.floor(gameState.elapsedTime * 10);
+
+    // Каждые 5 секунд увеличиваем скорость на 18%
+    const timeBonus = Math.floor(gameState.elapsedTime / 5);
+    gameState.speed = 0.005 * Math.pow(1.18, timeBonus);
 
     const inDanger = gameState.position <= gameState.dangerZone || gameState.position >= 1 - gameState.dangerZone;
     gameState.shakeAmount = inDanger ? (1 - gameState.position / gameState.dangerZone) * 3 : 0;
@@ -512,14 +514,24 @@ function drawBlock(x, y, w, h) {
 function endStackGame() {
   const score = gameState.score;
   const xpGained = score * 5 + Math.floor(score / 10) * 25;
-  const meteorShardsGained = Math.floor(score / 5) * 2;
+
+  let rewardText = `+${xpGained} XP`;
+  const state = getPlayerState();
+
+  // Награда за хардкор: обычная жеода за 20+ слитков
+  if (score >= 20) {
+    const commonGeodes = Object.values(CONFIG_GEODES).filter(g => !g.isSpecial && g.id !== 'meteor_common' && g.id !== 'meteor_rare' && g.id !== 'meteor_legendary');
+    if (commonGeodes.length > 0) {
+      const randomGeode = commonGeodes[Math.floor(Math.random() * commonGeodes.length)];
+      state.geodes[randomGeode.id] = (state.geodes[randomGeode.id] || 0) + 1;
+      rewardText += ` + ${randomGeode.name}`;
+    }
+  }
 
   if (score > 0) {
     addXP(xpGained);
-    const state = getPlayerState();
-    state.meteorShards += meteorShardsGained;
     saveGame();
-    showResult('Башня рухнула!', score, `+${xpGained} XP · +${meteorShardsGained} осколков`);
+    showResult('Башня рухнула!', score, rewardText);
   } else {
     showResult('Башня рухнула!', 0, 'Попробуй снова');
   }
@@ -652,21 +664,25 @@ function launchUpgradeWheel(sacrificeId, targetId, chance) {
   cleanupGame();
   currentGame = 'upgrade';
 
-  // Рассчитываем результат ДО анимации
+  // Шаг 1: СНАЧАЛА определяем исход
   const isSuccess = Math.random() * 100 < chance;
   const successAngleDeg = (chance / 100) * 360;
 
-  // Угол остановки: если успех — внутри зелёной зоны, если неудача — внутри красной
+  // Шаг 2: Вычисляем финальный угол СТРОГО внутри нужного сектора
   let stopAngleDeg;
   if (isSuccess) {
-    // Зелёная зона: от 0 до successAngleDeg
-    stopAngleDeg = Math.random() * successAngleDeg * 0.8 + successAngleDeg * 0.1;
+    // Зелёная зона: от 0 до successAngleDeg (отсчёт от -90° — верх стрелки)
+    const minGreen = 5;
+    const maxGreen = successAngleDeg - 5;
+    stopAngleDeg = minGreen + Math.random() * Math.max(0, maxGreen - minGreen);
   } else {
     // Красная зона: от successAngleDeg до 360
-    stopAngleDeg = successAngleDeg + Math.random() * (360 - successAngleDeg) * 0.8 + (360 - successAngleDeg) * 0.1;
+    const minRed = successAngleDeg + 5;
+    const maxRed = 355;
+    stopAngleDeg = minRed + Math.random() * Math.max(0, maxRed - minRed);
   }
 
-  // Стрелка сверху — вращаем колесо
+  // Преобразуем в угол поворота колеса (стрелка сверху — 0° на колесе)
   const totalRotation = 720 + Math.random() * 1440;
   const targetRotation = totalRotation + (360 - stopAngleDeg);
 
@@ -718,6 +734,7 @@ function spinWheel() {
     if (progress < 1) {
       animationId = requestAnimationFrame(animateSpin);
     } else {
+      // Шаг 3: Фиксируем колесо РОВНО на вычисленном угле
       gameState.rotation = gameState.targetRotation;
       renderUpgradeWheel();
       gameState.result = gameState.isSuccess;
