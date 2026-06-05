@@ -433,55 +433,7 @@ export const DEFAULT_STATE = {
     player: { level: 1, xp: 0, totalOpened: 0, totalIngots: 0, totalArtifacts: 0 },
     echoCooldowns: {},
     expeditionBonuses: {},
-    completedQuests: [],
-    // 🆕 Рекорды мини-игр
-    miniGameRecords: {
-        quench: 0,
-        stack: 0
-    }
-};
-
-// 🆕 ========== КОНФИГУРАЦИЯ МИНИ-ИГР ==========
-export const MINI_GAMES_CONFIG = {
-    quench: {
-        id: 'quench',
-        name: 'Закалка: Точный Удар',
-        icon: '🔨',
-        description: 'Сжимай раскалённый слиток между прессом и наковальней. Тапай, чтобы отбивать плиты!',
-        reqLevel: 1,
-        xpPerScore: 15,        // XP за каждые 50 очков
-        scoreInterval: 50,     // Интервал начисления награды
-        rewardIngotRarity: 'common', // Редкость слитков за награду
-        bonusGeodeForRecord: 'mine', // Жеода за новый рекорд
-        initialSpeed: 1.0,     // Начальная скорость сжатия
-        speedIncrement: 0.05,  // Прирост скорости в секунду
-        tapPushback: 0.15,     // Отскок плит при тапе (доля от расстояния)
-        dangerZone: 0.15       // Порог дрожания (15% от края)
-    },
-    stack: {
-        id: 'stack',
-        name: 'Идеальная Стопка',
-        icon: '🧱',
-        description: 'Строй башню из слитков! Тапай, чтобы сбросить слиток. Чем точнее — тем выше!',
-        reqLevel: 5,
-        baseBlockWidth: 100,   // Начальная ширина слитка в px
-        minBlockWidth: 10,     // Минимальная ширина (конец игры)
-        initialSpeed: 2.0,     // Начальная скорость движения
-        speedIncrement: 0.08,  // Прирост скорости за слиток
-        xpPerBlock: 5,         // XP за идеальный слиток
-        xpBonusPer10: 25,      // Бонус XP за каждые 10 блоков
-        meteorShardsPer5: 2    // Осколки метеоритов за каждые 5 блоков
-    },
-    upgrade: {
-        id: 'upgrade',
-        name: 'Кузнечный Апгрейд',
-        icon: '🎰',
-        description: 'Рискни слитком ради шанса получить более редкий! Выбери жертву и цель.',
-        reqLevel: 10,
-        spinDuration: 4,       // Длительность вращения в секундах
-        minChance: 1,          // Минимальный шанс успеха (%)
-        maxChance: 90          // Максимальный шанс успеха (%)
-    }
+    completedQuests: []
 };
 
 // ========== КОНФИГУРАЦИЯ ИВЕНТОВ (РОТАЦИЯ) ==========
