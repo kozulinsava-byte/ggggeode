@@ -201,19 +201,7 @@ function renderQuench() {
   ctx.setLineDash([]);
   ctx.lineWidth = 1;
 
-  // Score — крупный и яркий
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
-  ctx.font = 'bold 56px Unbounded, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(gs.score, width / 2, height / 2);
-
-  // Обводка счёта для читаемости
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 14px Unbounded, sans-serif';
-  ctx.fillText('SCORE', width / 2, height / 2 - 40);
-
-  // Верхняя плита
+  // Верхняя плита (рисуем ДО счётчика, чтобы он был поверх)
   const topY = gs.position * (height / 2 - 60);
   const plateGradTop = ctx.createLinearGradient(0, topY - 10, 0, topY + 10);
   plateGradTop.addColorStop(0, '#FF4500');
@@ -269,30 +257,53 @@ function renderQuench() {
   });
   ctx.shadowBlur = 0;
 
+  // Score — рисуем ПОВЕРХ ВСЕХ ОБЪЕКТОВ (последним)
+  // Фон для читаемости
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(width / 2 - 50, height / 2 - 50, 100, 60);
+  
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 14px Unbounded, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SCORE', width / 2, height / 2 - 32);
+
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 48px Unbounded, sans-serif';
+  ctx.fillText(gs.score, width / 2, height / 2 + 8);
+
   ctx.restore();
 }
 
 function endQuenchGame() {
   const score = gameState.score;
-  const rewards = Math.floor(score / 50);
+  const rewards = Math.floor(score / 200);
+
+  let rewardText = '';
+  const state = getPlayerState();
 
   if (rewards > 0) {
-    const xpGained = rewards * 15;
+    const xpGained = rewards * 30;
     addXP(xpGained);
 
     const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
-    const state = getPlayerState();
+
     for (let i = 0; i < rewards; i++) {
       const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
       state.ingots[randomIngot.id] = (state.ingots[randomIngot.id] || 0) + 1;
       state.minedStats[randomIngot.id] = (state.minedStats[randomIngot.id] || 0) + 1;
       state.player.totalIngots++;
+
+      rewardText += `Добавлен слиток: ${randomIngot.name}!\n`;
     }
+
+    rewardText += `+${xpGained} XP`;
     saveGame();
-    showResult('Закалка завершена!', score, `+${xpGained} XP · ${rewards} слитков`);
   } else {
-    showResult('Закалка завершена!', score, 'Не набрано очков для награды');
+    rewardText = 'Не набрано очков для награды';
   }
+
+  showResult('Закалка завершена!', score, rewardText);
 
   currentGame = null;
 
@@ -442,11 +453,14 @@ function renderStack() {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Score — крупный и яркий
+  // Score — крупный и яркий (поверх всего)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(width / 2 - 60, 10, 120, 40);
+  
   ctx.fillStyle = '#FFD700';
   ctx.font = 'bold 22px Unbounded, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`🏆 Башня: ${gs.score}`, width / 2, 40);
+  ctx.fillText(`🏆 Башня: ${gs.score}`, width / 2, 38);
 
   // Основание
   const baseY = gs.baseY;
@@ -524,7 +538,7 @@ function endStackGame() {
     if (commonGeodes.length > 0) {
       const randomGeode = commonGeodes[Math.floor(Math.random() * commonGeodes.length)];
       state.geodes[randomGeode.id] = (state.geodes[randomGeode.id] || 0) + 1;
-      rewardText += ` + ${randomGeode.name}`;
+      rewardText = `🎰 Награда: +${xpGained} EXP и ${randomGeode.name}!`;
     }
   }
 
@@ -664,27 +678,27 @@ function launchUpgradeWheel(sacrificeId, targetId, chance) {
   cleanupGame();
   currentGame = 'upgrade';
 
-  // Шаг 1: СНАЧАЛА определяем исход
+  // Шаг 1: СНАЧАЛА определяем исход (ДО анимации)
   const isSuccess = Math.random() * 100 < chance;
   const successAngleDeg = (chance / 100) * 360;
 
-  // Шаг 2: Вычисляем финальный угол СТРОГО внутри нужного сектора
+  // Шаг 2: Вычисляем targetAngle СТРОГО внутри нужного сектора
   let stopAngleDeg;
   if (isSuccess) {
-    // Зелёная зона: от 0 до successAngleDeg (отсчёт от -90° — верх стрелки)
-    const minGreen = 5;
-    const maxGreen = successAngleDeg - 5;
-    stopAngleDeg = minGreen + Math.random() * Math.max(0, maxGreen - minGreen);
+    // Зелёная зона: от 3° до (successAngleDeg - 3°)
+    const minGreen = 3;
+    const maxGreen = Math.max(minGreen + 1, successAngleDeg - 3);
+    stopAngleDeg = minGreen + Math.random() * (maxGreen - minGreen);
   } else {
-    // Красная зона: от successAngleDeg до 360
-    const minRed = successAngleDeg + 5;
-    const maxRed = 355;
+    // Красная зона: от (successAngleDeg + 3°) до 357°
+    const minRed = Math.min(357, successAngleDeg + 3);
+    const maxRed = 357;
     stopAngleDeg = minRed + Math.random() * Math.max(0, maxRed - minRed);
   }
 
-  // Преобразуем в угол поворота колеса (стрелка сверху — 0° на колесе)
-  const totalRotation = 720 + Math.random() * 1440;
-  const targetRotation = totalRotation + (360 - stopAngleDeg);
+  // Шаг 3: Полный оборот (несколько кругов) + точный угол остановки
+  const fullRotations = (2 + Math.floor(Math.random() * 3)) * 360;
+  const targetRotation = fullRotations + (360 - stopAngleDeg);
 
   gameState = {
     sacrificeId,
@@ -725,20 +739,21 @@ function spinWheel() {
 
     const elapsed = Date.now() - gameState.spinStart;
     const progress = Math.min(1, elapsed / gameState.spinDuration);
-    // Плавное замедление cubic-bezier
+    // Плавное замедление cubic-bezier (ease-out)
     const eased = 1 - Math.pow(1 - progress, 3);
 
+    // Шаг 4: Интерполяция от 0 до targetRotation
     gameState.rotation = eased * gameState.targetRotation;
     renderUpgradeWheel();
 
     if (progress < 1) {
       animationId = requestAnimationFrame(animateSpin);
     } else {
-      // Шаг 3: Фиксируем колесо РОВНО на вычисленном угле
+      // Шаг 5: Фиксируем РОВНО на вычисленном targetRotation
       gameState.rotation = gameState.targetRotation;
       renderUpgradeWheel();
       gameState.result = gameState.isSuccess;
-      setTimeout(() => finishUpgrade(), 600);
+      setTimeout(() => finishUpgrade(), 800);
     }
   }
 
