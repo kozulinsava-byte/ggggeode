@@ -1,5 +1,5 @@
 // ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
-import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS, MINI_GAMES_CONFIG } from './config.js';
+import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS } from './config.js';
 
 // ========== ЗАГЛУШКИ UI ФУНКЦИЙ ==========
 let _showToast = null;
@@ -56,12 +56,7 @@ export let playerState = {
   activeQuests: [],
   questRefreshTime: null,
   completedQuests: [],
-  questCooldownEnd: null,
-  // 🆕 Рекорды мини-игр
-  miniGameRecords: {
-    quench: 0,
-    stack: 0
-  }
+  questCooldownEnd: null
 };
 
 export function getPlayerState() {
@@ -92,37 +87,6 @@ export const meteorStormState = {
   cooldownDuration: 60000
 };
 
-// 🆕 СОСТОЯНИЕ МИНИ-ИГР
-export const miniGameState = {
-  quench: {
-    active: false,
-    score: 0,
-    position: 0.5,
-    speed: 1.0,
-    gameLoop: null,
-    lastTime: null
-  },
-  stack: {
-    active: false,
-    score: 0,
-    blockWidth: 100,
-    currentX: 0,
-    direction: 1,
-    speed: 2.0,
-    blocks: [],
-    gameLoop: null,
-    falling: false
-  },
-  upgrade: {
-    active: false,
-    sacrificeIngotId: null,
-    targetIngotId: null,
-    chance: 0,
-    spinning: false,
-    result: null
-  }
-};
-
 export function sendBotNotification(message) {
   console.log('[StarForge Bot Notification]', message);
 }
@@ -149,9 +113,7 @@ const activeTimers = {
   signal: null,
   signalTimeout: null,
   meteorSpawn: null,
-  meteorRound: null,
-  quench: null,
-  stack: null
+  meteorRound: null
 };
 
 function clearTimer(timerName) {
@@ -1260,447 +1222,6 @@ export function buyMeteorGeode(shopItemId) {
   return true;
 }
 
-// 🆕 ========== МИНИ-ИГРА №1: ЗАКАЛКА (QUENCH) ==========
-export function startQuenchGame() {
-  if (miniGameState.quench.active) return;
-  
-  const config = MINI_GAMES_CONFIG.quench;
-  if (playerState.player.level < config.reqLevel) {
-    if (_showToast) _showToast(`Требуется ${config.reqLevel} уровень!`, '🔒');
-    return;
-  }
-  
-  miniGameState.quench.active = true;
-  miniGameState.quench.score = 0;
-  miniGameState.quench.position = 0.5;
-  miniGameState.quench.speed = config.initialSpeed;
-  miniGameState.quench.lastTime = Date.now();
-  
-  const overlay = document.getElementById('quenchGameOverlay');
-  const scoreEl = document.getElementById('quenchScore');
-  const topPlate = document.getElementById('quenchTopPlate');
-  const bottomPlate = document.getElementById('quenchBottomPlate');
-  const ingotEl = document.getElementById('quenchIngot');
-  
-  if (overlay) overlay.classList.add('active');
-  if (scoreEl) scoreEl.textContent = '0';
-  
-  const gameLoop = () => {
-    if (!miniGameState.quench.active) return;
-    
-    const now = Date.now();
-    const dt = (now - miniGameState.quench.lastTime) / 1000;
-    miniGameState.quench.lastTime = now;
-    
-    miniGameState.quench.position -= miniGameState.quench.speed * dt;
-    miniGameState.quench.position = Math.max(0, Math.min(1, miniGameState.quench.position));
-    
-    miniGameState.quench.speed += config.speedIncrement * dt;
-    
-    if (miniGameState.quench.position <= config.dangerZone || miniGameState.quench.position >= 1 - config.dangerZone) {
-      if (overlay) overlay.classList.add('danger');
-    } else {
-      if (overlay) overlay.classList.remove('danger');
-    }
-    
-    if (miniGameState.quench.position <= 0 || miniGameState.quench.position >= 1) {
-      endQuenchGame();
-      return;
-    }
-    
-    miniGameState.quench.score++;
-    if (scoreEl) scoreEl.textContent = miniGameState.quench.score;
-    
-    if (topPlate) topPlate.style.top = (miniGameState.quench.position * 40) + '%';
-    if (bottomPlate) bottomPlate.style.bottom = (miniGameState.quench.position * 40) + '%';
-    
-    if (ingotEl) {
-      ingotEl.style.transform = `scaleX(${0.5 + miniGameState.quench.position * 0.5}) scaleY(${0.5 + (1 - miniGameState.quench.position) * 0.5})`;
-    }
-    
-    requestAnimationFrame(gameLoop);
-  };
-  
-  miniGameState.quench.gameLoop = requestAnimationFrame(gameLoop);
-  
-  const handleTap = (e) => {
-    e.preventDefault();
-    if (!miniGameState.quench.active) return;
-    miniGameState.quench.position += config.tapPushback;
-    miniGameState.quench.position = Math.min(1, miniGameState.quench.position);
-    
-    const sparkContainer = document.getElementById('quenchSparkContainer');
-    if (sparkContainer) {
-      for (let i = 0; i < 8; i++) {
-        const spark = document.createElement('div');
-        spark.className = 'quench-spark';
-        spark.style.left = (40 + Math.random() * 20) + '%';
-        spark.style.top = (40 + Math.random() * 20) + '%';
-        spark.style.setProperty('--angle', (i * 45 + Math.random() * 20) + 'deg');
-        spark.style.setProperty('--distance', (30 + Math.random() * 50) + 'px');
-        sparkContainer.appendChild(spark);
-        setTimeout(() => spark.remove(), 600);
-      }
-    }
-  };
-  
-  if (overlay) overlay.addEventListener('click', handleTap);
-  miniGameState.quench._handleTap = handleTap;
-}
-
-function endQuenchGame() {
-  miniGameState.quench.active = false;
-  if (miniGameState.quench.gameLoop) {
-    cancelAnimationFrame(miniGameState.quench.gameLoop);
-    miniGameState.quench.gameLoop = null;
-  }
-  
-  const overlay = document.getElementById('quenchGameOverlay');
-  if (overlay) {
-    overlay.classList.remove('active', 'danger');
-    if (miniGameState.quench._handleTap) {
-      overlay.removeEventListener('click', miniGameState.quench._handleTap);
-      miniGameState.quench._handleTap = null;
-    }
-  }
-  
-  const config = MINI_GAMES_CONFIG.quench;
-  const score = miniGameState.quench.score;
-  const rewards = Math.floor(score / config.scoreInterval);
-  
-  if (rewards > 0) {
-    const xpGained = rewards * config.xpPerScore;
-    addXP(xpGained);
-    
-    const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
-    for (let i = 0; i < rewards; i++) {
-      const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
-      playerState.ingots[randomIngot.id] = (playerState.ingots[randomIngot.id] || 0) + 1;
-      playerState.minedStats[randomIngot.id] = (playerState.minedStats[randomIngot.id] || 0) + 1;
-      playerState.player.totalIngots++;
-    }
-    
-    if (_showToast) _showToast(`Закалка завершена! ${rewards} наград, +${xpGained} XP`, '🔨');
-  }
-  
-  const isNewRecord = score > (playerState.miniGameRecords?.quench || 0);
-  if (isNewRecord) {
-    if (!playerState.miniGameRecords) playerState.miniGameRecords = { quench: 0, stack: 0 };
-    playerState.miniGameRecords.quench = score;
-    playerState.geodes[config.bonusGeodeForRecord] = (playerState.geodes[config.bonusGeodeForRecord] || 0) + 1;
-    if (_showToast) _showToast(`Новый рекорд: ${score}! +1 ${CONFIG_GEODES[config.bonusGeodeForRecord].name}`, '🏆');
-  }
-  
-  saveGame();
-  if (_renderCurrentTab) _renderCurrentTab();
-}
-
-export function getQuenchRecord() {
-  return playerState.miniGameRecords?.quench || 0;
-}
-
-// 🆕 ========== МИНИ-ИГРА №2: ИДЕАЛЬНАЯ СТОПКА (STACK) ==========
-export function startStackGame() {
-  if (miniGameState.stack.active) return;
-  
-  const config = MINI_GAMES_CONFIG.stack;
-  if (playerState.player.level < config.reqLevel) {
-    if (_showToast) _showToast(`Требуется ${config.reqLevel} уровень!`, '🔒');
-    return;
-  }
-  
-  miniGameState.stack.active = true;
-  miniGameState.stack.score = 0;
-  miniGameState.stack.blockWidth = config.baseBlockWidth;
-  miniGameState.stack.currentX = 0;
-  miniGameState.stack.direction = 1;
-  miniGameState.stack.speed = config.initialSpeed;
-  miniGameState.stack.blocks = [];
-  miniGameState.stack.falling = false;
-  
-  const overlay = document.getElementById('stackGameOverlay');
-  const scoreEl = document.getElementById('stackScore');
-  const gameArea = document.getElementById('stackGameArea');
-  const movingBlock = document.getElementById('stackMovingBlock');
-  const stackContainer = document.getElementById('stackContainer');
-  
-  if (overlay) overlay.classList.add('active');
-  if (scoreEl) scoreEl.textContent = '0';
-  if (stackContainer) stackContainer.innerHTML = '';
-  if (movingBlock) movingBlock.style.width = config.baseBlockWidth + 'px';
-  
-  const gameLoop = () => {
-    if (!miniGameState.stack.active || miniGameState.stack.falling) return;
-    
-    const areaWidth = gameArea ? gameArea.clientWidth : 300;
-    const maxX = areaWidth - miniGameState.stack.blockWidth;
-    
-    miniGameState.stack.currentX += miniGameState.stack.speed * miniGameState.stack.direction;
-    
-    if (miniGameState.stack.currentX >= maxX) {
-      miniGameState.stack.currentX = maxX;
-      miniGameState.stack.direction = -1;
-    } else if (miniGameState.stack.currentX <= 0) {
-      miniGameState.stack.currentX = 0;
-      miniGameState.stack.direction = 1;
-    }
-    
-    if (movingBlock) {
-      movingBlock.style.left = miniGameState.stack.currentX + 'px';
-      movingBlock.style.width = miniGameState.stack.blockWidth + 'px';
-    }
-    
-    requestAnimationFrame(gameLoop);
-  };
-  
-  miniGameState.stack.gameLoop = requestAnimationFrame(gameLoop);
-  
-  const handleTap = (e) => {
-    e.preventDefault();
-    if (!miniGameState.stack.active || miniGameState.stack.falling) return;
-    dropBlock();
-  };
-  
-  if (overlay) overlay.addEventListener('click', handleTap);
-  miniGameState.stack._handleTap = handleTap;
-}
-
-function dropBlock() {
-  miniGameState.stack.falling = true;
-  
-  const config = MINI_GAMES_CONFIG.stack;
-  const movingBlock = document.getElementById('stackMovingBlock');
-  const stackContainer = document.getElementById('stackContainer');
-  const scoreEl = document.getElementById('stackScore');
-  
-  if (!movingBlock || !stackContainer) return;
-  
-  const currentX = miniGameState.stack.currentX;
-  const blockWidth = miniGameState.stack.blockWidth;
-  const prevBlock = miniGameState.stack.blocks.length > 0 ? miniGameState.stack.blocks[miniGameState.stack.blocks.length - 1] : null;
-  
-  let newWidth = blockWidth;
-  let newX = currentX;
-  let perfect = false;
-  
-  if (prevBlock) {
-    const overlapLeft = Math.max(prevBlock.x, currentX);
-    const overlapRight = Math.min(prevBlock.x + prevBlock.width, currentX + blockWidth);
-    newWidth = overlapRight - overlapLeft;
-    newX = overlapLeft;
-    
-    if (newWidth <= 0) {
-      endStackGame();
-      return;
-    }
-    
-    if (Math.abs(currentX - prevBlock.x) < 3 && Math.abs(blockWidth - prevBlock.width) < 3) {
-      perfect = true;
-    }
-  }
-  
-  const placedBlock = document.createElement('div');
-  placedBlock.className = 'stack-block placed';
-  placedBlock.style.left = newX + 'px';
-  placedBlock.style.width = newWidth + 'px';
-  placedBlock.style.bottom = (miniGameState.stack.blocks.length * 24) + 'px';
-  placedBlock.style.height = '24px';
-  placedBlock.style.background = perfect 
-    ? 'linear-gradient(135deg, #FFD700, #FFA500)' 
-    : 'linear-gradient(135deg, #B87333, #8B4513)';
-  
-  if (perfect) {
-    placedBlock.style.boxShadow = '0 0 15px rgba(255,215,0,0.6)';
-  }
-  
-  stackContainer.appendChild(placedBlock);
-  
-  miniGameState.stack.blocks.push({ x: newX, width: newWidth });
-  miniGameState.stack.blockWidth = Math.max(newWidth, config.minBlockWidth);
-  miniGameState.stack.score++;
-  miniGameState.stack.speed += config.speedIncrement;
-  miniGameState.stack.currentX = 0;
-  miniGameState.stack.direction = 1;
-  miniGameState.stack.falling = false;
-  
-  if (scoreEl) scoreEl.textContent = miniGameState.stack.score;
-  
-  if (movingBlock) {
-    movingBlock.style.width = miniGameState.stack.blockWidth + 'px';
-    movingBlock.style.left = '0px';
-  }
-}
-
-function endStackGame() {
-  miniGameState.stack.active = false;
-  if (miniGameState.stack.gameLoop) {
-    cancelAnimationFrame(miniGameState.stack.gameLoop);
-    miniGameState.stack.gameLoop = null;
-  }
-  
-  const overlay = document.getElementById('stackGameOverlay');
-  if (overlay) {
-    overlay.classList.remove('active');
-    if (miniGameState.stack._handleTap) {
-      overlay.removeEventListener('click', miniGameState.stack._handleTap);
-      miniGameState.stack._handleTap = null;
-    }
-  }
-  
-  const config = MINI_GAMES_CONFIG.stack;
-  const score = miniGameState.stack.score;
-  
-  const xpGained = score * config.xpPerBlock + Math.floor(score / 10) * config.xpBonusPer10;
-  const meteorShardsGained = Math.floor(score / 5) * config.meteorShardsPer5;
-  
-  if (xpGained > 0) {
-    addXP(xpGained);
-    if (_showToast) _showToast(`Стопка: ${score} блоков! +${xpGained} XP`, '🧱');
-  }
-  
-  if (meteorShardsGained > 0) {
-    playerState.meteorShards += meteorShardsGained;
-    if (_showToast) _showToast(`+${meteorShardsGained} осколков метеоритов!`, '💎');
-  }
-  
-  const isNewRecord = score > (playerState.miniGameRecords?.stack || 0);
-  if (isNewRecord) {
-    if (!playerState.miniGameRecords) playerState.miniGameRecords = { quench: 0, stack: 0 };
-    playerState.miniGameRecords.stack = score;
-    if (_showToast) _showToast(`Новый рекорд в Стопке: ${score}!`, '🏆');
-  }
-  
-  saveGame();
-  if (_renderCurrentTab) _renderCurrentTab();
-}
-
-export function getStackRecord() {
-  return playerState.miniGameRecords?.stack || 0;
-}
-
-// 🆕 ========== МИНИ-ИГРА №3: КУЗНЕЧНЫЙ АПГРЕЙД (UPGRADE) ==========
-export function calculateUpgradeChance(sacrificeId, targetId) {
-  const sacrifice = CONFIG_ITEMS[sacrificeId];
-  const target = CONFIG_ITEMS[targetId];
-  
-  if (!sacrifice || !target) return 0;
-  if (sacrifice.isCollectible || target.isCollectible) return 0;
-  
-  const sacrificeValue = sacrifice.sellValue;
-  const targetValue = target.sellValue;
-  
-  if (targetValue <= sacrificeValue) {
-    return MINI_GAMES_CONFIG.upgrade.maxChance;
-  }
-  
-  const ratio = sacrificeValue / targetValue;
-  const chance = Math.floor(ratio * MINI_GAMES_CONFIG.upgrade.maxChance);
-  
-  return Math.max(MINI_GAMES_CONFIG.upgrade.minChance, Math.min(MINI_GAMES_CONFIG.upgrade.maxChance, chance));
-}
-
-export function startUpgradeGame(sacrificeId, targetId) {
-  if (miniGameState.upgrade.active) return;
-  
-  const config = MINI_GAMES_CONFIG.upgrade;
-  if (playerState.player.level < config.reqLevel) {
-    if (_showToast) _showToast(`Требуется ${config.reqLevel} уровень!`, '🔒');
-    return;
-  }
-  
-  if (sacrificeId === targetId) {
-    if (_showToast) _showToast('Нельзя обменять слиток на такой же!', '⚠️');
-    return;
-  }
-  
-  if (!playerState.ingots[sacrificeId] || playerState.ingots[sacrificeId] <= 0) {
-    if (_showToast) _showToast('У вас нет выбранного слитка для жертвы!', '⚠️');
-    return;
-  }
-  
-  const chance = calculateUpgradeChance(sacrificeId, targetId);
-  
-  miniGameState.upgrade.active = true;
-  miniGameState.upgrade.sacrificeIngotId = sacrificeId;
-  miniGameState.upgrade.targetIngotId = targetId;
-  miniGameState.upgrade.chance = chance;
-  miniGameState.upgrade.spinning = false;
-  miniGameState.upgrade.result = null;
-  
-  import('./ui.js').then(ui => {
-    ui.showUpgradeGameOverlay(sacrificeId, targetId, chance);
-  });
-}
-
-export function spinUpgradeWheel() {
-  if (!miniGameState.upgrade.active || miniGameState.upgrade.spinning) return;
-  
-  miniGameState.upgrade.spinning = true;
-  
-  const chance = miniGameState.upgrade.chance;
-  const isSuccess = Math.random() * 100 < chance;
-  
-  const spinDuration = MINI_GAMES_CONFIG.upgrade.spinDuration * 1000;
-  const totalRotation = 720 + Math.random() * 1080;
-  const targetAngle = isSuccess 
-    ? (chance / 100) * 360 * 0.5
-    : (chance / 100) * 360 + (1 - chance / 100) * 360 * 0.5;
-  const finalRotation = totalRotation + targetAngle;
-  
-  const wheel = document.getElementById('upgradeWheel');
-  if (wheel) {
-    wheel.style.transition = `transform ${spinDuration}ms cubic-bezier(0.2, 0, 0.1, 1)`;
-    wheel.style.transform = `rotate(${finalRotation}deg)`;
-  }
-  
-  setTimeout(() => {
-    finishUpgradeGame(isSuccess);
-  }, spinDuration + 100);
-}
-
-function finishUpgradeGame(isSuccess) {
-  const sacrificeId = miniGameState.upgrade.sacrificeIngotId;
-  const targetId = miniGameState.upgrade.targetIngotId;
-  
-  if (isSuccess) {
-    playerState.ingots[sacrificeId]--;
-    playerState.ingots[targetId] = (playerState.ingots[targetId] || 0) + 1;
-    playerState.minedStats[targetId] = (playerState.minedStats[targetId] || 0) + 1;
-    playerState.player.totalIngots++;
-    
-    const targetIngot = CONFIG_ITEMS[targetId];
-    if (_showToast) _showToast(`Успех! Получен ${targetIngot.name}!`, targetIngot.icon);
-    sendBotNotification(`🎰 Игрок успешно обменял ${CONFIG_ITEMS[sacrificeId]?.name} на ${targetIngot.name}!`);
-  } else {
-    playerState.ingots[sacrificeId]--;
-    
-    if (_showToast) _showToast(`Неудача! ${CONFIG_ITEMS[sacrificeId]?.name} сгорел в печи.`, '🔥');
-  }
-  
-  saveGame();
-  
-  miniGameState.upgrade.active = false;
-  miniGameState.upgrade.spinning = false;
-  miniGameState.upgrade.result = isSuccess ? 'success' : 'fail';
-  
-  import('./ui.js').then(ui => {
-    ui.showUpgradeResult(isSuccess, sacrificeId, targetId);
-  });
-}
-
-export function closeUpgradeGame() {
-  miniGameState.upgrade.active = false;
-  miniGameState.upgrade.spinning = false;
-  miniGameState.upgrade.sacrificeIngotId = null;
-  miniGameState.upgrade.targetIngotId = null;
-  miniGameState.upgrade.result = null;
-  
-  const overlay = document.getElementById('upgradeGameOverlay');
-  if (overlay) overlay.classList.remove('active');
-  
-  if (_renderCurrentTab) _renderCurrentTab();
-}
-
 // ---------- СИСТЕМА СОХРАНЕНИЙ ----------
 export function saveGame() {
   if (!playerState) return;
@@ -1721,8 +1242,7 @@ export function saveGame() {
       activeQuests: playerState.activeQuests,
       questRefreshTime: playerState.questRefreshTime,
       completedQuests: playerState.completedQuests,
-      questCooldownEnd: playerState.questCooldownEnd,
-      miniGameRecords: playerState.miniGameRecords
+      questCooldownEnd: playerState.questCooldownEnd
     },
     collectibleSerials,
     nextSerial,
@@ -1834,13 +1354,6 @@ function applySaveData(data) {
     playerState.questCooldownEnd = saved.questCooldownEnd;
   }
   
-  if (saved.miniGameRecords && typeof saved.miniGameRecords === 'object') {
-    playerState.miniGameRecords = {
-      quench: saved.miniGameRecords.quench || 0,
-      stack: saved.miniGameRecords.stack || 0
-    };
-  }
-  
   if (data.collectibleSerials) {
     for (let k in data.collectibleSerials) {
       collectibleSerials[k] = data.collectibleSerials[k];
@@ -1886,10 +1399,6 @@ export const saveToLocalStorage = saveGame;
   playerState.questRefreshTime = null;
   playerState.completedQuests = [];
   playerState.questCooldownEnd = null;
-  playerState.miniGameRecords = {
-    quench: d.miniGameRecords?.quench || 0,
-    stack: d.miniGameRecords?.stack || 0
-  };
   
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
