@@ -72,15 +72,15 @@ function setupCanvas() {
   return true;
 }
 
-// 🆕 Универсальный индикатор редкости вместо эмодзи
+// Универсальный индикатор редкости
 function getRarityIndicator(rarityLevel) {
   switch (rarityLevel) {
-    case 'common': return { icon: '⬤', color: '#A0A0A0', name: 'Обычный' };
-    case 'rare': return { icon: '⬤', color: '#4A9CFF', name: 'Редкий' };
-    case 'epic': return { icon: '⬤', color: '#B44AFF', name: 'Эпический' };
-    case 'legendary': return { icon: '⬤', color: '#FFD700', name: 'Легендарный' };
-    case 'collectible': return { icon: '⬤', color: '#FF64FF', name: 'Коллекционный' };
-    default: return { icon: '⬤', color: '#A0A0A0', name: 'Обычный' };
+    case 'common': return { icon: '🔴', color: '#A0A0A0', name: 'Обычный', bg: 'rgba(160,160,160,0.2)' };
+    case 'rare': return { icon: '🔵', color: '#4A9CFF', name: 'Редкий', bg: 'rgba(74,156,255,0.2)' };
+    case 'epic': return { icon: '🟣', color: '#B44AFF', name: 'Эпический', bg: 'rgba(180,74,255,0.2)' };
+    case 'legendary': return { icon: '🟣', color: '#FFD700', name: 'Легендарный', bg: 'rgba(255,215,0,0.2)' };
+    case 'collectible': return { icon: '🟣', color: '#FF64FF', name: 'Коллекционный', bg: 'rgba(255,100,255,0.2)' };
+    default: return { icon: '🔴', color: '#A0A0A0', name: 'Обычный', bg: 'rgba(160,160,160,0.2)' };
   }
 }
 
@@ -108,8 +108,8 @@ export function startQuenchGame() {
     score: 0,
     position: 0.5,
     speed: 0.005,
-    dangerZone: 0.12,
-    redZone: 0.04,
+    greenZone: 0.15,
+    redZone: 0.06,
     tapPushback: 0.07,
     elapsedTime: 0,
     lastTime: Date.now(),
@@ -128,7 +128,7 @@ export function startQuenchGame() {
     gameState.position += gameState.tapPushback;
     gameState.position = Math.min(1, gameState.position);
 
-    // Проверка на попадание в красную зону при отскоке
+    // Проверка на попадание в красные зоны (самые края)
     if (gameState.position >= 1 - gameState.redZone || gameState.position <= gameState.redZone) {
       endQuenchGame(true);
       return;
@@ -170,8 +170,9 @@ export function startQuenchGame() {
     const timeBonus = Math.floor(gameState.elapsedTime / 5);
     gameState.speed = 0.005 * Math.pow(1.18, timeBonus);
 
-    const inDanger = gameState.position <= gameState.dangerZone || gameState.position >= 1 - gameState.dangerZone;
-    gameState.shakeAmount = inDanger ? (1 - gameState.position / gameState.dangerZone) * 3 : 0;
+    const inGreen = gameState.position >= 0.5 - gameState.greenZone && gameState.position <= 0.5 + gameState.greenZone;
+    const inRed = gameState.position <= gameState.redZone || gameState.position >= 1 - gameState.redZone;
+    gameState.shakeAmount = inRed ? 2 : 0;
 
     gameState.sparks = gameState.sparks.filter(s => {
       s.x += s.vx;
@@ -207,34 +208,31 @@ function renderQuench() {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Красные зоны по краям
-  const redZoneHeight = gs.redZone * height;
-  ctx.fillStyle = 'rgba(255, 0, 0, 0.25)';
-  ctx.fillRect(0, 0, width, redZoneHeight);
-  ctx.fillRect(0, height - redZoneHeight, width, redZoneHeight);
-  ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
+  // Красные зоны по САМЫМ КРАЯМ
+  const redZonePx = gs.redZone * height;
+  ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+  ctx.fillRect(0, 0, width, redZonePx);
+  ctx.fillRect(0, height - redZonePx, width, redZonePx);
+  ctx.strokeStyle = 'rgba(255, 60, 60, 0.8)';
   ctx.lineWidth = 2;
-  ctx.setLineDash([4, 4]);
   ctx.beginPath();
-  ctx.moveTo(0, redZoneHeight);
-  ctx.lineTo(width, redZoneHeight);
+  ctx.moveTo(0, redZonePx);
+  ctx.lineTo(width, redZonePx);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(0, height - redZoneHeight);
-  ctx.lineTo(width, height - redZoneHeight);
+  ctx.moveTo(0, height - redZonePx);
+  ctx.lineTo(width, height - redZonePx);
   ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.lineWidth = 1;
 
-  // Зона идеального удара
-  const zoneHeight = 30;
-  const zoneY = height / 2 - zoneHeight / 2;
-  ctx.fillStyle = 'rgba(80, 200, 120, 0.15)';
-  ctx.fillRect(width * 0.05, zoneY, width * 0.9, zoneHeight);
-  ctx.strokeStyle = 'rgba(80, 200, 120, 0.6)';
+  // ЗЕЛЁНАЯ ЗОНА строго по центру
+  const greenZonePx = gs.greenZone * height;
+  const greenY = height / 2 - greenZonePx / 2;
+  ctx.fillStyle = 'rgba(80, 200, 120, 0.2)';
+  ctx.fillRect(width * 0.05, greenY, width * 0.9, greenZonePx);
+  ctx.strokeStyle = 'rgba(80, 200, 120, 0.7)';
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 4]);
-  ctx.strokeRect(width * 0.05, zoneY, width * 0.9, zoneHeight);
+  ctx.strokeRect(width * 0.05, greenY, width * 0.9, greenZonePx);
   ctx.setLineDash([]);
   ctx.lineWidth = 1;
 
@@ -368,7 +366,6 @@ export function startStackGame() {
   const baseY = canvas.height - 30;
   const baseSpeed = 3.0;
 
-  // Случайная начальная сторона
   const randomDirection = Math.random() > 0.5 ? 1 : -1;
 
   gameState = {
@@ -478,7 +475,6 @@ function placeBlock() {
   gameState.score++;
   gameState.speed = gameState.baseSpeed + Math.random() * 2.0 + gameState.score * 0.15;
 
-  // Случайная сторона для следующего блока
   gameState.direction = Math.random() > 0.5 ? 1 : -1;
   gameState.currentX = gameState.direction === 1 ? 0 : canvas.width - gameState.blockWidth;
 
@@ -493,14 +489,12 @@ function renderStack() {
   const { width, height } = canvas;
   const gs = gameState;
 
-  // Фон
   const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
   bgGrad.addColorStop(0, '#1a1a2e');
   bgGrad.addColorStop(1, '#0a0a14');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Score — поверх всего
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.fillRect(width / 2 - 60, 10, 120, 40);
   
@@ -509,7 +503,6 @@ function renderStack() {
   ctx.textAlign = 'center';
   ctx.fillText(`🏆 Башня: ${gs.score}`, width / 2, 38);
 
-  // Основание
   const baseY = gs.baseY;
   ctx.fillStyle = '#455A64';
   ctx.shadowColor = 'rgba(96, 125, 139, 0.4)';
@@ -517,13 +510,11 @@ function renderStack() {
   ctx.fillRect(width * 0.05, baseY, width * 0.9, 12);
   ctx.shadowBlur = 0;
 
-  // Размещённые блоки
   gs.blocks.forEach((block, index) => {
     const blockY = baseY - (index + 1) * gs.blockHeight;
     drawBlock(block.x, blockY, block.width, gs.blockHeight);
   });
 
-  // Падающий блок
   if (gs.falling && gs.fallBlock) {
     const fb = gs.fallBlock;
     const currentY = gs.fallStartY + (gs.fallTargetY - gs.fallStartY) * gs.fallProgress;
@@ -531,7 +522,6 @@ function renderStack() {
     drawBlock(fb.x, currentY, fb.width, gs.blockHeight);
   }
 
-  // Движущийся блок
   if (!gs.falling) {
     const movingY = gs.movingY;
     const blockGrad = ctx.createLinearGradient(gs.currentX, movingY, gs.currentX, movingY + gs.blockHeight);
@@ -623,17 +613,35 @@ export function startUpgradeGame() {
 }
 
 function showUpgradeSelectionModal(availableIngots) {
-  let sacrificeOptions = '';
+  // Список жертв
+  let sacrificeItemsHtml = '';
   availableIngots.forEach(({ id, count, ingot }) => {
     const indicator = getRarityIndicator(ingot.rarityLevel);
-    sacrificeOptions += `<option value="${id}">${indicator.icon} ${ingot.name} (${count} шт.) — Ценность: ${ingot.sellValue}</option>`;
+    sacrificeItemsHtml += `
+      <div class="upgrade-ingot-item" data-sacrifice="${id}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:${indicator.bg}; border-radius:12px; cursor:pointer; margin-bottom:6px; transition:all 0.2s;">
+        <span style="font-size:18px;">${indicator.icon}</span>
+        <div style="flex:1; text-align:left;">
+          <div style="font-weight:600; font-size:13px; color:#fff;">${ingot.name}</div>
+          <div style="font-size:10px; color:rgba(255,255,255,0.5);">${count} шт. · Ценность: ${ingot.sellValue}</div>
+        </div>
+      </div>
+    `;
   });
 
-  let targetOptions = '';
+  // Список целей
+  let targetItemsHtml = '';
   Object.entries(CONFIG_ITEMS).forEach(([id, ingot]) => {
     if (!ingot.isCollectible) {
       const indicator = getRarityIndicator(ingot.rarityLevel);
-      targetOptions += `<option value="${id}">${indicator.icon} ${ingot.name} (${indicator.name}) — Ценность: ${ingot.sellValue}</option>`;
+      targetItemsHtml += `
+        <div class="upgrade-ingot-item" data-target="${id}" style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:${indicator.bg}; border-radius:12px; cursor:pointer; margin-bottom:6px; transition:all 0.2s;">
+          <span style="font-size:18px;">${indicator.icon}</span>
+          <div style="flex:1; text-align:left;">
+            <div style="font-weight:600; font-size:13px; color:#fff;">${ingot.name}</div>
+            <div style="font-size:10px; color:rgba(255,255,255,0.5);">${indicator.name} · Ценность: ${ingot.sellValue}</div>
+          </div>
+        </div>
+      `;
     }
   });
 
@@ -642,21 +650,21 @@ function showUpgradeSelectionModal(availableIngots) {
       <div class="modal-title">🎰 Кузнечный Апгрейд</div>
       <button class="modal-close" onclick="document.dispatchEvent(new Event('closeModal'))">✕</button>
     </div>
-    <div class="modal-content">
-      <div class="modal-description">Выбери слиток-жертву и целевой слиток. Шанс зависит от разницы в ценности!</div>
+    <div class="modal-content" style="text-align:left;">
+      <div class="modal-description" style="text-align:center;">Выбери жертву и цель. Шанс зависит от разницы в ценности!</div>
       
-      <div style="text-align: left; margin-bottom: 16px;">
-        <label style="font-weight: 700; font-size: 13px; color: var(--text-secondary);">Жертва (будет потрачена):</label>
-        <select id="upgradeSacrifice" style="width: 100%; padding: 10px; background: #1a1a2e; color: #ffffff; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; margin-top: 6px; font-size: 13px;">
-          ${sacrificeOptions}
-        </select>
+      <div style="margin-bottom:12px;">
+        <div style="font-weight:700; font-size:13px; color:var(--text-secondary); margin-bottom:6px;">🔥 Жертва: <span id="selectedSacrificeName" style="color:#FF4444;">не выбрана</span></div>
+        <div style="max-height:160px; overflow-y:auto; background:rgba(0,0,0,0.3); border-radius:16px; padding:8px; border:1px solid var(--card-border);" id="sacrificeList">
+          ${sacrificeItemsHtml}
+        </div>
       </div>
       
-      <div style="text-align: left; margin-bottom: 16px;">
-        <label style="font-weight: 700; font-size: 13px; color: var(--text-secondary);">Цель (хочешь получить):</label>
-        <select id="upgradeTarget" style="width: 100%; padding: 10px; background: #1a1a2e; color: #ffffff; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; margin-top: 6px; font-size: 13px;">
-          ${targetOptions}
-        </select>
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:700; font-size:13px; color:var(--text-secondary); margin-bottom:6px;">🎯 Цель: <span id="selectedTargetName" style="color:#50C878;">не выбрана</span></div>
+        <div style="max-height:160px; overflow-y:auto; background:rgba(0,0,0,0.3); border-radius:16px; padding:8px; border:1px solid var(--card-border);" id="targetList">
+          ${targetItemsHtml}
+        </div>
       </div>
       
       <div id="upgradeChanceDisplay2" style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 14px; margin-bottom: 16px; text-align: center;">
@@ -672,30 +680,44 @@ function showUpgradeSelectionModal(availableIngots) {
     ui.openModal(html);
 
     setTimeout(() => {
-      const sacrificeSelect = document.getElementById('upgradeSacrifice');
-      const targetSelect = document.getElementById('upgradeTarget');
-      const chanceDisplay = document.getElementById('upgradeChanceValue2');
+      let selectedSacrifice = null;
+      let selectedTarget = null;
+
+      document.querySelectorAll('[data-sacrifice]').forEach(el => {
+        el.addEventListener('click', () => {
+          document.querySelectorAll('[data-sacrifice]').forEach(e => e.style.border = 'none');
+          el.style.border = '2px solid #FFD700';
+          selectedSacrifice = el.dataset.sacrifice;
+          document.getElementById('selectedSacrificeName').textContent = CONFIG_ITEMS[selectedSacrifice]?.name || 'выбрана';
+          updateChance();
+        });
+      });
+
+      document.querySelectorAll('[data-target]').forEach(el => {
+        el.addEventListener('click', () => {
+          document.querySelectorAll('[data-target]').forEach(e => e.style.border = 'none');
+          el.style.border = '2px solid #FFD700';
+          selectedTarget = el.dataset.target;
+          document.getElementById('selectedTargetName').textContent = CONFIG_ITEMS[selectedTarget]?.name || 'выбрана';
+          updateChance();
+        });
+      });
 
       function updateChance() {
-        const sacrificeId = sacrificeSelect.value;
-        const targetId = targetSelect.value;
-        if (sacrificeId && targetId) {
-          const chance = calculateUpgradeChance(sacrificeId, targetId);
-          chanceDisplay.textContent = chance + '%';
-          chanceDisplay.style.color = chance >= 50 ? '#50C878' : chance >= 20 ? '#FFA500' : '#FF4444';
+        if (selectedSacrifice && selectedTarget) {
+          const chance = calculateUpgradeChance(selectedSacrifice, selectedTarget);
+          const display = document.getElementById('upgradeChanceValue2');
+          display.textContent = chance + '%';
+          display.style.color = chance >= 50 ? '#50C878' : chance >= 20 ? '#FFA500' : '#FF4444';
         }
       }
 
-      sacrificeSelect.addEventListener('change', updateChance);
-      targetSelect.addEventListener('change', updateChance);
-      updateChance();
-
       document.getElementById('upgradeStartBtn2').addEventListener('click', () => {
-        const sacrificeId = sacrificeSelect.value;
-        const targetId = targetSelect.value;
-        if (sacrificeId && targetId) {
+        if (selectedSacrifice && selectedTarget) {
           ui.closeModal();
-          launchUpgradeWheel(sacrificeId, targetId, calculateUpgradeChance(sacrificeId, targetId));
+          launchUpgradeWheel(selectedSacrifice, selectedTarget, calculateUpgradeChance(selectedSacrifice, selectedTarget));
+        } else {
+          ui.showToast('Выбери жертву и цель!', '⚠️');
         }
       });
     }, 10);
@@ -905,7 +927,7 @@ function finishUpgrade() {
     state.player.totalIngots++;
 
     const targetIngot = CONFIG_ITEMS[targetId];
-    import('./ui.js').then(ui => ui.showToast(`Успех! Получен ${targetIngot.name}!`, '⬤'));
+    import('./ui.js').then(ui => ui.showToast(`Успех! Получен ${targetIngot.name}!`, '🟣'));
     showResult('🎉 Успех!', 0, `${CONFIG_ITEMS[sacrificeId]?.name} → ${targetIngot.name}`);
   } else {
     state.ingots[sacrificeId]--;
