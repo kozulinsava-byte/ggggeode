@@ -108,9 +108,10 @@ export function startQuenchGame() {
     score: 0,
     topPlatePos: 0.05,
     bottomPlatePos: 0.95,
+    topPlateTarget: 0.05,
+    bottomPlateTarget: 0.95,
     speed: 0.004,
     tapPushback: 0.08,
-    tapCooldown: 0,
     elapsedTime: 0,
     lastTime: Date.now(),
     ingotHeight: 60,
@@ -118,7 +119,10 @@ export function startQuenchGame() {
     shakeAmount: 0,
     sparks: [],
     crashZoneCenter: 0.08,
-    crashZoneEdge: 0.04
+    crashZoneEdge: 0.04,
+    countdown: 3,
+    countdownStart: Date.now(),
+    gameStarted: false
   };
 
   overlay.classList.add('active');
@@ -126,12 +130,13 @@ export function startQuenchGame() {
   const handleTap = (e) => {
     e.preventDefault();
     if (currentGame !== 'quench') return;
+    if (!gameState.gameStarted) return;
 
-    gameState.topPlatePos -= gameState.tapPushback;
-    gameState.bottomPlatePos += gameState.tapPushback;
+    gameState.topPlateTarget -= gameState.tapPushback;
+    gameState.bottomPlateTarget += gameState.tapPushback;
 
-    gameState.topPlatePos = Math.max(0, gameState.topPlatePos);
-    gameState.bottomPlatePos = Math.min(1, gameState.bottomPlatePos);
+    gameState.topPlateTarget = Math.max(0, gameState.topPlateTarget);
+    gameState.bottomPlateTarget = Math.min(1, gameState.bottomPlateTarget);
 
     for (let i = 0; i < 5; i++) {
       gameState.sparks.push({
@@ -155,6 +160,35 @@ export function startQuenchGame() {
     const dt = (now - gameState.lastTime) / 1000;
     gameState.lastTime = now;
 
+    // Обратный отсчёт
+    if (!gameState.gameStarted) {
+      const elapsed = (now - gameState.countdownStart) / 1000;
+      gameState.countdown = Math.max(0, 3 - Math.floor(elapsed));
+
+      if (elapsed >= 3) {
+        gameState.gameStarted = true;
+        gameState.countdown = 0;
+        gameState.lastTime = Date.now();
+      }
+
+      renderQuench();
+      animationId = requestAnimationFrame(gameLoop);
+      return;
+    }
+
+    // Плавное движение плит к целевым позициям
+    const lerpSpeed = 12;
+    gameState.topPlatePos += (gameState.topPlateTarget - gameState.topPlatePos) * lerpSpeed * dt;
+    gameState.bottomPlatePos += (gameState.bottomPlateTarget - gameState.bottomPlatePos) * lerpSpeed * dt;
+
+    // Автоматическое сжатие
+    gameState.topPlateTarget += gameState.speed * dt * 60;
+    gameState.bottomPlateTarget -= gameState.speed * dt * 60;
+
+    gameState.topPlateTarget = Math.min(1, gameState.topPlateTarget);
+    gameState.bottomPlateTarget = Math.max(0, gameState.bottomPlateTarget);
+
+    // Двигаем реальные позиции к сжатию
     gameState.topPlatePos += gameState.speed * dt * 60;
     gameState.bottomPlatePos -= gameState.speed * dt * 60;
 
@@ -203,6 +237,29 @@ function renderQuench() {
 
   const { width, height } = canvas;
   const gs = gameState;
+
+  // Если идёт отсчёт — показываем только его
+  if (!gs.gameStarted) {
+    ctx.fillStyle = '#0a0a0c';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 64px Unbounded, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (gs.countdown > 0) {
+      ctx.fillText(gs.countdown, width / 2, height / 2 - 20);
+    } else {
+      ctx.fillText('ЗАКАЛКА!', width / 2, height / 2 - 20);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = 'bold 16px Montserrat, sans-serif';
+    ctx.fillText('Приготовься...', width / 2, height / 2 + 40);
+
+    return;
+  }
 
   const shakeX = (Math.random() - 0.5) * gs.shakeAmount * 2;
   const shakeY = (Math.random() - 0.5) * gs.shakeAmount * 2;
@@ -277,7 +334,7 @@ function renderQuench() {
   const ingotCenterY = (topY + bottomY) / 2;
   const ingotScale = Math.max(0.3, (bottomY - topY) / 200);
   const ingotW = gs.ingotWidth * ingotScale;
-  const ingotH = Math.min(gs.ingotHeight, (bottomY - topY - 20));
+  const ingotH = Math.min(gs.ingotHeight, Math.max(4, bottomY - topY - 20));
   const ingotX = width / 2 - ingotW / 2;
   const ingotY = ingotCenterY - ingotH / 2;
 
@@ -313,18 +370,15 @@ function renderQuench() {
   ctx.shadowBlur = 0;
 
   // Score — поверх всех объектов
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-  ctx.fillRect(width / 2 - 55, height / 2 - 45, 110, 55);
-
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 13px Unbounded, sans-serif';
+  ctx.font = 'bold 14px Unbounded, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('SCORE', width / 2, height / 2 - 28);
+  ctx.fillText('SCORE', width / 2, 26);
 
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 42px Unbounded, sans-serif';
-  ctx.fillText(gs.score, width / 2, height / 2 + 10);
+  ctx.font = 'bold 48px Unbounded, sans-serif';
+  ctx.fillText(gs.score, width / 2, 64);
 
   ctx.restore();
 }
@@ -337,33 +391,32 @@ function endQuenchGame(reason) {
 
   if (reason === 'crushed') {
     title = 'Слиток раздавлен!';
-    rewardText = '💥 Плиты столкнулись в центре!';
   } else if (reason === 'broken') {
     title = 'Пресс сломан!';
-    rewardText = '⚡ Перегрев! Плиты ушли за пределы!';
-  } else {
-    const rewards = Math.floor(score / 200);
+  }
 
-    if (rewards > 0) {
-      const xpGained = rewards * 30;
-      addXP(xpGained);
+  // ВСЕГДА выдаём награды за очки, независимо от причины проигрыша
+  const rewards = Math.floor(score / 200);
 
-      const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
+  if (rewards > 0) {
+    const xpGained = rewards * 30;
+    addXP(xpGained);
 
-      for (let i = 0; i < rewards; i++) {
-        const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
-        state.ingots[randomIngot.id] = (state.ingots[randomIngot.id] || 0) + 1;
-        state.minedStats[randomIngot.id] = (state.minedStats[randomIngot.id] || 0) + 1;
-        state.player.totalIngots++;
+    const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
 
-        rewardText += `Добавлен слиток: ${randomIngot.name}!\n`;
-      }
+    for (let i = 0; i < rewards; i++) {
+      const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
+      state.ingots[randomIngot.id] = (state.ingots[randomIngot.id] || 0) + 1;
+      state.minedStats[randomIngot.id] = (state.minedStats[randomIngot.id] || 0) + 1;
+      state.player.totalIngots++;
 
-      rewardText += `+${xpGained} XP`;
-      saveGame();
-    } else {
-      rewardText = 'Не набрано очков для награды';
+      rewardText += `Добавлен слиток: ${randomIngot.name}!\n`;
     }
+
+    rewardText += `+${xpGained} XP`;
+    saveGame();
+  } else {
+    rewardText = 'Не набрано очков для награды';
   }
 
   showResult(title, score, rewardText);
@@ -519,9 +572,6 @@ function renderStack() {
   bgGrad.addColorStop(1, '#0a0a14');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.fillRect(width / 2 - 60, 10, 120, 40);
 
   ctx.fillStyle = '#FFD700';
   ctx.font = 'bold 22px Unbounded, sans-serif';
