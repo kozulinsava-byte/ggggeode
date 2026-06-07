@@ -812,7 +812,7 @@ export function updateMeteorShardsDisplay() {
 // ---------- РЕНДЕРИНГ ВКЛАДОК ----------
 export function renderProfileTab() {
   const state = getPlayerState();
-  const userName = window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || 'Старатель';
+  const userName = 'Старатель';
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
   const themeBtnText = currentTheme === 'dark' ? '🌙 Сменить тему (Светлая)' : '☀️ Сменить тему (Тёмная)';
   
