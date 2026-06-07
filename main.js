@@ -2,19 +2,6 @@
 import { initializeState, startGlobalTimer, showSkeleton } from './core.js';
 import { setActiveTab, closeShowcase, closeModal } from './ui.js';
 
-// Тихая инициализация Telegram
-const tg = window.Telegram?.WebApp;
-if (tg) {
-  try {
-    tg.ready();
-    tg.expand();
-    try { tg.setHeaderColor('#000000'); } catch(e) {}
-    try { tg.setBackgroundColor('#000000'); } catch(e) {}
-  } catch(e) {
-    console.warn('[StarForge] Telegram init delayed');
-  }
-}
-
 // Привязка событий
 try {
   document.getElementById('showcaseClose')?.addEventListener('click', closeShowcase);
@@ -147,7 +134,7 @@ async function boot() {
     t.addEventListener('click', () => setActiveTab(t.dataset.tab))
   );
   
-  // 🆕 Привязка закрытия мини-игр
+  // Привязка закрытия мини-игр
   try {
     const minigameCloseBtn = document.getElementById('minigameCloseBtn');
     const minigameOverlay = document.getElementById('minigameOverlay');
