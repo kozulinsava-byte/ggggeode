@@ -341,6 +341,9 @@ function showAdminPanel() {
       <button class="btn" id="adminFillIngots" style="margin-bottom:6px;">✨ +10 всех обычных слитков</button>
       <button class="btn" id="adminFillArtifacts" style="margin-bottom:6px;">💎 +1 всех коллекционных артефактов</button>
       
+      <div style="margin:20px 0; font-weight:600; color:var(--accent-gold);">🧹 Опасные действия</div>
+      <button class="btn" id="adminResetProgress" style="margin-bottom:8px; background: linear-gradient(135deg, #FF4444, #CC0000); box-shadow: 0 4px 20px rgba(255,0,0,0.4);">💀 ПОЛНЫЙ СБРОС ПРОГРЕССА</button>
+      
       <div style="margin:20px 0; font-weight:600; color:var(--accent-gold);">🌐 Глобальные ивенты</div>
       <div style="background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px; margin-bottom: 12px;">
         <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">Текущий ивент:</div>
@@ -428,6 +431,73 @@ function showAdminPanel() {
       saveGame(); 
       showToast('+1 артефакт каждого типа!', '💎'); 
       closeModal(); 
+    });
+    
+    // 🆕 ПОЛНЫЙ СБРОС ПРОГРЕССА
+    document.getElementById('adminResetProgress')?.addEventListener('click', () => {
+      const state = getPlayerState();
+      
+      // Сброс всего состояния
+      state.player.level = 1;
+      state.player.xp = 0;
+      state.player.totalOpened = 0;
+      state.player.totalIngots = 0;
+      state.player.totalArtifacts = 0;
+      
+      // Сброс экспедиций
+      for (let k in state.expeditions) {
+        state.expeditions[k].active = false;
+        state.expeditions[k].endTime = null;
+        state.expeditions[k].scanUsed = false;
+        state.expeditions[k].specialChanceBoost = null;
+      }
+      
+      // Сброс жеод
+      Object.keys(state.geodes).forEach(k => { state.geodes[k] = 0; });
+      state.geodes['mine'] = 2;
+      state.geodes['jungle'] = 1;
+      
+      // Сброс слитков и статистики
+      Object.keys(state.ingots).forEach(k => { state.ingots[k] = 0; });
+      Object.keys(state.minedStats).forEach(k => { state.minedStats[k] = 0; });
+      
+      // Сброс особых жеод и артефактов
+      Object.keys(state.discoveredSpecialGeodes).forEach(k => { state.discoveredSpecialGeodes[k] = false; });
+      state.collectedArtifacts.mine = [];
+      state.collectedArtifacts.jungle = [];
+      state.collectedArtifacts.asteroid = [];
+      state.collectedArtifacts.meteor = [];
+      
+      // Сброс эхо-кулдаунов и бонусов
+      state.echoCooldowns = {};
+      state.expeditionBonuses = {};
+      
+      // Сброс метеоритных осколков
+      state.meteorShards = 0;
+      state.meteorCooldownEnd = null;
+      
+      // Сброс квестов
+      state.activeQuests = [];
+      state.questRefreshTime = null;
+      state.completedQuests = [];
+      state.questCooldownEnd = null;
+      
+      // Сброс слитка-кликера
+      import('./ingot.js').then(ingot => {
+        ingot.resetIngotState();
+      });
+      
+      // Очистка localStorage и сохранение чистого состояния
+      localStorage.removeItem('starforge_v1');
+      saveGame();
+      
+      showToast('💀 Прогресс полностью сброшен!', '🗑️');
+      closeModal();
+      
+      // Перезагрузка страницы для чистой инициализации
+      setTimeout(() => {
+        location.reload();
+      }, 500);
     });
     
     document.getElementById('adminStartSmelt')?.addEventListener('click', () => {
