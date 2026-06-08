@@ -135,7 +135,7 @@ let ingotState = {
   levelLocked: false
 };
 
-// ========== ИНИЦИАЛИЗАЦИЯ ИЗ СОХРАНЕНИЯ ==========
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
 export function initIngotState(savedData) {
   if (savedData) {
     ingotState.shavings = savedData.ingotShavings || 0;
@@ -146,7 +146,6 @@ export function initIngotState(savedData) {
   }
 }
 
-// ========== СБРОС СОСТОЯНИЯ ==========
 export function resetIngotState() {
   ingotState.shavings = 0;
   ingotState.tapEnergy = 500;
@@ -155,7 +154,6 @@ export function resetIngotState() {
   ingotState.levelLocked = false;
 }
 
-// ========== ЭКСПОРТ СОСТОЯНИЯ ДЛЯ СОХРАНЕНИЯ ==========
 export function getIngotSaveData() {
   return {
     ingotShavings: ingotState.shavings,
@@ -166,27 +164,14 @@ export function getIngotSaveData() {
   };
 }
 
-// ========== ГЕТТЕРЫ ==========
-export function getShavings() {
-  return ingotState.shavings;
-}
-
-export function getTapEnergy() {
-  return ingotState.tapEnergy;
-}
-
-export function getMaxTapEnergy() {
-  return ingotState.maxTapEnergy;
-}
-
-export function isLevelLocked() {
-  return ingotState.levelLocked;
-}
+export function getShavings() { return ingotState.shavings; }
+export function getTapEnergy() { return ingotState.tapEnergy; }
+export function getMaxTapEnergy() { return ingotState.maxTapEnergy; }
+export function isLevelLocked() { return ingotState.levelLocked; }
 
 export function getCurrentIngotData() {
   const state = getPlayerState();
-  const level = state.player.level;
-  return INGOT_LEVELS[level] || INGOT_LEVELS[1];
+  return INGOT_LEVELS[state.player.level] || INGOT_LEVELS[1];
 }
 
 export function getIngotDataForLevel(level) {
@@ -198,40 +183,33 @@ export function regenEnergy() {
   const now = Date.now();
   const elapsed = now - ingotState.lastEnergyRegen;
   const regenAmount = Math.floor(elapsed / 1000) * 3;
-  
   if (regenAmount > 0) {
     ingotState.tapEnergy = Math.min(ingotState.maxTapEnergy, ingotState.tapEnergy + regenAmount);
     ingotState.lastEnergyRegen = now - (elapsed % 1000);
   }
 }
 
-// ========== ТАП ПО СЛИТКУ ==========
+// ========== ТАП ==========
 export function tapIngot() {
   if (ingotState.tapEnergy <= 0) {
     return { success: false, message: 'Нет энергии! Подождите восстановления.' };
   }
-  
   ingotState.tapEnergy--;
   ingotState.shavings++;
-  
   saveGame();
-  
   return { success: true, shavings: ingotState.shavings, energy: ingotState.tapEnergy };
 }
 
-// ========== ПРОВЕРКА ЗАСЛОНКИ ==========
+// ========== ЗАСЛОНКА ==========
 export function checkLevelLock() {
   const state = getPlayerState();
-  const currentLevel = state.player.level;
-  const nextLevelXP = getNextLevelXP(currentLevel);
-  
-  if (state.player.xp >= nextLevelXP && !ingotState.levelLocked) {
-    state.player.xp = nextLevelXP;
+  const nextXP = getNextLevelXP(state.player.level);
+  if (state.player.xp >= nextXP && !ingotState.levelLocked) {
+    state.player.xp = nextXP;
     ingotState.levelLocked = true;
     saveGame();
     return true;
   }
-  
   return ingotState.levelLocked;
 }
 
@@ -240,188 +218,183 @@ function getNextLevelXP(level) {
   return LEVELS[level] || LEVELS[LEVELS.length - 1];
 }
 
-// ========== ПЕРЕПЛАВКА СЛИТКА ==========
+// ========== ПЕРЕПЛАВКА (ВОЗВРАЩАЕТ ДАННЫЕ ДЛЯ АНИМАЦИИ) ==========
 export function performUpgrade() {
   const state = getPlayerState();
-  
-  if (!ingotState.levelLocked) {
-    return { success: false, message: 'Опыт ещё не заполнен!' };
-  }
-  
-  const currentLevel = state.player.level;
-  const ingotData = INGOT_LEVELS[currentLevel];
-  
-  if (!ingotData) {
-    return { success: false, message: 'Максимальный уровень достигнут!' };
-  }
-  
-  if (ingotState.shavings < ingotData.shavingsCost) {
-    return { success: false, message: `Недостаточно стружки! Нужно ${ingotData.shavingsCost}.` };
-  }
-  
+  if (!ingotState.levelLocked) return { success: false, message: 'Опыт ещё не заполнен!' };
+  const ingotData = INGOT_LEVELS[state.player.level];
+  if (!ingotData) return { success: false, message: 'Максимальный уровень!' };
+  if (ingotState.shavings < ingotData.shavingsCost) return { success: false, message: `Нужно ${ingotData.shavingsCost} стружки!` };
   if (ingotData.ingotCost) {
-    for (let ingId in ingotData.ingotCost) {
-      const required = ingotData.ingotCost[ingId];
-      const owned = state.ingots[ingId] || 0;
-      if (owned < required) {
-        const ingName = CONFIG_ITEMS[ingId]?.name || ingId;
-        return { success: false, message: `Недостаточно ${ingName}! Нужно ${required}.` };
+    for (let id in ingotData.ingotCost) {
+      if ((state.ingots[id] || 0) < ingotData.ingotCost[id]) {
+        return { success: false, message: `Недостаточно ${CONFIG_ITEMS[id]?.name || id}!` };
       }
     }
   }
   
+  // Сохраняем старые данные для окна эволюции
+  const oldIngot = { name: ingotData.name, icon: ingotData.icon, era: ingotData.era, level: state.player.level };
+  
   ingotState.shavings -= ingotData.shavingsCost;
-  
   if (ingotData.ingotCost) {
-    for (let ingId in ingotData.ingotCost) {
-      state.ingots[ingId] -= ingotData.ingotCost[ingId];
-    }
+    for (let id in ingotData.ingotCost) state.ingots[id] -= ingotData.ingotCost[id];
   }
-  
   state.player.level++;
   state.player.xp = 0;
   ingotState.levelLocked = false;
-  
   saveGame();
   
-  return { 
-    success: true, 
-    newLevel: state.player.level, 
-    ingotName: ingotData.name, 
-    ingotIcon: ingotData.icon 
-  };
+  const newData = INGOT_LEVELS[state.player.level];
+  return { success: true, oldIngot, newIngot: { name: newData.name, icon: newData.icon, era: newData.era, level: state.player.level } };
 }
 
-// ========== ПОЛНАЯ ОТРИСОВКА ВКЛАДКИ СЛИТКА ==========
+// ========== ОТРИСОВКА ==========
 export function renderIngotScreen(container) {
   const state = getPlayerState();
   const ingotData = getCurrentIngotData();
+  const nextIngot = getIngotDataForLevel(state.player.level + 1);
   const energy = ingotState.tapEnergy;
   const maxEnergy = ingotState.maxTapEnergy;
   const shavings = ingotState.shavings;
   const locked = ingotState.levelLocked;
-  
-  const energyPercent = (energy / maxEnergy) * 100;
+  const nextXP = getNextLevelXP(state.player.level);
+  const energyPct = (energy / maxEnergy) * 100;
   
   let html = '';
   
-  // ===== CSS-СТИЛИ =====
+  // ===== CSS =====
   html += `
     <style>
       @keyframes ingotFloat {
-        0%, 100% { transform: translateY(0px) rotate(0deg); }
-        25% { transform: translateY(-12px) rotate(0.5deg); }
-        75% { transform: translateY(-6px) rotate(-0.5deg); }
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-14px); }
+      }
+      @keyframes shadowPulse {
+        0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.5; }
+        50% { transform: translateX(-50%) scale(0.75); opacity: 0.25; }
       }
       @keyframes ingotGlow {
-        0%, 100% { filter: drop-shadow(0 0 30px rgba(255,180,0,0.6)) drop-shadow(0 0 60px rgba(255,120,0,0.3)); }
-        50% { filter: drop-shadow(0 0 45px rgba(255,180,0,0.9)) drop-shadow(0 0 80px rgba(255,120,0,0.5)); }
+        0%, 100% { filter: drop-shadow(0 0 35px rgba(255,140,0,0.7)) drop-shadow(0 0 70px rgba(255,80,0,0.35)); }
+        50% { filter: drop-shadow(0 0 55px rgba(255,140,0,1)) drop-shadow(0 0 100px rgba(255,80,0,0.55)); }
       }
-      @keyframes ingotTapFlash {
+      @keyframes tapBounce {
         0% { transform: scale(1); }
-        30% { transform: scale(1.12); }
+        40% { transform: scale(0.92); }
         100% { transform: scale(1); }
       }
-      @keyframes fadeUp {
+      @keyframes sparkFly {
+        0% { opacity: 1; transform: translate(0, 0) scale(1); }
+        100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
+      }
+      @keyframes textFloatUp {
         0% { opacity: 1; transform: translateY(0) scale(1); }
-        100% { opacity: 0; transform: translateY(-60px) scale(1.5); }
+        100% { opacity: 0; transform: translateY(-60px) scale(1.4); }
+      }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-8px); }
+        40% { transform: translateX(8px); }
+        60% { transform: translateX(-5px); }
+        80% { transform: translateX(5px); }
+      }
+      @keyframes screenFlash {
+        0% { opacity: 0; }
+        30% { opacity: 1; }
+        100% { opacity: 0; }
       }
       @keyframes pulseUpgrade {
-        0%, 100% { box-shadow: 0 0 25px rgba(255,80,0,0.6), 0 0 50px rgba(255,120,0,0.3); }
-        50% { box-shadow: 0 0 45px rgba(255,80,0,0.9), 0 0 90px rgba(255,120,0,0.6); }
+        0%, 100% { transform: scale(1); box-shadow: 0 0 30px rgba(255,50,0,0.6), 0 0 60px rgba(255,100,0,0.3); }
+        50% { transform: scale(1.03); box-shadow: 0 0 50px rgba(255,50,0,0.9), 0 0 100px rgba(255,100,0,0.6); }
       }
-      @keyframes shimmer {
-        0% { background-position: -200% center; }
-        100% { background-position: 200% center; }
+      @keyframes spinGlow {
+        0% { transform: translate(-50%, -50%) rotate(0deg); }
+        100% { transform: translate(-50%, -50%) rotate(360deg); }
       }
       
       .ingot-screen {
         min-height: 100%;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        padding: 0 16px 20px;
-        background: radial-gradient(circle at 50% 30%, rgba(230,92,0,0.15) 0%, rgba(15,15,15,1) 80%);
+        padding: 0;
+        background: radial-gradient(circle at 50% 40%, rgba(230,92,0,0.1) 0%, rgba(15,15,15,1) 75%);
+        position: relative;
+        overflow-y: auto;
+        overflow-x: hidden;
       }
       
       .ingot-header {
-        width: 100%;
         text-align: center;
-        padding: 20px 0 10px;
+        padding: 24px 20px 8px;
+        flex-shrink: 0;
       }
-      
-      .ingot-title {
-        font-family: 'Unbounded', sans-serif;
-        font-size: 14px;
-        font-weight: 700;
-        color: rgba(255,255,255,0.5);
+      .ingot-shavings-label {
+        font-size: 10px;
+        color: rgba(255,255,255,0.3);
         letter-spacing: 2px;
         text-transform: uppercase;
       }
-      
-      .ingot-shavings-display {
+      .ingot-shavings-value {
         font-family: 'Unbounded', sans-serif;
-        font-size: 36px;
+        font-size: 44px;
         font-weight: 800;
-        background: linear-gradient(180deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%);
+        background: linear-gradient(180deg, #FFE55C 0%, #FFD700 40%, #FF8C00 100%);
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 2px 8px rgba(255,180,0,0.4));
-        margin: 4px 0;
+        filter: drop-shadow(0 3px 10px rgba(255,160,0,0.5));
+        line-height: 1;
+        margin-bottom: 6px;
       }
-      
-      .ingot-shavings-label {
-        font-size: 10px;
-        color: rgba(255,255,255,0.4);
-        letter-spacing: 1px;
-        text-transform: uppercase;
+      .ingot-info-line {
+        font-size: 12px;
+        color: rgba(255,255,255,0.6);
       }
+      .ingot-info-line strong { color: #fff; font-weight: 700; }
       
-      .ingot-core-area {
+      .ingot-core {
         flex: 1;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         position: relative;
-        width: 100%;
         min-height: 260px;
+        flex-shrink: 0;
       }
       
-      .ingot-float-container {
-        cursor: pointer;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
+      .ingot-float-wrapper {
         animation: ingotFloat 4s ease-in-out infinite;
         position: relative;
         z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
-      
-      .ingot-float-container.tap-active {
-        animation: ingotTapFlash 0.15s ease-out;
+      .ingot-float-wrapper.tap-active {
+        animation: tapBounce 0.18s ease-out;
+      }
+      .ingot-float-wrapper.shaking {
+        animation: shake 0.5s ease-in-out;
       }
       
       .ingot-icon-display {
-        font-size: 110px;
+        font-size: 140px;
         display: block;
         line-height: 1;
         animation: ingotGlow 2.5s ease-in-out infinite;
+        cursor: pointer;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
       
-      .ingot-name-display {
-        font-family: 'Unbounded', sans-serif;
-        font-size: 15px;
-        font-weight: 700;
-        color: rgba(255,255,255,0.8);
-        text-align: center;
-        margin-top: 6px;
-      }
-      
-      .ingot-era-display {
-        font-size: 10px;
-        color: rgba(255,255,255,0.4);
-        text-align: center;
-        letter-spacing: 1px;
+      .ingot-shadow {
+        width: 100px;
+        height: 16px;
+        background: radial-gradient(ellipse, rgba(0,0,0,0.6) 0%, transparent 70%);
+        border-radius: 50%;
+        margin-top: 8px;
+        animation: shadowPulse 4s ease-in-out infinite;
       }
       
       .tap-particle {
@@ -432,142 +405,88 @@ export function renderIngotScreen(container) {
         color: #FFD700;
         pointer-events: none;
         z-index: 10;
-        text-shadow: 0 0 8px rgba(255,180,0,0.8);
-        animation: fadeUp 0.6s ease-out forwards;
+        text-shadow: 0 0 10px rgba(255,180,0,0.9);
+        animation: textFloatUp 0.7s ease-out forwards;
+      }
+      .tap-spark {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #FF8C00;
+        box-shadow: 0 0 6px #FFD700;
+        pointer-events: none;
+        z-index: 9;
+        animation: sparkFly 0.5s ease-out forwards;
       }
       
-      .ingot-energy-section {
+      .ingot-energy-divider {
         width: 100%;
-        margin-bottom: 16px;
+        padding: 0 20px;
+        flex-shrink: 0;
       }
-      
-      .ingot-energy-header {
-        display: flex;
-        justify-content: space-between;
-        font-size: 10px;
-        color: rgba(255,255,255,0.5);
-        margin-bottom: 4px;
-        letter-spacing: 0.5px;
-      }
-      
       .ingot-energy-bar-outer {
         width: 100%;
-        height: 6px;
-        background: rgba(255,255,255,0.06);
+        height: 5px;
+        background: rgba(255,255,255,0.05);
         border-radius: 10px;
         overflow: hidden;
       }
-      
       .ingot-energy-bar-inner {
         height: 100%;
         border-radius: 10px;
-        background: linear-gradient(90deg, #4A9CFF, #00BFFF);
-        box-shadow: 0 0 12px rgba(0, 191, 255, 0.5);
+        background: linear-gradient(90deg, #3A8CFF, #00D4FF);
+        box-shadow: 0 0 10px rgba(0,180,255,0.5);
         transition: width 0.4s ease;
       }
       
-      .ingot-upgrade-section {
-        width: 100%;
-        margin-top: auto;
-        padding-bottom: 10px;
+      .ingot-bottom {
+        padding: 16px 16px 24px;
+        flex-shrink: 0;
       }
+      .ingot-goal-title {
+        font-family: 'Unbounded', sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        color: rgba(255,255,255,0.65);
+        text-align: center;
+        margin-bottom: 12px;
+        letter-spacing: 1px;
+      }
+      .ingot-goal-title strong { color: #FFD700; }
+      
+      .ingot-progress-list { display: flex; flex-direction: column; gap: 8px; }
+      .ingot-progress-row { display: flex; align-items: center; gap: 10px; }
+      .ingot-progress-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+      .ingot-progress-info { flex: 1; min-width: 0; }
+      .ingot-progress-header { display: flex; justify-content: space-between; font-size: 10px; color: rgba(255,255,255,0.45); margin-bottom: 3px; }
+      .ingot-progress-bar-outer { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 8px; overflow: hidden; }
+      .ingot-progress-bar-inner { height: 100%; border-radius: 8px; transition: width 0.5s ease; }
+      .ingot-progress-bar-inner.shavings { background: linear-gradient(90deg, #FFD700, #FFA500); box-shadow: 0 0 8px rgba(255,180,0,0.4); }
+      .ingot-progress-bar-inner.ingot { background: linear-gradient(90deg, #B0B0B0, #D0D0D0); }
+      .ingot-progress-bar-inner.xp { background: linear-gradient(90deg, #FF4500, #FF8C00); box-shadow: 0 0 8px rgba(255,80,0,0.4); }
       
       .ingot-upgrade-btn {
         display: block;
         width: 100%;
-        padding: 18px;
+        padding: 20px;
         border: none;
         border-radius: 60px;
         font-family: 'Unbounded', sans-serif;
         font-weight: 800;
-        font-size: 16px;
+        font-size: 17px;
         letter-spacing: 2px;
         cursor: pointer;
-        transition: all 0.3s;
         text-transform: uppercase;
-        position: relative;
-        overflow: hidden;
-        background: linear-gradient(135deg, #FF4500 0%, #FF8C00 30%, #FFD700 100%);
+        background: linear-gradient(135deg, #FF3D00 0%, #FF6D00 40%, #FFD700 100%);
         color: #000;
         animation: pulseUpgrade 2s ease-in-out infinite;
+        margin-top: 4px;
       }
+      .ingot-upgrade-btn:active { transform: scale(0.95) !important; }
+      .ingot-upgrade-btn:disabled { opacity: 0.3; cursor: not-allowed; animation: none; }
       
-      .ingot-upgrade-btn:active {
-        transform: scale(0.94);
-      }
-      
-      .ingot-upgrade-btn:disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-        animation: none;
-      }
-      
-      .ingot-upgrade-requirements {
-        margin-top: 10px;
-        text-align: center;
-        font-size: 10px;
-        color: rgba(255,255,255,0.5);
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-      }
-      
-      .ingot-upgrade-requirement {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 10px;
-      }
-      
-      .ingot-upgrade-requirement.met {
-        color: #50C878;
-      }
-      
-      .ingot-upgrade-requirement.unmet {
-        color: #FF6B6B;
-      }
-      
-      .ingot-xp-section {
-        width: 100%;
-        margin-bottom: 16px;
-      }
-      
-      .ingot-xp-label {
-        display: flex;
-        justify-content: space-between;
-        font-size: 10px;
-        color: rgba(255,255,255,0.5);
-        margin-bottom: 4px;
-        letter-spacing: 0.5px;
-      }
-      
-      .ingot-xp-bar-outer {
-        width: 100%;
-        height: 6px;
-        background: rgba(255,255,255,0.06);
-        border-radius: 10px;
-        overflow: hidden;
-      }
-      
-      .ingot-xp-bar-inner {
-        height: 100%;
-        border-radius: 10px;
-        background: linear-gradient(90deg, #FFD700, #FFA500);
-        box-shadow: 0 0 12px rgba(255, 180, 0, 0.5);
-        transition: width 0.5s ease;
-      }
-      
-      .ingot-next-level-info {
-        font-family: 'Unbounded', sans-serif;
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--accent-gold);
-        text-align: center;
-        margin-bottom: 12px;
-      }
-      
-      .ingot-max-level {
+      .ingot-max-msg {
         font-family: 'Unbounded', sans-serif;
         font-size: 16px;
         font-weight: 800;
@@ -575,156 +494,211 @@ export function renderIngotScreen(container) {
         text-align: center;
         padding: 24px;
       }
+      
+      /* Эволюция */
+      .evolution-flash {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: #fff;
+        z-index: 9999;
+        pointer-events: none;
+        animation: screenFlash 0.6s ease-out forwards;
+      }
+      .evolution-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85);
+        backdrop-filter: blur(10px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: screenFlash 0.4s ease-out reverse;
+      }
+      .evolution-card {
+        background: radial-gradient(circle at 50% 0%, rgba(255,140,0,0.2) 0%, rgba(20,20,20,0.95) 70%);
+        border: 1px solid rgba(255,180,0,0.3);
+        border-radius: 32px;
+        padding: 30px 20px;
+        text-align: center;
+        width: 90%;
+        max-width: 340px;
+        position: relative;
+        overflow: hidden;
+      }
+      .evolution-rays {
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 300px; height: 300px;
+        background: conic-gradient(from 0deg, transparent, rgba(255,180,0,0.1), transparent, rgba(255,100,0,0.1), transparent);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        animation: spinGlow 8s linear infinite;
+        pointer-events: none;
+      }
+      .evolution-icon {
+        font-size: 80px;
+        position: relative;
+        z-index: 1;
+        animation: ingotFloat 2s ease-in-out infinite;
+      }
+      .evolution-title {
+        font-family: 'Unbounded', sans-serif;
+        font-size: 20px;
+        font-weight: 800;
+        color: #FFD700;
+        margin: 12px 0 8px;
+        position: relative;
+        z-index: 1;
+      }
+      .evolution-subtitle {
+        font-size: 13px;
+        color: rgba(255,255,255,0.7);
+        margin-bottom: 20px;
+        position: relative;
+        z-index: 1;
+        line-height: 1.5;
+      }
+      .evolution-close-btn {
+        background: linear-gradient(135deg, #FFD700, #FF8C00);
+        color: #000;
+        border: none;
+        padding: 14px 32px;
+        border-radius: 50px;
+        font-weight: 800;
+        font-size: 15px;
+        cursor: pointer;
+        position: relative;
+        z-index: 1;
+      }
     </style>
   `;
   
   // ===== HTML =====
   html += `<div class="ingot-screen">`;
   
-  // Верхняя панель: стружка
+  // Верх
   html += `
     <div class="ingot-header">
-      <div class="ingot-title">Кузнечная стружка</div>
-      <div class="ingot-shavings-display" id="ingotShavingsDisplay">${shavings}</div>
-      <div class="ingot-shavings-label">тапай по слитку</div>
-    </div>
-  `;
-  
-  // Центральная зона: Слиток
-  html += `
-    <div class="ingot-core-area" id="ingotCoreArea">
-      <div class="ingot-float-container" id="ingotFloatContainer">
-        <span class="ingot-icon-display">${ingotData.icon}</span>
-        <div class="ingot-name-display">${ingotData.name}</div>
-        <div class="ingot-era-display">Ур. ${state.player.level} · ${ingotData.era}</div>
+      <div class="ingot-shavings-label">Кузнечная стружка</div>
+      <div class="ingot-shavings-value" id="ingotShavingsDisplay">${shavings}</div>
+      <div class="ingot-info-line">
+        <strong>${ingotData.name}</strong> (Ур. ${state.player.level}) · ${ingotData.era}
       </div>
     </div>
   `;
   
-  // Полоска энергии
+  // Центр
   html += `
-    <div class="ingot-energy-section">
-      <div class="ingot-energy-header">
-        <span>⚡ Энергия</span>
-        <span id="ingotEnergyText">${energy}/${maxEnergy}</span>
+    <div class="ingot-core" id="ingotCoreArea">
+      <div class="ingot-float-wrapper" id="ingotFloatWrapper">
+        <span class="ingot-icon-display" id="ingotIconDisplay">${ingotData.icon}</span>
+        <div class="ingot-shadow"></div>
       </div>
+    </div>
+  `;
+  
+  // Энергия
+  html += `
+    <div class="ingot-energy-divider">
       <div class="ingot-energy-bar-outer">
-        <div class="ingot-energy-bar-inner" id="ingotEnergyBar" style="width:${energyPercent}%;"></div>
+        <div class="ingot-energy-bar-inner" id="ingotEnergyBar" style="width:${energyPct}%;"></div>
       </div>
     </div>
   `;
   
-  // Секция переплавки / XP
-  if (locked) {
-    const nextIngot = getIngotDataForLevel(state.player.level + 1);
+  // Низ
+  html += `<div class="ingot-bottom">`;
+  
+  if (!nextIngot) {
+    html += `<div class="ingot-max-msg">🏆 Максимальный уровень</div>`;
+  } else if (locked) {
+    const canUpgrade = shavings >= nextIngot.shavingsCost &&
+      (!nextIngot.ingotCost || Object.entries(nextIngot.ingotCost).every(([id, r]) => (state.ingots[id] || 0) >= r));
     
-    if (nextIngot) {
-      html += `
-        <div class="ingot-upgrade-section">
-          <div class="ingot-next-level-info">
-            Следующий: ${nextIngot.icon} ${nextIngot.name}
-          </div>
-      `;
-      
-      const canUpgrade = shavings >= nextIngot.shavingsCost && 
-        (!nextIngot.ingotCost || Object.entries(nextIngot.ingotCost).every(([id, req]) => (state.ingots[id] || 0) >= req));
-      
-      html += `
-        <button class="ingot-upgrade-btn" id="performUpgradeBtn" ${canUpgrade ? '' : 'disabled'}>
-          ПЕРЕПЛАВИТЬ
-        </button>
-      `;
-      
-      // Требования
-      html += `<div class="ingot-upgrade-requirements">`;
-      
-      html += `
-        <span class="ingot-upgrade-requirement ${shavings >= nextIngot.shavingsCost ? 'met' : 'unmet'}">
-          ✨ ${shavings}/${nextIngot.shavingsCost}
-        </span>
-      `;
-      
+    if (canUpgrade) {
+      html += `<button class="ingot-upgrade-btn" id="performUpgradeBtn">⚡ ПЕРЕПЛАВИТЬ СЛИТОК</button>`;
+    } else {
+      html += `<div class="ingot-goal-title">ЦЕЛЬ: ЭВОЛЮЦИЯ ДО <strong>${nextIngot.name}</strong> (Ур. ${state.player.level + 1})</div>`;
+      html += `<div class="ingot-progress-list">`;
+      html += buildProgressRow('✨', 'Стружка', shavings, nextIngot.shavingsCost, 'shavings');
       if (nextIngot.ingotCost) {
-        for (let ingId in nextIngot.ingotCost) {
-          const required = nextIngot.ingotCost[ingId];
-          const owned = state.ingots[ingId] || 0;
-          const met = owned >= required;
-          const ingIcon = CONFIG_ITEMS[ingId]?.icon || '📦';
-          
-          html += `
-            <span class="ingot-upgrade-requirement ${met ? 'met' : 'unmet'}">
-              ${ingIcon} ${owned}/${required}
-            </span>
-          `;
+        for (let id in nextIngot.ingotCost) {
+          const ing = CONFIG_ITEMS[id];
+          html += buildProgressRow(ing?.icon || '📦', ing?.name || id, state.ingots[id] || 0, nextIngot.ingotCost[id], 'ingot');
         }
       }
-      
-      html += `</div></div>`;
-    } else {
-      html += `<div class="ingot-max-level">🏆 Максимальный уровень</div>`;
+      html += buildProgressRow('🔥', 'Опыт профиля', state.player.xp, nextXP, 'xp');
+      html += `</div>`;
     }
   } else {
-    const nextLevelXP = getNextLevelXP(state.player.level);
-    const progress = state.player.xp;
-    const progressPercent = (progress / nextLevelXP) * 100;
-    
-    html += `
-      <div class="ingot-xp-section">
-        <div class="ingot-xp-label">
-          <span>🔥 Опыт</span>
-          <span>${progress}/${nextLevelXP} XP</span>
-        </div>
-        <div class="ingot-xp-bar-outer">
-          <div class="ingot-xp-bar-inner" style="width:${progressPercent}%;"></div>
-        </div>
-      </div>
-    `;
+    html += `<div class="ingot-goal-title">ЦЕЛЬ: ЭВОЛЮЦИЯ ДО <strong>${nextIngot.name}</strong> (Ур. ${state.player.level + 1})</div>`;
+    html += `<div class="ingot-progress-list">`;
+    html += buildProgressRow('✨', 'Стружка', shavings, nextIngot.shavingsCost, 'shavings');
+    if (nextIngot.ingotCost) {
+      for (let id in nextIngot.ingotCost) {
+        const ing = CONFIG_ITEMS[id];
+        html += buildProgressRow(ing?.icon || '📦', ing?.name || id, state.ingots[id] || 0, nextIngot.ingotCost[id], 'ingot');
+      }
+    }
+    html += buildProgressRow('🔥', 'Опыт профиля', state.player.xp, nextXP, 'xp');
+    html += `</div>`;
   }
   
-  html += `</div>`;
-  
+  html += `</div></div>`;
   container.innerHTML = html;
   
-  // Обработчики событий
+  // ===== ОБРАБОТЧИКИ =====
   setTimeout(() => {
-    const floatContainer = document.getElementById('ingotFloatContainer');
+    const wrapper = document.getElementById('ingotFloatWrapper');
     const coreArea = document.getElementById('ingotCoreArea');
+    const iconDisplay = document.getElementById('ingotIconDisplay');
     
-    if (floatContainer && coreArea) {
-      floatContainer.addEventListener('click', (e) => {
+    if (iconDisplay && coreArea) {
+      iconDisplay.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
         const result = tapIngot();
-        
-        if (result.success) {
-          // Анимация тапа
-          floatContainer.classList.remove('tap-active');
-          void floatContainer.offsetWidth;
-          floatContainer.classList.add('tap-active');
-          
-          // Создание частицы "+1"
-          const particle = document.createElement('span');
-          particle.className = 'tap-particle';
-          particle.textContent = '+1';
-          
-          const rect = floatContainer.getBoundingClientRect();
-          const coreRect = coreArea.getBoundingClientRect();
-          
-          const x = rect.left + rect.width / 2 - coreRect.left - 20 + (Math.random() - 0.5) * 40;
-          const y = rect.top - coreRect.top;
-          
-          particle.style.left = x + 'px';
-          particle.style.top = y + 'px';
-          
-          coreArea.appendChild(particle);
-          
-          setTimeout(() => particle.remove(), 600);
-          
-          updateIngotUI();
-        } else {
+        if (!result.success) {
           import('./ui.js').then(ui => ui.showToast(result.message, '⚡'));
+          return;
         }
+        
+        // Анимация сжатия
+        if (wrapper) {
+          wrapper.classList.remove('tap-active');
+          void wrapper.offsetWidth;
+          wrapper.classList.add('tap-active');
+        }
+        
+        // Частица "+1"
+        const particle = document.createElement('span');
+        particle.className = 'tap-particle';
+        particle.textContent = '+1';
+        const rect = iconDisplay.getBoundingClientRect();
+        const coreRect = coreArea.getBoundingClientRect();
+        particle.style.left = (rect.left + rect.width / 2 - coreRect.left - 20 + (Math.random() - 0.5) * 40) + 'px';
+        particle.style.top = (rect.top - coreRect.top) + 'px';
+        coreArea.appendChild(particle);
+        setTimeout(() => particle.remove(), 700);
+        
+        // Искры
+        for (let i = 0; i < 4; i++) {
+          const spark = document.createElement('div');
+          spark.className = 'tap-spark';
+          spark.style.left = (rect.left + rect.width / 2 - coreRect.left) + 'px';
+          spark.style.top = (rect.top + rect.height / 2 - coreRect.top) + 'px';
+          const angle = Math.random() * Math.PI * 2;
+          const dist = 25 + Math.random() * 35;
+          spark.style.setProperty('--sx', Math.cos(angle) * dist + 'px');
+          spark.style.setProperty('--sy', Math.sin(angle) * dist + 'px');
+          coreArea.appendChild(spark);
+          setTimeout(() => spark.remove(), 500);
+        }
+        
+        updateIngotUI();
       });
     }
     
@@ -732,39 +706,77 @@ export function renderIngotScreen(container) {
     if (upgradeBtn) {
       upgradeBtn.addEventListener('click', () => {
         const result = performUpgrade();
-        
-        if (result.success) {
-          import('./ui.js').then(ui => {
-            ui.showToast(`🎉 Уровень ${result.newLevel}: ${result.ingotName}!`, result.ingotIcon);
-            ui.renderCurrentTab();
-          });
-        } else {
+        if (!result.success) {
           import('./ui.js').then(ui => ui.showToast(result.message, '⚠️'));
+          return;
         }
+        
+        // Тряска + вспышка + окно эволюции
+        if (wrapper) {
+          wrapper.classList.add('shaking');
+          setTimeout(() => wrapper.classList.remove('shaking'), 500);
+        }
+        
+        const flash = document.createElement('div');
+        flash.className = 'evolution-flash';
+        document.body.appendChild(flash);
+        setTimeout(() => flash.remove(), 600);
+        
+        setTimeout(() => {
+          showEvolutionModal(result.oldIngot, result.newIngot);
+        }, 300);
       });
     }
   }, 10);
 }
 
-// ========== ОБНОВЛЕНИЕ UI БЕЗ ПЕРЕРИСОВКИ ==========
-function updateIngotUI() {
-  const shavingsDisplay = document.getElementById('ingotShavingsDisplay');
-  const energyText = document.getElementById('ingotEnergyText');
-  const energyBar = document.getElementById('ingotEnergyBar');
-  
-  if (shavingsDisplay) {
-    shavingsDisplay.textContent = ingotState.shavings;
-  }
-  
-  if (energyText) {
-    energyText.textContent = `${ingotState.tapEnergy}/${ingotState.maxTapEnergy}`;
-  }
-  
-  if (energyBar) {
-    const percent = (ingotState.tapEnergy / ingotState.maxTapEnergy) * 100;
-    energyBar.style.width = percent + '%';
-  }
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+function buildProgressRow(icon, label, current, needed, cssClass) {
+  const pct = Math.min(100, (current / needed) * 100);
+  return `
+    <div class="ingot-progress-row">
+      <span class="ingot-progress-icon">${icon}</span>
+      <div class="ingot-progress-info">
+        <div class="ingot-progress-header"><span>${label}</span><span>${current}/${needed}</span></div>
+        <div class="ingot-progress-bar-outer">
+          <div class="ingot-progress-bar-inner ${cssClass}" style="width:${pct}%;"></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
-// ========== ЭКСПОРТ ДЛЯ ВНЕШНИХ МОДУЛЕЙ ==========
+function updateIngotUI() {
+  const display = document.getElementById('ingotShavingsDisplay');
+  const bar = document.getElementById('ingotEnergyBar');
+  if (display) display.textContent = ingotState.shavings;
+  if (bar) bar.style.width = (ingotState.tapEnergy / ingotState.maxTapEnergy * 100) + '%';
+}
+
+// ========== ОКНО ЭВОЛЮЦИИ ==========
+function showEvolutionModal(oldData, newData) {
+  const overlay = document.createElement('div');
+  overlay.className = 'evolution-overlay';
+  overlay.innerHTML = `
+    <div class="evolution-card">
+      <div class="evolution-rays"></div>
+      <div class="evolution-icon">${newData.icon}</div>
+      <div class="evolution-title">ЭВОЛЮЦИЯ СЛИТКА!</div>
+      <div class="evolution-subtitle">
+        <strong>${oldData.name}</strong> → <strong>${newData.name}</strong><br>
+        Уровень ${newData.level} · ${newData.era}
+      </div>
+      <button class="evolution-close-btn" id="evolutionCloseBtn">ПРОДОЛЖИТЬ</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target.id === 'evolutionCloseBtn') {
+      overlay.remove();
+      import('./ui.js').then(ui => ui.renderCurrentTab());
+    }
+  });
+}
+
 export { INGOT_LEVELS };
