@@ -1,6 +1,6 @@
 // ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS } from './config.js';
-import { INGOT_LEVELS } from './ingot.js';
+import { regenEnergy, checkLevelLock, getIngotSaveData, initIngotState } from './ingot.js';
 
 // ========== ЗАГЛУШКИ UI ФУНКЦИЙ ==========
 let _showToast = null;
@@ -43,13 +43,7 @@ export let playerState = {
   activeQuests: [],
   questRefreshTime: null,
   completedQuests: [],
-  questCooldownEnd: null,
-  // 🆕 Система слитка-кликера
-  ingotShavings: 0,
-  tapEnergy: 100,
-  maxTapEnergy: 100,
-  lastEnergyRegen: Date.now(),
-  levelLocked: false
+  questCooldownEnd: null
 };
 
 export function getPlayerState() {
@@ -638,22 +632,15 @@ export function getExpeditionTimeLeft(expId) {
   return Math.max(0, exp.endTime - Date.now());
 }
 
-// 🆕 ДОБАВЛЕНИЕ ОПЫТА С ЗАСЛОНКОЙ
 export function addXP(amount) {
-  if (playerState.levelLocked) {
-    if (_showToast) _showToast('Опыт заполнен! Переплавьте Слиток для повышения уровня.', '🔒');
-    return;
-  }
-  
   playerState.player.xp += amount;
   
   const nextLevelXP = LEVELS[playerState.player.level] || LEVELS[LEVELS.length - 1];
   
   if (playerState.player.xp >= nextLevelXP) {
     playerState.player.xp = nextLevelXP;
-    playerState.levelLocked = true;
-    if (_showToast) _showToast('⚡ Опыт заполнен! Совершите переплавку Слитка!', '🔒');
-    sendBotNotification(`🔒 Игрок достиг порога переплавки на уровне ${playerState.player.level}`);
+    checkLevelLock();
+    if (_showToast) _showToast('⚡ Опыт заполнен! Переплавьте Слиток для повышения уровня.', '🔒');
     saveGame();
     if (_updateProfileUI) _updateProfileUI();
     if (_renderCurrentTab) _renderCurrentTab();
@@ -712,113 +699,6 @@ export function exchangeSpecialGeodeForXP(geodeId) {
   
   if (_showToast) _showToast(`Жеода изучена! +${xpGained} XP`, '📚');
   if (_renderCurrentTab) _renderCurrentTab();
-}
-
-// 🆕 СИСТЕМА ТАПОВ ПО СЛИТКУ
-export function tapIngot() {
-  if (playerState.tapEnergy <= 0) {
-    if (_showToast) _showToast('Нет энергии! Подождите восстановления.', '⚡');
-    return false;
-  }
-  
-  playerState.tapEnergy--;
-  playerState.ingotShavings = (playerState.ingotShavings || 0) + 1;
-  
-  saveGame();
-  return true;
-}
-
-export function getIngotEnergy() {
-  return playerState.tapEnergy;
-}
-
-export function getMaxIngotEnergy() {
-  return playerState.maxTapEnergy;
-}
-
-export function getIngotShavings() {
-  return playerState.ingotShavings || 0;
-}
-
-export function isLevelLocked() {
-  return playerState.levelLocked;
-}
-
-// 🆕 РЕГЕНЕРАЦИЯ ЭНЕРГИИ
-export function regenTapEnergy() {
-  if (!playerState.lastEnergyRegen) {
-    playerState.lastEnergyRegen = Date.now();
-    return;
-  }
-  
-  const now = Date.now();
-  const elapsed = now - playerState.lastEnergyRegen;
-  const regenAmount = Math.floor(elapsed / 3000);
-  
-  if (regenAmount > 0) {
-    playerState.tapEnergy = Math.min(playerState.maxTapEnergy, playerState.tapEnergy + regenAmount);
-    playerState.lastEnergyRegen = now - (elapsed % 3000);
-  }
-}
-
-// 🆕 ПЕРЕПЛАВКА СЛИТКА (ПОВЫШЕНИЕ УРОВНЯ)
-export function performIngotUpgrade() {
-  if (!playerState.levelLocked) {
-    if (_showToast) _showToast('Опыт ещё не заполнен!', '⚠️');
-    return false;
-  }
-  
-  const currentLevel = playerState.player.level;
-  const ingotData = INGOT_LEVELS[currentLevel];
-  
-  if (!ingotData) {
-    if (_showToast) _showToast('Максимальный уровень достигнут!', '🏆');
-    return false;
-  }
-  
-  if (playerState.ingotShavings < ingotData.shavingsCost) {
-    if (_showToast) _showToast(`Недостаточно стружки! Нужно ${ingotData.shavingsCost}.`, '⚠️');
-    return false;
-  }
-  
-  if (ingotData.ingotCost) {
-    for (let ingId in ingotData.ingotCost) {
-      const required = ingotData.ingotCost[ingId];
-      const owned = playerState.ingots[ingId] || 0;
-      if (owned < required) {
-        const ingName = CONFIG_ITEMS[ingId]?.name || ingId;
-        if (_showToast) _showToast(`Недостаточно ${ingName}! Нужно ${required}.`, '⚠️');
-        return false;
-      }
-    }
-  }
-  
-  playerState.ingotShavings -= ingotData.shavingsCost;
-  
-  if (ingotData.ingotCost) {
-    for (let ingId in ingotData.ingotCost) {
-      playerState.ingots[ingId] -= ingotData.ingotCost[ingId];
-    }
-  }
-  
-  playerState.player.level++;
-  playerState.player.xp = 0;
-  playerState.levelLocked = false;
-  
-  if (_showToast) _showToast(`🎉 Слиток переплавлен! Уровень ${playerState.player.level}: ${ingotData.name}`, ingotData.icon);
-  sendBotNotification(`⬆️ Игрок повысил уровень до ${playerState.player.level} (${ingotData.name})`);
-  
-  saveGame();
-  if (_updateProfileUI) _updateProfileUI();
-  if (_renderCurrentTab) _renderCurrentTab();
-  
-  return true;
-}
-
-// 🆕 ПОЛУЧИТЬ ДАННЫЕ ТЕКУЩЕГО СЛИТКА
-export function getCurrentIngotData() {
-  const level = playerState.player.level;
-  return INGOT_LEVELS[level] || INGOT_LEVELS[1];
 }
 
 // ---------- ПЕРЕРАБОТАННЫЕ ЗАКАЗЫ ГИЛЬДИИ ----------
@@ -1338,6 +1218,8 @@ export function buyMeteorGeode(shopItemId) {
 export function saveGame() {
   if (!playerState) return;
   
+  const ingotSave = getIngotSaveData();
+  
   const saveData = JSON.stringify({
     playerState: {
       expeditions: playerState.expeditions,
@@ -1355,11 +1237,11 @@ export function saveGame() {
       questRefreshTime: playerState.questRefreshTime,
       completedQuests: playerState.completedQuests,
       questCooldownEnd: playerState.questCooldownEnd,
-      ingotShavings: playerState.ingotShavings,
-      tapEnergy: playerState.tapEnergy,
-      maxTapEnergy: playerState.maxTapEnergy,
-      lastEnergyRegen: playerState.lastEnergyRegen,
-      levelLocked: playerState.levelLocked
+      ingotShavings: ingotSave.ingotShavings,
+      tapEnergy: ingotSave.tapEnergy,
+      maxTapEnergy: ingotSave.maxTapEnergy,
+      lastEnergyRegen: ingotSave.lastEnergyRegen,
+      levelLocked: ingotSave.levelLocked
     },
     collectibleSerials,
     nextSerial,
@@ -1465,21 +1347,13 @@ function applySaveData(data) {
     playerState.questCooldownEnd = saved.questCooldownEnd;
   }
   
-  if (typeof saved.ingotShavings === 'number') {
-    playerState.ingotShavings = saved.ingotShavings;
-  }
-  if (typeof saved.tapEnergy === 'number') {
-    playerState.tapEnergy = saved.tapEnergy;
-  }
-  if (typeof saved.maxTapEnergy === 'number') {
-    playerState.maxTapEnergy = saved.maxTapEnergy;
-  }
-  if (typeof saved.lastEnergyRegen === 'number' || saved.lastEnergyRegen === null) {
-    playerState.lastEnergyRegen = saved.lastEnergyRegen;
-  }
-  if (typeof saved.levelLocked === 'boolean') {
-    playerState.levelLocked = saved.levelLocked;
-  }
+  initIngotState({
+    ingotShavings: saved.ingotShavings || 0,
+    tapEnergy: saved.tapEnergy || 500,
+    maxTapEnergy: saved.maxTapEnergy || 500,
+    lastEnergyRegen: saved.lastEnergyRegen || Date.now(),
+    levelLocked: saved.levelLocked || false
+  });
   
   if (data.collectibleSerials) {
     for (let k in data.collectibleSerials) {
@@ -1526,11 +1400,6 @@ export const saveToLocalStorage = saveGame;
   playerState.questRefreshTime = null;
   playerState.completedQuests = [];
   playerState.questCooldownEnd = null;
-  playerState.ingotShavings = 0;
-  playerState.tapEnergy = 100;
-  playerState.maxTapEnergy = 100;
-  playerState.lastEnergyRegen = Date.now();
-  playerState.levelLocked = false;
   
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
@@ -1632,7 +1501,7 @@ export function startGlobalTimer() {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
-    regenTapEnergy();
+    regenEnergy();
   }, 500);
 }
 
