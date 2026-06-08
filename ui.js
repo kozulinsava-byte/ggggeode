@@ -1,6 +1,6 @@
 // ========== UI МОДУЛЬ: ОТРИСОВКА ИНТЕРФЕЙСА ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, LEVELS, STATUSES, GUILD_QUESTS } from './config.js';
-import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState, buyMeteorGeode, METEOR_SHOP_ITEMS, completeQuest, refreshActiveQuests, toggleSpeedMode, getQuestCooldownRemaining } from './core.js';
+import { getPlayerState, getSerialForCollectible, isLocationCompleted, sellIngot, startExpedition, openBrawlOverlay, eventsManager, saveGame, devGiveXP, devGiveGeodes, devUnlockLocations, devResetGeodes, startSignalGame, exchangeSpecialGeodeForXP, openForge, sendBotNotification, registerUIFunctions, startMeteorStorm, canStartMeteorStorm, isMeteorStormOnCooldown, getMeteorCooldownRemaining, meteorStormState, buyMeteorGeode, METEOR_SHOP_ITEMS, completeQuest, refreshActiveQuests, toggleSpeedMode, getQuestCooldownRemaining, tapIngot, getIngotEnergy, getMaxIngotEnergy, getIngotShavings, isLevelLocked, performIngotUpgrade, getCurrentIngotData } from './core.js';
 
 // 🆕 Точка входа для мини-игр
 let _startQuenchGame = null;
@@ -1164,6 +1164,153 @@ export function renderCollectionTab() {
   );
 }
 
+// ========== 🆕 ВКЛАДКА СЛИТКА (КЛИКЕР) ==========
+export function renderIngotTab() {
+  const state = getPlayerState();
+  const ingotData = getCurrentIngotData();
+  const energy = getIngotEnergy();
+  const maxEnergy = getMaxIngotEnergy();
+  const shavings = getIngotShavings();
+  const locked = isLevelLocked();
+  
+  const energyPercent = (energy / maxEnergy) * 100;
+  
+  let html = `<div class="section-title">⚒️ Слиток Кузнеца</div>`;
+  
+  // 🆕 Карточка слитка с анимацией покачивания
+  html += `
+    <div class="card" style="text-align:center; padding:30px 20px;">
+      <div class="ingot-display" id="ingotDisplay" style="font-size:80px; animation: ingotFloat 3s ease-in-out infinite; cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;">
+        ${ingotData.icon}
+      </div>
+      <div class="ingot-name" style="font-family:'Unbounded',sans-serif; font-size:18px; font-weight:700; color:var(--accent-gold); margin-top:8px;">
+        ${ingotData.name}
+      </div>
+      <div style="font-size:12px; color:var(--text-secondary); margin-top:4px;">
+        Уровень ${state.player.level} · Эпоха: ${ingotData.era}
+      </div>
+      
+      <div style="margin-top:16px; background:rgba(0,0,0,0.2); border-radius:16px; padding:12px;">
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); margin-bottom:4px;">
+          <span>⚡ Энергия</span>
+          <span>${energy}/${maxEnergy}</span>
+        </div>
+        <div class="progress-bar-container" style="height:6px; margin:4px 0;">
+          <div class="progress-bar-fill" style="width:${energyPercent}%; background:linear-gradient(90deg, #4A9CFF, #00BFFF);"></div>
+        </div>
+      </div>
+      
+      <div style="margin-top:8px; font-size:24px; font-weight:700; color:#FFD700;">
+        ✨ ${shavings} стружки
+      </div>
+    </div>
+  `;
+  
+  // 🆕 Карточка переплавки
+  html += `
+    <div class="card" style="text-align:center;">
+      <div style="font-family:'Unbounded',sans-serif; font-size:16px; font-weight:700; margin-bottom:12px; color:${locked ? '#FF4444' : 'var(--accent-gold)'};">
+        ${locked ? '🔒 ОПЫТ ЗАПОЛНЕН!' : '🔥 Переплавка Слитка'}
+      </div>
+  `;
+  
+  if (locked) {
+    const nextIngot = getIngotDataForLevel(state.player.level + 1);
+    
+    if (nextIngot) {
+      html += `
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">
+          Совершите переплавку для повышения до уровня ${state.player.level + 1}: <strong>${nextIngot.name}</strong>
+        </div>
+        
+        <div style="background:rgba(0,0,0,0.2); border-radius:16px; padding:14px; margin-bottom:12px; text-align:left;">
+          <div style="font-weight:700; font-size:13px; margin-bottom:8px; color:var(--text-primary);">Требования:</div>
+          <div style="font-size:12px; color:${shavings >= nextIngot.shavingsCost ? '#50C878' : '#FF4444'}; margin-bottom:6px;">
+            ✨ Кузнечная стружка: ${shavings}/${nextIngot.shavingsCost}
+          </div>
+      `;
+      
+      if (nextIngot.ingotCost) {
+        for (let ingId in nextIngot.ingotCost) {
+          const required = nextIngot.ingotCost[ingId];
+          const owned = state.ingots[ingId] || 0;
+          const ingName = CONFIG_ITEMS[ingId]?.name || ingId;
+          html += `
+            <div style="font-size:12px; color:${owned >= required ? '#50C878' : '#FF4444'}; margin-bottom:4px;">
+              ${CONFIG_ITEMS[ingId]?.icon || '📦'} ${ingName}: ${owned}/${required}
+            </div>
+          `;
+        }
+      }
+      
+      html += `</div>`;
+      
+      const canUpgrade = shavings >= nextIngot.shavingsCost && 
+        (!nextIngot.ingotCost || Object.entries(nextIngot.ingotCost).every(([id, req]) => (state.ingots[id] || 0) >= req));
+      
+      html += `
+        <button class="btn" id="performUpgradeBtn" style="background:linear-gradient(135deg, #FF4500, #FFD700); box-shadow:0 4px 20px rgba(255,100,0,0.4); ${canUpgrade ? '' : 'opacity:0.5; pointer-events:none;'}">
+          ⚡ ПЕРЕПЛАВИТЬ СЛИТОК
+        </button>
+      `;
+    } else {
+      html += `
+        <div style="font-size:14px; color:var(--accent-gold); padding:20px;">
+          🏆 Максимальный уровень достигнут!
+        </div>
+      `;
+    }
+  } else {
+    const nextLevelXP = LEVELS[state.player.level] || LEVELS[LEVELS.length - 1];
+    html += `
+      <div style="font-size:13px; color:var(--text-secondary); padding:20px;">
+        Наберите ${nextLevelXP} XP для разблокировки переплавки.
+        <br>Текущий опыт: ${state.player.xp} / ${nextLevelXP}
+      </div>
+    `;
+  }
+  
+  html += `</div>`;
+  
+  mainContent.innerHTML = html;
+  
+  // Обработчик тапа по слитку
+  const ingotDisplay = document.getElementById('ingotDisplay');
+  if (ingotDisplay) {
+    ingotDisplay.addEventListener('click', (e) => {
+      e.preventDefault();
+      const success = tapIngot();
+      if (success) {
+        // Анимация вспышки
+        ingotDisplay.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+          ingotDisplay.style.transform = 'scale(1)';
+        }, 100);
+        
+        // Обновляем UI
+        renderIngotTab();
+      }
+    });
+  }
+  
+  // Обработчик кнопки переплавки
+  const upgradeBtn = document.getElementById('performUpgradeBtn');
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener('click', () => {
+      performIngotUpgrade();
+      renderIngotTab();
+    });
+  }
+}
+
+// 🆕 Получить данные слитка для конкретного уровня
+function getIngotDataForLevel(level) {
+  return INGOT_LEVELS[level] || null;
+}
+
+// Импорт INGOT_LEVELS из ingot.js
+import { INGOT_LEVELS } from './ingot.js';
+
 // ========== ВКЛАДКА "ИГРЫ" ==========
 export function renderGamesTab() {
   const state = getPlayerState();
@@ -1295,7 +1442,6 @@ export function renderGamesTab() {
   // ===== ЗОНА 3: МИНИ-ИГРЫ =====
   html += '<div style="font-family:\'Unbounded\',sans-serif; font-size:14px; font-weight:700; margin:20px 0 8px; color:var(--accent-gold);">🎰 Мини-игры</div>';
   
-  // 🆕 Карточки мини-игр с проверкой уровня
   const miniGames = [
     { id: 'quench', name: 'Закалка: Точный Удар', icon: '🔨', description: 'Сжимай раскалённый слиток между прессом и наковальней. Тапай, чтобы отбивать плиты!', reqLevel: 1 },
     { id: 'stack', name: 'Идеальная Стопка', icon: '🧱', description: 'Строй башню из слитков! Тапай, чтобы сбросить слиток. Чем точнее — тем выше!', reqLevel: 5 },
@@ -1359,7 +1505,6 @@ export function renderGamesTab() {
     });
   });
   
-  // 🆕 Обработчики кнопок мини-игр
   document.querySelectorAll('.mini-game-play-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1523,6 +1668,7 @@ export function renderCurrentTab() {
   else if (currentTab === 'collection') renderCollectionTab();
   else if (currentTab === 'events') renderGamesTab();
   else if (currentTab === 'profile') renderProfileTab();
+  else if (currentTab === 'ingot') renderIngotTab();
 }
 
 export function setActiveTab(tabId) {
