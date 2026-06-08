@@ -59,7 +59,7 @@ function cleanupGame() {
   gameState = {};
 }
 
-// Настройка Canvas с учётом DPR
+// Настройка Canvas с учётом DPR (Retina-дисплеи)
 function setupCanvas() {
   if (!canvas || !overlay) return false;
 
@@ -72,6 +72,10 @@ function setupCanvas() {
   canvas.style.width = maxWidth + 'px';
   canvas.style.height = maxHeight + 'px';
   ctx.scale(dpr, dpr);
+
+  // Сохраняем логические размеры для удобства
+  canvas._logicalWidth = maxWidth;
+  canvas._logicalHeight = maxHeight;
 
   return true;
 }
@@ -94,7 +98,7 @@ export function stopCurrentGame() {
   if (overlay) overlay.classList.remove('active');
 }
 
-// ========== ЭКСПОРТ: ЗАПУСК ЗАКАЛКИ ==========
+// ========== ЭКСПОРТ: ЗАПУСК ЗАКАЛКИ (АКТУАЛЬНАЯ ВЕРСИЯ) ==========
 export function startQuenchGame() {
   initDOM();
   if (!setupCanvas()) return;
@@ -108,19 +112,30 @@ export function startQuenchGame() {
   cleanupGame();
   currentGame = 'quench';
 
+  const w = canvas._logicalWidth;
+  const h = canvas._logicalHeight;
+
   gameState = {
     score: 0,
-    position: 0.5,
-    speed: 0.005,
-    dangerZone: 0.12,
-    redZone: 0.06,
-    tapPushback: 0.07,
+    topPlatePos: 0.05,
+    bottomPlatePos: 0.95,
+    topPlateTarget: 0.05,
+    bottomPlateTarget: 0.95,
+    speed: 0.004,
+    tapPushback: 0.08,
     elapsedTime: 0,
     lastTime: Date.now(),
     ingotHeight: 60,
     ingotWidth: 80,
     shakeAmount: 0,
-    sparks: []
+    sparks: [],
+    crashZoneCenter: 0.08,
+    crashZoneEdge: 0.04,
+    countdown: 3,
+    countdownStart: Date.now(),
+    gameStarted: false,
+    canvasW: w,
+    canvasH: h
   };
 
   overlay.classList.add('active');
@@ -128,19 +143,24 @@ export function startQuenchGame() {
   const handleTap = (e) => {
     e.preventDefault();
     if (currentGame !== 'quench') return;
+    if (!gameState.gameStarted) return;
 
-    gameState.position += gameState.tapPushback;
-    gameState.position = Math.min(1, gameState.position);
+    gameState.topPlateTarget -= gameState.tapPushback;
+    gameState.bottomPlateTarget += gameState.tapPushback;
 
-    if (gameState.position >= 1 - gameState.redZone || gameState.position <= gameState.redZone) {
-      endQuenchGame(true);
+    gameState.topPlateTarget = Math.max(0, gameState.topPlateTarget);
+    gameState.bottomPlateTarget = Math.min(1, gameState.bottomPlateTarget);
+
+    // Проверка на попадание в красные зоны (самые края)
+    if (gameState.topPlateTarget >= 1 - gameState.crashZoneEdge || gameState.bottomPlateTarget <= gameState.crashZoneEdge) {
+      endQuenchGame('broken');
       return;
     }
 
     for (let i = 0; i < 5; i++) {
       gameState.sparks.push({
-        x: Math.min(window.innerWidth - 32, 400) / 2 + (Math.random() - 0.5) * gameState.ingotWidth,
-        y: Math.min(window.innerHeight - 120, 600) / 2 + (Math.random() - 0.5) * gameState.ingotHeight,
+        x: w / 2 + (Math.random() - 0.5) * gameState.ingotWidth,
+        y: h / 2 + (Math.random() - 0.5) * gameState.ingotHeight,
         vx: (Math.random() - 0.5) * 4,
         vy: (Math.random() - 0.5) * 4,
         life: 1,
@@ -159,11 +179,46 @@ export function startQuenchGame() {
     const dt = (now - gameState.lastTime) / 1000;
     gameState.lastTime = now;
 
-    gameState.position -= gameState.speed * dt * 60;
-    gameState.position = Math.max(0, Math.min(1, gameState.position));
+    // Обратный отсчёт
+    if (!gameState.gameStarted) {
+      const elapsed = (now - gameState.countdownStart) / 1000;
+      gameState.countdown = Math.max(0, 3 - Math.floor(elapsed));
+      if (elapsed >= 3) {
+        gameState.gameStarted = true;
+        gameState.countdown = 0;
+        gameState.lastTime = Date.now();
+      }
+      renderQuench();
+      animationId = requestAnimationFrame(gameLoop);
+      return;
+    }
 
-    if (gameState.position <= 0 || gameState.position >= 1) {
-      endQuenchGame(false);
+    // Плавное движение плит к целевым позициям (lerp)
+    const lerpSpeed = 12;
+    gameState.topPlatePos += (gameState.topPlateTarget - gameState.topPlatePos) * lerpSpeed * dt;
+    gameState.bottomPlatePos += (gameState.bottomPlateTarget - gameState.bottomPlatePos) * lerpSpeed * dt;
+
+    // Автоматическое сжатие
+    gameState.topPlateTarget += gameState.speed * dt * 60;
+    gameState.bottomPlateTarget -= gameState.speed * dt * 60;
+    gameState.topPlateTarget = Math.min(1, gameState.topPlateTarget);
+    gameState.bottomPlateTarget = Math.max(0, gameState.bottomPlateTarget);
+
+    // Двигаем реальные позиции к сжатию
+    gameState.topPlatePos += gameState.speed * dt * 60;
+    gameState.bottomPlatePos -= gameState.speed * dt * 60;
+    gameState.topPlatePos = Math.min(1, gameState.topPlatePos);
+    gameState.bottomPlatePos = Math.max(0, gameState.bottomPlatePos);
+
+    // Проверка: плиты коснулись друг друга в центре
+    if (gameState.topPlatePos >= gameState.bottomPlatePos) {
+      endQuenchGame('crushed');
+      return;
+    }
+
+    // Проверка: плиты улетели в крайние красные зоны
+    if (gameState.topPlatePos <= gameState.crashZoneEdge || gameState.bottomPlatePos >= 1 - gameState.crashZoneEdge) {
+      endQuenchGame('broken');
       return;
     }
 
@@ -171,10 +226,12 @@ export function startQuenchGame() {
     gameState.score = Math.floor(gameState.elapsedTime * 10);
 
     const timeBonus = Math.floor(gameState.elapsedTime / 5);
-    gameState.speed = 0.005 * Math.pow(1.18, timeBonus);
+    gameState.speed = 0.004 * Math.pow(1.18, timeBonus);
 
-    const inDanger = gameState.position <= gameState.dangerZone || gameState.position >= 1 - gameState.dangerZone;
-    gameState.shakeAmount = inDanger ? (1 - gameState.position / gameState.dangerZone) * 3 : 0;
+    const topInDanger = gameState.topPlatePos <= gameState.crashZoneEdge;
+    const bottomInDanger = gameState.bottomPlatePos >= 1 - gameState.crashZoneEdge;
+    const centerClose = (gameState.bottomPlatePos - gameState.topPlatePos) < gameState.crashZoneCenter;
+    gameState.shakeAmount = (topInDanger || bottomInDanger || centerClose) ? 2 : 0;
 
     gameState.sparks = gameState.sparks.filter(s => {
       s.x += s.vx;
@@ -193,10 +250,28 @@ export function startQuenchGame() {
 function renderQuench() {
   if (!ctx || !canvas) return;
 
-  const displayWidth = Math.min(window.innerWidth - 32, 400);
-  const displayHeight = Math.min(window.innerHeight - 120, 600);
-  const { width, height } = { width: displayWidth, height: displayHeight };
+  const w = gameState.canvasW;
+  const h = gameState.canvasH;
   const gs = gameState;
+
+  // Если идёт отсчёт — показываем только его
+  if (!gs.gameStarted) {
+    ctx.fillStyle = '#0a0a0c';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 64px Unbounded, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (gs.countdown > 0) {
+      ctx.fillText(gs.countdown, w / 2, h / 2 - 20);
+    } else {
+      ctx.fillText('ЗАКАЛКА!', w / 2, h / 2 - 20);
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = 'bold 16px Montserrat, sans-serif';
+    ctx.fillText('Приготовься...', w / 2, h / 2 + 40);
+    return;
+  }
 
   const shakeX = (Math.random() - 0.5) * gs.shakeAmount * 2;
   const shakeY = (Math.random() - 0.5) * gs.shakeAmount * 2;
@@ -205,46 +280,46 @@ function renderQuench() {
   ctx.translate(shakeX, shakeY);
 
   // Фон
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
   bgGrad.addColorStop(0, '#2a2a2e');
   bgGrad.addColorStop(0.5, '#1a1a1c');
   bgGrad.addColorStop(1, '#2a2a2e');
   ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, w, h);
 
-  // Красные зоны по краям
-  const redZonePx = gs.redZone * height;
+  // Красные зоны по краям (пресс сломан)
+  const edgeZonePx = gs.crashZoneEdge * h;
   ctx.fillStyle = 'rgba(255, 0, 0, 0.35)';
-  ctx.fillRect(0, 0, width, redZonePx);
-  ctx.fillRect(0, height - redZonePx, width, redZonePx);
+  ctx.fillRect(0, 0, w, edgeZonePx);
+  ctx.fillRect(0, h - edgeZonePx, w, edgeZonePx);
   ctx.strokeStyle = 'rgba(255, 60, 60, 0.9)';
   ctx.lineWidth = 3;
   ctx.setLineDash([6, 3]);
   ctx.beginPath();
-  ctx.moveTo(0, redZonePx);
-  ctx.lineTo(width, redZonePx);
+  ctx.moveTo(0, edgeZonePx);
+  ctx.lineTo(w, edgeZonePx);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(0, height - redZonePx);
-  ctx.lineTo(width, height - redZonePx);
+  ctx.moveTo(0, h - edgeZonePx);
+  ctx.lineTo(w, h - edgeZonePx);
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.lineWidth = 1;
 
-  // Красная зона в центре
-  const centerZoneHalf = (gs.dangerZone * height) / 2;
-  const centerY = height / 2;
+  // Красная зона в центре (слиток раздавлен)
+  const centerZoneHalf = (gs.crashZoneCenter * h) / 2;
+  const centerY = h / 2;
   ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-  ctx.fillRect(width * 0.05, centerY - centerZoneHalf, width * 0.9, centerZoneHalf * 2);
+  ctx.fillRect(w * 0.05, centerY - centerZoneHalf, w * 0.9, centerZoneHalf * 2);
   ctx.strokeStyle = 'rgba(255, 80, 80, 0.7)';
   ctx.lineWidth = 2;
   ctx.setLineDash([4, 4]);
-  ctx.strokeRect(width * 0.05, centerY - centerZoneHalf, width * 0.9, centerZoneHalf * 2);
+  ctx.strokeRect(w * 0.05, centerY - centerZoneHalf, w * 0.9, centerZoneHalf * 2);
   ctx.setLineDash([]);
   ctx.lineWidth = 1;
 
   // Верхняя плита
-  const topY = gs.position * (height / 2 - 60);
+  const topY = gs.topPlatePos * h;
   const plateGradTop = ctx.createLinearGradient(0, topY - 8, 0, topY + 8);
   plateGradTop.addColorStop(0, '#FF4500');
   plateGradTop.addColorStop(0.5, '#FF8C00');
@@ -252,11 +327,11 @@ function renderQuench() {
   ctx.fillStyle = plateGradTop;
   ctx.shadowColor = 'rgba(255, 100, 0, 0.8)';
   ctx.shadowBlur = 20 + gs.shakeAmount * 10;
-  ctx.fillRect(width * 0.05, topY - 6, width * 0.9, 12);
+  ctx.fillRect(w * 0.05, topY - 6, w * 0.9, 12);
   ctx.shadowBlur = 0;
 
   // Нижняя плита
-  const bottomY = height - gs.position * (height / 2 - 60);
+  const bottomY = gs.bottomPlatePos * h;
   const plateGradBottom = ctx.createLinearGradient(0, bottomY - 6, 0, bottomY + 6);
   plateGradBottom.addColorStop(0, '#87CEEB');
   plateGradBottom.addColorStop(0.5, '#1E90FF');
@@ -264,15 +339,15 @@ function renderQuench() {
   ctx.fillStyle = plateGradBottom;
   ctx.shadowColor = 'rgba(0, 191, 255, 0.8)';
   ctx.shadowBlur = 20 + gs.shakeAmount * 10;
-  ctx.fillRect(width * 0.05, bottomY - 6, width * 0.9, 12);
+  ctx.fillRect(w * 0.05, bottomY - 6, w * 0.9, 12);
   ctx.shadowBlur = 0;
 
-  // Слиток
+  // Слиток — между плитами
   const ingotCenterY = (topY + bottomY) / 2;
   const ingotScale = Math.max(0.3, (bottomY - topY) / 200);
   const ingotW = gs.ingotWidth * ingotScale;
   const ingotH = Math.min(gs.ingotHeight, Math.max(4, bottomY - topY - 20));
-  const ingotX = width / 2 - ingotW / 2;
+  const ingotX = w / 2 - ingotW / 2;
   const ingotY = ingotCenterY - ingotH / 2;
 
   if (ingotH > 4) {
@@ -307,58 +382,57 @@ function renderQuench() {
   ctx.shadowBlur = 0;
 
   // Score
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-  ctx.fillRect(width / 2 - 55, height / 2 - 45, 110, 55);
-
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 13px Unbounded, sans-serif';
+  ctx.font = 'bold 14px Unbounded, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('SCORE', width / 2, height / 2 - 28);
+  ctx.fillText('SCORE', w / 2, 26);
 
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 42px Unbounded, sans-serif';
-  ctx.fillText(gs.score, width / 2, height / 2 + 10);
+  ctx.font = 'bold 48px Unbounded, sans-serif';
+  ctx.fillText(gs.score, w / 2, 64);
 
   ctx.restore();
 }
 
-function endQuenchGame(crashedByRedZone) {
+function endQuenchGame(reason) {
   const score = gameState.score;
   let rewardText = '';
+  let title = 'Закалка завершена!';
   const state = getPlayerState();
 
-  if (crashedByRedZone) {
-    rewardText = '💥 Пресс сломан! Слиток разрушен.';
-  } else {
-    const rewards = Math.floor(score / 200);
-
-    if (rewards > 0) {
-      const xpGained = rewards * 30;
-      addXP(xpGained);
-
-      const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
-
-      for (let i = 0; i < rewards; i++) {
-        const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
-        state.ingots[randomIngot.id] = (state.ingots[randomIngot.id] || 0) + 1;
-        state.minedStats[randomIngot.id] = (state.minedStats[randomIngot.id] || 0) + 1;
-        state.player.totalIngots++;
-
-        rewardText += `Добавлен слиток: ${randomIngot.name}!\n`;
-      }
-
-      rewardText += `+${xpGained} XP`;
-      saveGame();
-    } else {
-      rewardText = 'Не набрано очков для награды';
-    }
+  if (reason === 'crushed') {
+    title = 'Слиток раздавлен!';
+  } else if (reason === 'broken') {
+    title = 'Пресс сломан!';
   }
 
-  showResult(crashedByRedZone ? 'Пресс сломан!' : 'Закалка завершена!', score, rewardText);
+  // ВСЕГДА выдаём награды за очки
+  const rewards = Math.floor(score / 200);
 
+  if (rewards > 0) {
+    const xpGained = rewards * 30;
+    addXP(xpGained);
+
+    const commonIngots = Object.values(CONFIG_ITEMS).filter(i => i.rarityLevel === 'common' && !i.isCollectible);
+
+    for (let i = 0; i < rewards; i++) {
+      const randomIngot = commonIngots[Math.floor(Math.random() * commonIngots.length)];
+      state.ingots[randomIngot.id] = (state.ingots[randomIngot.id] || 0) + 1;
+      state.minedStats[randomIngot.id] = (state.minedStats[randomIngot.id] || 0) + 1;
+      state.player.totalIngots++;
+
+      rewardText += `Добавлен слиток: ${randomIngot.name}!\n`;
+    }
+
+    rewardText += `+${xpGained} XP`;
+    saveGame();
+  } else {
+    rewardText = 'Не набрано очков для награды';
+  }
+
+  showResult(title, score, rewardText);
   currentGame = null;
-
   import('./ui.js').then(ui => ui.renderCurrentTab());
 }
 
@@ -376,10 +450,10 @@ export function startStackGame() {
   cleanupGame();
   currentGame = 'stack';
 
-  const displayWidth = Math.min(window.innerWidth - 32, 400);
-  const displayHeight = Math.min(window.innerHeight - 120, 600);
+  const w = canvas._logicalWidth;
+  const h = canvas._logicalHeight;
   const blockHeight = 28;
-  const baseY = displayHeight - 30;
+  const baseY = h - 30;
   const baseSpeed = 3.0;
   const randomDirection = Math.random() > 0.5 ? 1 : -1;
 
@@ -387,7 +461,7 @@ export function startStackGame() {
     score: 0,
     blockWidth: 120,
     minBlockWidth: 15,
-    currentX: randomDirection === 1 ? 0 : displayWidth - 120,
+    currentX: randomDirection === 1 ? 0 : w - 120,
     direction: randomDirection,
     speed: baseSpeed + Math.random() * 1.5,
     blocks: [],
@@ -400,8 +474,8 @@ export function startStackGame() {
     baseY: baseY,
     movingY: 60,
     baseSpeed: baseSpeed,
-    displayWidth: displayWidth,
-    displayHeight: displayHeight
+    canvasW: w,
+    canvasH: h
   };
 
   gameState.fallTargetY = baseY - blockHeight;
@@ -421,7 +495,7 @@ export function startStackGame() {
     if (currentGame !== 'stack') return;
 
     if (!gameState.falling) {
-      const maxX = gameState.displayWidth - gameState.blockWidth;
+      const maxX = gameState.canvasW - gameState.blockWidth;
       gameState.currentX += gameState.speed * gameState.direction;
 
       if (gameState.currentX >= maxX) {
@@ -493,7 +567,7 @@ function placeBlock() {
   gameState.speed = gameState.baseSpeed + Math.random() * 2.0 + gameState.score * 0.15;
 
   gameState.direction = Math.random() > 0.5 ? 1 : -1;
-  gameState.currentX = gameState.direction === 1 ? 0 : gameState.displayWidth - gameState.blockWidth;
+  gameState.currentX = gameState.direction === 1 ? 0 : gameState.canvasW - gameState.blockWidth;
 
   gameState.falling = false;
   gameState.fallBlock = null;
@@ -503,29 +577,26 @@ function placeBlock() {
 function renderStack() {
   if (!ctx || !canvas) return;
 
-  const width = gameState.displayWidth;
-  const height = gameState.displayHeight;
+  const w = gameState.canvasW;
+  const h = gameState.canvasH;
   const gs = gameState;
 
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
   bgGrad.addColorStop(0, '#1a1a2e');
   bgGrad.addColorStop(1, '#0a0a14');
   ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.fillRect(width / 2 - 60, 10, 120, 40);
+  ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = '#FFD700';
   ctx.font = 'bold 22px Unbounded, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`🏆 Башня: ${gs.score}`, width / 2, 38);
+  ctx.fillText(`🏆 Башня: ${gs.score}`, w / 2, 38);
 
   const baseY = gs.baseY;
   ctx.fillStyle = '#455A64';
   ctx.shadowColor = 'rgba(96, 125, 139, 0.4)';
   ctx.shadowBlur = 10;
-  ctx.fillRect(width * 0.05, baseY, width * 0.9, 12);
+  ctx.fillRect(w * 0.05, baseY, w * 0.9, 12);
   ctx.shadowBlur = 0;
 
   gs.blocks.forEach((block, index) => {
@@ -771,6 +842,9 @@ function launchUpgradeWheel(sacrificeId, targetId, chance) {
   cleanupGame();
   currentGame = 'upgrade';
 
+  const w = canvas._logicalWidth;
+  const h = canvas._logicalHeight;
+
   const isSuccess = Math.random() * 100 < chance;
   const successAngleDeg = (chance / 100) * 360;
 
@@ -800,8 +874,8 @@ function launchUpgradeWheel(sacrificeId, targetId, chance) {
     spinStart: 0,
     spinDuration: 4000,
     successAngleDeg,
-    displayWidth: Math.min(window.innerWidth - 32, 400),
-    displayHeight: Math.min(window.innerHeight - 120, 600)
+    canvasW: w,
+    canvasH: h
   };
 
   overlay.classList.add('active');
@@ -850,14 +924,14 @@ function spinWheel() {
 function renderUpgradeWheel() {
   if (!ctx || !canvas) return;
 
-  const width = gameState.displayWidth;
-  const height = gameState.displayHeight;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const wheelRadius = Math.min(width, height) * 0.38;
+  const w = gameState.canvasW;
+  const h = gameState.canvasH;
+  const centerX = w / 2;
+  const centerY = h / 2;
+  const wheelRadius = Math.min(w, h) * 0.38;
 
   ctx.fillStyle = '#1a0a1a';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
   ctx.font = 'bold 16px Unbounded, sans-serif';
@@ -873,7 +947,7 @@ function renderUpgradeWheel() {
   ctx.fillText(`Жертва: ${sacrifice?.name || '???'}`, 16, 80);
 
   ctx.textAlign = 'right';
-  ctx.fillText(`Цель: ${target?.name || '???'}`, width - 16, 80);
+  ctx.fillText(`Цель: ${target?.name || '???'}`, w - 16, 80);
 
   ctx.save();
   ctx.translate(centerX, centerY);
@@ -923,12 +997,12 @@ function renderUpgradeWheel() {
   ctx.fillStyle = chanceColor;
   ctx.font = 'bold 28px Unbounded, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`Шанс: ${gameState.chance}%`, centerX, height - 60);
+  ctx.fillText(`Шанс: ${gameState.chance}%`, centerX, h - 60);
 
   if (!gameState.spinning && gameState.result === null) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.font = '14px Montserrat, sans-serif';
-    ctx.fillText('Тапни, чтобы запустить', centerX, height - 24);
+    ctx.fillText('Тапни, чтобы запустить', centerX, h - 24);
   }
 
   if (gameState.result !== null) {
@@ -936,7 +1010,7 @@ function renderUpgradeWheel() {
     const resultText = gameState.result ? '🎉 УСПЕХ!' : '💔 НЕУДАЧА';
     ctx.fillStyle = resultColor;
     ctx.font = 'bold 24px Unbounded, sans-serif';
-    ctx.fillText(resultText, centerX, height - 90);
+    ctx.fillText(resultText, centerX, h - 90);
   }
 }
 
@@ -989,4 +1063,4 @@ if (ctx && !ctx.roundRect) {
   };
 }
 
-console.log('[Minigames] Модуль загружен. Игры: Закалка, Стопка, Апгрейд.');
+console.log('[Minigames] Модуль загружен. Игры: Закалка, Стопка, Апгрейд. DPR-фикс применён.');
