@@ -1,5 +1,6 @@
 // ========== CORE МОДУЛЬ: ЛОГИКА ИГРЫ ==========
 import { CONFIG_ITEMS, CONFIG_GEODES, CONFIG_EXPEDITIONS, CRAFT_RECIPES, LEVELS, DEFAULT_STATE, GUILD_QUESTS } from './config.js';
+import { INGOT_LEVELS } from './ingot.js';
 
 // ========== ЗАГЛУШКИ UI ФУНКЦИЙ ==========
 let _showToast = null;
@@ -26,20 +27,6 @@ export function registerUIFunctions(functions) {
     _updateMeteorShardsDisplay = functions.updateMeteorShardsDisplay;
 }
 
-const isTelegram = !!window.Telegram?.WebApp;
-const tg = window.Telegram?.WebApp;
-
-if (tg) {
-  try {
-    tg.ready();
-    tg.expand();
-    try { tg.setHeaderColor('#000000'); } catch(e) {}
-    try { tg.setBackgroundColor('#000000'); } catch(e) {}
-  } catch(e) {
-    console.warn('[StarForge] Telegram init error:', e);
-  }
-}
-
 // ========== СОСТОЯНИЕ ИГРОКА ==========
 export let playerState = {
   expeditions: {},
@@ -56,7 +43,13 @@ export let playerState = {
   activeQuests: [],
   questRefreshTime: null,
   completedQuests: [],
-  questCooldownEnd: null
+  questCooldownEnd: null,
+  // 🆕 Система слитка-кликера
+  ingotShavings: 0,
+  tapEnergy: 100,
+  maxTapEnergy: 100,
+  lastEnergyRegen: Date.now(),
+  levelLocked: false
 };
 
 export function getPlayerState() {
@@ -88,7 +81,7 @@ export const meteorStormState = {
 };
 
 export function sendBotNotification(message) {
-  console.log('[StarForge Bot Notification]', message);
+  console.log('[StarForge Notification]', message);
 }
 
 export function showSkeleton() {
@@ -147,8 +140,8 @@ function setTimerTimeout(timerName, callback, delay) {
 
 // ---------- УНИВЕРСАЛЬНЫЙ ИВЕНТ-МЕНЕДЖЕР (РОТАЦИЯ ПО СИСТЕМНОМУ ВРЕМЕНИ) ----------
 const EVENT_LIST = ['great_smelt', 'meteor_storm'];
-const EVENT_DURATION = 15 * 60 * 1000; // 15 минут
-const ROTATION_INTERVAL = 30 * 60 * 1000; // 30 минут
+const EVENT_DURATION = 15 * 60 * 1000;
+const ROTATION_INTERVAL = 30 * 60 * 1000;
 
 const EVENT_DEFINITIONS = {
   great_smelt: {
@@ -175,7 +168,6 @@ const EVENT_DEFINITIONS = {
   }
 };
 
-// 🆕 Ускоренный режим для тестов
 let speedMode = false;
 const SPEED_MULTIPLIER = 60;
 
@@ -646,13 +638,26 @@ export function getExpeditionTimeLeft(expId) {
   return Math.max(0, exp.endTime - Date.now());
 }
 
+// 🆕 ДОБАВЛЕНИЕ ОПЫТА С ЗАСЛОНКОЙ
 export function addXP(amount) {
+  if (playerState.levelLocked) {
+    if (_showToast) _showToast('Опыт заполнен! Переплавьте Слиток для повышения уровня.', '🔒');
+    return;
+  }
+  
   playerState.player.xp += amount;
   
-  while (playerState.player.level < LEVELS.length - 1 && playerState.player.xp >= LEVELS[playerState.player.level]) {
-    playerState.player.level++;
-    if (_showToast) _showToast(`🎉 Уровень ${playerState.player.level}!`, '⬆️');
-    sendBotNotification(`⭐ Игрок достиг ${playerState.player.level} уровня!`);
+  const nextLevelXP = LEVELS[playerState.player.level] || LEVELS[LEVELS.length - 1];
+  
+  if (playerState.player.xp >= nextLevelXP) {
+    playerState.player.xp = nextLevelXP;
+    playerState.levelLocked = true;
+    if (_showToast) _showToast('⚡ Опыт заполнен! Совершите переплавку Слитка!', '🔒');
+    sendBotNotification(`🔒 Игрок достиг порога переплавки на уровне ${playerState.player.level}`);
+    saveGame();
+    if (_updateProfileUI) _updateProfileUI();
+    if (_renderCurrentTab) _renderCurrentTab();
+    return;
   }
   
   if (_updateProfileUI) _updateProfileUI();
@@ -709,7 +714,114 @@ export function exchangeSpecialGeodeForXP(geodeId) {
   if (_renderCurrentTab) _renderCurrentTab();
 }
 
-// ---------- 🆕 ПЕРЕРАБОТАННЫЕ ЗАКАЗЫ ГИЛЬДИИ ----------
+// 🆕 СИСТЕМА ТАПОВ ПО СЛИТКУ
+export function tapIngot() {
+  if (playerState.tapEnergy <= 0) {
+    if (_showToast) _showToast('Нет энергии! Подождите восстановления.', '⚡');
+    return false;
+  }
+  
+  playerState.tapEnergy--;
+  playerState.ingotShavings = (playerState.ingotShavings || 0) + 1;
+  
+  saveGame();
+  return true;
+}
+
+export function getIngotEnergy() {
+  return playerState.tapEnergy;
+}
+
+export function getMaxIngotEnergy() {
+  return playerState.maxTapEnergy;
+}
+
+export function getIngotShavings() {
+  return playerState.ingotShavings || 0;
+}
+
+export function isLevelLocked() {
+  return playerState.levelLocked;
+}
+
+// 🆕 РЕГЕНЕРАЦИЯ ЭНЕРГИИ
+export function regenTapEnergy() {
+  if (!playerState.lastEnergyRegen) {
+    playerState.lastEnergyRegen = Date.now();
+    return;
+  }
+  
+  const now = Date.now();
+  const elapsed = now - playerState.lastEnergyRegen;
+  const regenAmount = Math.floor(elapsed / 3000);
+  
+  if (regenAmount > 0) {
+    playerState.tapEnergy = Math.min(playerState.maxTapEnergy, playerState.tapEnergy + regenAmount);
+    playerState.lastEnergyRegen = now - (elapsed % 3000);
+  }
+}
+
+// 🆕 ПЕРЕПЛАВКА СЛИТКА (ПОВЫШЕНИЕ УРОВНЯ)
+export function performIngotUpgrade() {
+  if (!playerState.levelLocked) {
+    if (_showToast) _showToast('Опыт ещё не заполнен!', '⚠️');
+    return false;
+  }
+  
+  const currentLevel = playerState.player.level;
+  const ingotData = INGOT_LEVELS[currentLevel];
+  
+  if (!ingotData) {
+    if (_showToast) _showToast('Максимальный уровень достигнут!', '🏆');
+    return false;
+  }
+  
+  if (playerState.ingotShavings < ingotData.shavingsCost) {
+    if (_showToast) _showToast(`Недостаточно стружки! Нужно ${ingotData.shavingsCost}.`, '⚠️');
+    return false;
+  }
+  
+  if (ingotData.ingotCost) {
+    for (let ingId in ingotData.ingotCost) {
+      const required = ingotData.ingotCost[ingId];
+      const owned = playerState.ingots[ingId] || 0;
+      if (owned < required) {
+        const ingName = CONFIG_ITEMS[ingId]?.name || ingId;
+        if (_showToast) _showToast(`Недостаточно ${ingName}! Нужно ${required}.`, '⚠️');
+        return false;
+      }
+    }
+  }
+  
+  playerState.ingotShavings -= ingotData.shavingsCost;
+  
+  if (ingotData.ingotCost) {
+    for (let ingId in ingotData.ingotCost) {
+      playerState.ingots[ingId] -= ingotData.ingotCost[ingId];
+    }
+  }
+  
+  playerState.player.level++;
+  playerState.player.xp = 0;
+  playerState.levelLocked = false;
+  
+  if (_showToast) _showToast(`🎉 Слиток переплавлен! Уровень ${playerState.player.level}: ${ingotData.name}`, ingotData.icon);
+  sendBotNotification(`⬆️ Игрок повысил уровень до ${playerState.player.level} (${ingotData.name})`);
+  
+  saveGame();
+  if (_updateProfileUI) _updateProfileUI();
+  if (_renderCurrentTab) _renderCurrentTab();
+  
+  return true;
+}
+
+// 🆕 ПОЛУЧИТЬ ДАННЫЕ ТЕКУЩЕГО СЛИТКА
+export function getCurrentIngotData() {
+  const level = playerState.player.level;
+  return INGOT_LEVELS[level] || INGOT_LEVELS[1];
+}
+
+// ---------- ПЕРЕРАБОТАННЫЕ ЗАКАЗЫ ГИЛЬДИИ ----------
 export function getAvailableQuests() {
   const playerLevel = playerState.player.level;
   return GUILD_QUESTS.filter(q => q.reqLevel >= playerLevel - 1 && q.reqLevel <= playerLevel + 1);
@@ -1242,7 +1354,12 @@ export function saveGame() {
       activeQuests: playerState.activeQuests,
       questRefreshTime: playerState.questRefreshTime,
       completedQuests: playerState.completedQuests,
-      questCooldownEnd: playerState.questCooldownEnd
+      questCooldownEnd: playerState.questCooldownEnd,
+      ingotShavings: playerState.ingotShavings,
+      tapEnergy: playerState.tapEnergy,
+      maxTapEnergy: playerState.maxTapEnergy,
+      lastEnergyRegen: playerState.lastEnergyRegen,
+      levelLocked: playerState.levelLocked
     },
     collectibleSerials,
     nextSerial,
@@ -1254,12 +1371,6 @@ export function saveGame() {
   try {
     localStorage.setItem('starforge_v1', saveData);
   } catch (e) {}
-  
-  if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.setItem === 'function') {
-    try {
-      tg.CloudStorage.setItem('starforge_save', saveData, () => {});
-    } catch(e) {}
-  }
 }
 
 function applySaveData(data) {
@@ -1354,6 +1465,22 @@ function applySaveData(data) {
     playerState.questCooldownEnd = saved.questCooldownEnd;
   }
   
+  if (typeof saved.ingotShavings === 'number') {
+    playerState.ingotShavings = saved.ingotShavings;
+  }
+  if (typeof saved.tapEnergy === 'number') {
+    playerState.tapEnergy = saved.tapEnergy;
+  }
+  if (typeof saved.maxTapEnergy === 'number') {
+    playerState.maxTapEnergy = saved.maxTapEnergy;
+  }
+  if (typeof saved.lastEnergyRegen === 'number' || saved.lastEnergyRegen === null) {
+    playerState.lastEnergyRegen = saved.lastEnergyRegen;
+  }
+  if (typeof saved.levelLocked === 'boolean') {
+    playerState.levelLocked = saved.levelLocked;
+  }
+  
   if (data.collectibleSerials) {
     for (let k in data.collectibleSerials) {
       collectibleSerials[k] = data.collectibleSerials[k];
@@ -1399,6 +1526,11 @@ export const saveToLocalStorage = saveGame;
   playerState.questRefreshTime = null;
   playerState.completedQuests = [];
   playerState.questCooldownEnd = null;
+  playerState.ingotShavings = 0;
+  playerState.tapEnergy = 100;
+  playerState.maxTapEnergy = 100;
+  playerState.lastEnergyRegen = Date.now();
+  playerState.levelLocked = false;
   
   console.log('[Core] DEFAULT_STATE применён синхронно при загрузке модуля');
 })();
@@ -1418,22 +1550,6 @@ export async function initializeState() {
         console.log('[Boot] Local save loaded');
       }
     } catch (e) {}
-    
-    if (isTelegram && tg.CloudStorage && typeof tg.CloudStorage.getItem === 'function') {
-      try {
-        await new Promise((resolve) => {
-          tg.CloudStorage.getItem('starforge_save', (error, cloudData) => {
-            if (!error && cloudData) {
-              try {
-                applySaveData(JSON.parse(cloudData));
-                localStorage.setItem('starforge_v1', cloudData);
-              } catch (e) {}
-            }
-            resolve();
-          });
-        });
-      } catch(e) {}
-    }
     
     console.log('[Boot] Инициализация завершена');
     eventsManager.startEventCycle();
@@ -1516,6 +1632,7 @@ export function startGlobalTimer() {
     checkCompletedExpeditions();
     updateExpeditionTimers();
     updateEventTimer();
+    regenTapEnergy();
   }, 500);
 }
 
@@ -1651,19 +1768,13 @@ function showCollectibleAnimation(ingot) {
 
 // ---------- ЛИДЕРБОРД ----------
 export async function updateLeaderboard() {
-  if (!isTelegram || !tg.initData) {
-    if (_showToast) _showToast('Лидерборд доступен только в Telegram', '⚠️');
-    return;
-  }
-  
   renderTestLeaderboard();
 }
 
 function renderTestLeaderboard() {
-  const userName = tg?.initDataUnsafe?.user?.first_name || 'Старатель';
   const testData = [
     { rank: 1, name: '⛏️ Шахтёр_Бог', xp: 15000 }, { rank: 2, name: '💎 Алмазный_Лорд', xp: 12000 },
-    { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 }, { rank: 4, name: userName, xp: playerState.player.xp, isPlayer: true },
+    { rank: 3, name: '🌌 Космо_Старатель', xp: 8500 }, { rank: 4, name: 'Старатель', xp: playerState.player.xp, isPlayer: true },
     { rank: 5, name: '🪨 Геолог_777', xp: 3200 }, { rank: 6, name: '🔥 Лавовый_Копатель', xp: 2100 },
     { rank: 7, name: '❄️ Ледяной_Бур', xp: 900 }, { rank: 8, name: '🌟 Звёздный_Путник', xp: 450 },
     { rank: 9, name: '🪐 Астероидный_Волк', xp: 200 }, { rank: 10, name: '⛏️ Новичок_2026', xp: 50 }
