@@ -2,7 +2,7 @@
 import { CONFIG_ITEMS } from './config.js';
 import { getPlayerState, saveGame } from './core.js';
 
-// ========== ДАННЫЕ ПРОГРЕССИИ СЛИТКА ==========
+// ========== ДАННЫЕ ПРОГРЕССИИ СЛИТКА (15 УРОВНЕЙ) ==========
 const INGOT_LEVELS = {
   1: {
     level: 1,
@@ -11,79 +11,88 @@ const INGOT_LEVELS = {
     era: 'Эпоха Шахт',
     shavingsCost: 150,
     ingotCost: { copper: 3 },
-    tapPower: 1
+    tapPower: 1,
+    image: 'assets/king_ingot/ingot_1.png'
   },
   2: {
     level: 2,
     name: 'Чугунный Слиток',
     icon: '⚫',
     era: 'Эпоха Шахт',
-    shavingsCost: 800,
+    shavingsCost: 500,
     ingotCost: { iron: 2, coal: 2 },
-    tapPower: 3
+    tapPower: 3,
+    image: 'assets/king_ingot/ingot_2.png'
   },
   3: {
     level: 3,
     name: 'Медный Слиток',
     icon: '🟫',
     era: 'Эпоха Шахт',
-    shavingsCost: 3000,
+    shavingsCost: 1500,
     ingotCost: { copper: 5, tin: 2 },
-    tapPower: 7
+    tapPower: 7,
+    image: 'assets/king_ingot/ingot_3.png'
   },
   4: {
     level: 4,
     name: 'Железный Слиток',
     icon: '⬜',
     era: 'Эпоха Шахт',
-    shavingsCost: 12000,
+    shavingsCost: 4000,
     ingotCost: { iron: 5, nickel: 2, coal: 3 },
-    tapPower: 15
+    tapPower: 15,
+    image: 'assets/king_ingot/ingot_4.png'
   },
   5: {
     level: 5,
     name: 'Бронзовый Слиток',
     icon: '🟤',
     era: 'Эпоха Джунглей',
-    shavingsCost: 25000,
+    shavingsCost: 10000,
     ingotCost: { vinebronze: 2, woodalloy: 1 },
-    tapPower: 25
+    tapPower: 30,
+    image: 'assets/king_ingot/ingot_5.png'
   },
   6: {
     level: 6,
     name: 'Стальной Слиток',
     icon: '🔩',
     era: 'Эпоха Джунглей',
-    shavingsCost: 50000,
+    shavingsCost: 25000,
     ingotCost: { iron: 4, coal: 4, nickel: 2 },
-    tapPower: 40
+    tapPower: 60,
+    image: 'assets/king_ingot/ingot_6.png'
   },
   7: {
     level: 7,
     name: 'Изумрудный Слиток',
     icon: '💚',
     era: 'Эпоха Джунглей',
-    shavingsCost: 100000,
+    shavingsCost: 60000,
     ingotCost: { emeraldsteel: 2, biocopper: 3 },
-    tapPower: 60
+    tapPower: 120,
+    image: 'assets/king_ingot/ingot_7.png'
   },
   8: {
     level: 8,
     name: 'Окисленный Слиток',
     icon: '🥈',
     era: 'Эпоха Джунглей',
-    shavingsCost: 200000,
+    shavingsCost: 150000,
     ingotCost: { oxidizedsilver: 2, vinebronze: 3, woodalloy: 2 },
-    tapPower: 90
+    tapPower: 250,
+    image: 'assets/king_ingot/ingot_8.png'
   },
   9: {
     level: 9,
     name: 'Био-Стальной Слиток',
     icon: '🧬',
     era: 'Эпоха Джунглей',
-    shavingsCost: 400000,
+    shavingsCost: 350000,
     ingotCost: { biocopper: 4, emeraldsteel: 2, woodalloy: 3 },
-    tapPower: 130
+    tapPower: 500,
+    image: 'assets/king_ingot/ingot_9.png'
   },
   10: {
     level: 10,
@@ -92,52 +101,58 @@ const INGOT_LEVELS = {
     era: 'Пояс Астероидов',
     shavingsCost: 800000,
     ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 },
-    tapPower: 200
+    tapPower: 1000,
+    image: 'assets/king_ingot/ingot_10.png'
   },
   11: {
     level: 11,
     name: 'Титановый Слиток',
     icon: '🔷',
     era: 'Пояс Астероидов',
-    shavingsCost: 1500000,
+    shavingsCost: 1800000,
     ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 },
-    tapPower: 300
+    tapPower: 2200,
+    image: 'assets/king_ingot/ingot_11.png'
   },
   12: {
     level: 12,
     name: 'Кобальтовый Слиток',
     icon: '🔵',
     era: 'Пояс Астероидов',
-    shavingsCost: 3000000,
+    shavingsCost: 4000000,
     ingotCost: { cobalt: 4, titanium: 3, platincon: 2 },
-    tapPower: 450
+    tapPower: 5000,
+    image: 'assets/king_ingot/ingot_12.png'
   },
   13: {
     level: 13,
     name: 'Иридиевый Слиток',
     icon: '💠',
     era: 'Далёкий Космос',
-    shavingsCost: 6000000,
+    shavingsCost: 10000000,
     ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 },
-    tapPower: 700
+    tapPower: 12000,
+    image: 'assets/king_ingot/ingot_13.png'
   },
   14: {
     level: 14,
     name: 'Платиновый Слиток',
     icon: '💎',
     era: 'Далёкий Космос',
-    shavingsCost: 12000000,
+    shavingsCost: 25000000,
     ingotCost: { platincon: 6, iridium: 3, starchrome: 4 },
-    tapPower: 1000
+    tapPower: 30000,
+    image: 'assets/king_ingot/ingot_14.png'
   },
   15: {
     level: 15,
     name: 'Космониумный Слиток',
     icon: '🌈',
     era: 'Далёкий Космос',
-    shavingsCost: 25000000,
+    shavingsCost: 60000000,
     ingotCost: { cosmonium: 1, nebulite: 2, singular: 2, meteor_gold: 3 },
-    tapPower: 1500
+    tapPower: 70000,
+    image: 'assets/king_ingot/ingot_15.png'
   }
 };
 
@@ -254,7 +269,7 @@ export function performUpgrade() {
     }
   }
   
-  const oldIngot = { name: ingotData.name, icon: ingotData.icon, era: ingotData.era, level: state.player.level };
+  const oldIngot = { name: ingotData.name, icon: ingotData.icon, era: ingotData.era, level: state.player.level, image: ingotData.image };
   
   ingotState.shavings -= ingotData.shavingsCost;
   if (ingotData.ingotCost) {
@@ -266,7 +281,7 @@ export function performUpgrade() {
   saveGame();
   
   const newData = INGOT_LEVELS[state.player.level];
-  return { success: true, oldIngot, newIngot: { name: newData.name, icon: newData.icon, era: newData.era, level: state.player.level } };
+  return { success: true, oldIngot, newIngot: { name: newData.name, icon: newData.icon, era: newData.era, level: state.player.level, image: newData.image } };
 }
 
 // ========== ЖИВОЕ ОБНОВЛЕНИЕ UI ==========
@@ -417,14 +432,35 @@ export function renderIngotScreen(container) {
         animation: shake 0.5s ease-in-out;
       }
       
-      .ingot-icon-display {
-        font-size: 140px;
-        display: block;
-        line-height: 1;
-        animation: ingotGlow 2.5s ease-in-out infinite;
+      .ingot-image-container {
+        width: 180px;
+        height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
+        position: relative;
+      }
+      
+      .ingot-image {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        animation: ingotGlow 2.5s ease-in-out infinite;
+      }
+      
+      .ingot-fallback {
+        width: 160px;
+        height: 160px;
+        border-radius: 32px;
+        background: linear-gradient(135deg, #B87333 0%, #FFD700 40%, #FF8C00 70%, #8B4513 100%);
+        box-shadow: 0 0 35px rgba(255,140,0,0.6), 0 0 70px rgba(255,80,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 70px;
       }
       
       .ingot-shadow {
@@ -606,11 +642,31 @@ export function renderIngotScreen(container) {
         animation: spinGlow 8s linear infinite;
         pointer-events: none;
       }
-      .evolution-icon {
-        font-size: 80px;
+      .evolution-icon-container {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         position: relative;
         z-index: 1;
         animation: ingotFloat 2s ease-in-out infinite;
+      }
+      .evolution-icon-img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .evolution-icon-fallback {
+        width: 100px;
+        height: 100px;
+        border-radius: 24px;
+        background: linear-gradient(135deg, #B87333, #FFD700, #FF8C00);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 50px;
       }
       .evolution-title {
         font-family: 'Unbounded', sans-serif;
@@ -662,7 +718,10 @@ export function renderIngotScreen(container) {
   html += `
     <div class="ingot-core" id="ingotCoreArea">
       <div class="ingot-float-wrapper" id="ingotFloatWrapper">
-        <span class="ingot-icon-display" id="ingotIconDisplay">${ingotData.icon}</span>
+        <div class="ingot-image-container" id="ingotImageContainer">
+          <img class="ingot-image" id="ingotImage" src="${ingotData.image}" alt="${ingotData.name}" onerror="this.style.display='none';document.getElementById('ingotFallback').style.display='flex';" />
+          <div class="ingot-fallback" id="ingotFallback" style="display:none;">${ingotData.icon}</div>
+        </div>
         <div class="ingot-shadow"></div>
       </div>
     </div>
@@ -725,10 +784,10 @@ export function renderIngotScreen(container) {
   setTimeout(() => {
     const wrapper = document.getElementById('ingotFloatWrapper');
     const coreArea = document.getElementById('ingotCoreArea');
-    const iconDisplay = document.getElementById('ingotIconDisplay');
+    const imageContainer = document.getElementById('ingotImageContainer');
     
-    if (iconDisplay && coreArea) {
-      iconDisplay.addEventListener('click', (e) => {
+    if (imageContainer && coreArea) {
+      imageContainer.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const result = tapIngot();
@@ -743,10 +802,16 @@ export function renderIngotScreen(container) {
           wrapper.classList.add('tap-active');
         }
         
+        // МГНОВЕННОЕ обновление счётчика стружки
+        const shavingsDisplay = document.getElementById('ingotShavingsDisplay');
+        if (shavingsDisplay) {
+          shavingsDisplay.textContent = result.shavings;
+        }
+        
         const particle = document.createElement('span');
         particle.className = 'tap-particle';
         particle.textContent = '+' + result.tapPower;
-        const rect = iconDisplay.getBoundingClientRect();
+        const rect = imageContainer.getBoundingClientRect();
         const coreRect = coreArea.getBoundingClientRect();
         particle.style.left = (rect.left + rect.width / 2 - coreRect.left - 24 + (Math.random() - 0.5) * 40) + 'px';
         particle.style.top = (rect.top - coreRect.top) + 'px';
@@ -765,8 +830,6 @@ export function renderIngotScreen(container) {
           coreArea.appendChild(spark);
           setTimeout(() => spark.remove(), 500);
         }
-        
-        updateIngotUI();
       });
     }
     
@@ -827,7 +890,10 @@ function showEvolutionModal(oldData, newData) {
   overlay.innerHTML = `
     <div class="evolution-card">
       <div class="evolution-rays"></div>
-      <div class="evolution-icon">${newData.icon}</div>
+      <div class="evolution-icon-container">
+        <img class="evolution-icon-img" src="${newData.image}" alt="${newData.name}" onerror="this.style.display='none';document.getElementById('evoFallback').style.display='flex';" />
+        <div class="evolution-icon-fallback" id="evoFallback" style="display:none;">${newData.icon}</div>
+      </div>
       <div class="evolution-title">ЭВОЛЮЦИЯ СЛИТКА!</div>
       <div class="evolution-subtitle">
         <strong>${oldData.name}</strong> → <strong>${newData.name}</strong><br>
