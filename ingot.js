@@ -9,120 +9,135 @@ const INGOT_LEVELS = {
     name: 'Ржавый Слиток',
     icon: '🪨',
     era: 'Эпоха Шахт',
-    shavingsCost: 50,
-    ingotCost: { copper: 3 }
+    shavingsCost: 150,
+    ingotCost: { copper: 3 },
+    tapPower: 1
   },
   2: {
     level: 2,
     name: 'Чугунный Слиток',
     icon: '⚫',
     era: 'Эпоха Шахт',
-    shavingsCost: 100,
-    ingotCost: { iron: 2, coal: 2 }
+    shavingsCost: 800,
+    ingotCost: { iron: 2, coal: 2 },
+    tapPower: 3
   },
   3: {
     level: 3,
     name: 'Медный Слиток',
     icon: '🟫',
     era: 'Эпоха Шахт',
-    shavingsCost: 200,
-    ingotCost: { copper: 5, tin: 2 }
+    shavingsCost: 3000,
+    ingotCost: { copper: 5, tin: 2 },
+    tapPower: 7
   },
   4: {
     level: 4,
     name: 'Железный Слиток',
     icon: '⬜',
     era: 'Эпоха Шахт',
-    shavingsCost: 350,
-    ingotCost: { iron: 5, nickel: 2, coal: 3 }
+    shavingsCost: 12000,
+    ingotCost: { iron: 5, nickel: 2, coal: 3 },
+    tapPower: 15
   },
   5: {
     level: 5,
     name: 'Бронзовый Слиток',
     icon: '🟤',
     era: 'Эпоха Джунглей',
-    shavingsCost: 500,
-    ingotCost: { vinebronze: 2, woodalloy: 1 }
+    shavingsCost: 25000,
+    ingotCost: { vinebronze: 2, woodalloy: 1 },
+    tapPower: 25
   },
   6: {
     level: 6,
     name: 'Стальной Слиток',
     icon: '🔩',
     era: 'Эпоха Джунглей',
-    shavingsCost: 750,
-    ingotCost: { iron: 4, coal: 4, nickel: 2 }
+    shavingsCost: 50000,
+    ingotCost: { iron: 4, coal: 4, nickel: 2 },
+    tapPower: 40
   },
   7: {
     level: 7,
     name: 'Изумрудный Слиток',
     icon: '💚',
     era: 'Эпоха Джунглей',
-    shavingsCost: 1000,
-    ingotCost: { emeraldsteel: 2, biocopper: 3 }
+    shavingsCost: 100000,
+    ingotCost: { emeraldsteel: 2, biocopper: 3 },
+    tapPower: 60
   },
   8: {
     level: 8,
     name: 'Окисленный Слиток',
     icon: '🥈',
     era: 'Эпоха Джунглей',
-    shavingsCost: 1400,
-    ingotCost: { oxidizedsilver: 2, vinebronze: 3, woodalloy: 2 }
+    shavingsCost: 200000,
+    ingotCost: { oxidizedsilver: 2, vinebronze: 3, woodalloy: 2 },
+    tapPower: 90
   },
   9: {
     level: 9,
     name: 'Био-Стальной Слиток',
     icon: '🧬',
     era: 'Эпоха Джунглей',
-    shavingsCost: 1800,
-    ingotCost: { biocopper: 4, emeraldsteel: 2, woodalloy: 3 }
+    shavingsCost: 400000,
+    ingotCost: { biocopper: 4, emeraldsteel: 2, woodalloy: 3 },
+    tapPower: 130
   },
   10: {
     level: 10,
     name: 'Вольфрамовый Слиток',
     icon: '⭐',
     era: 'Пояс Астероидов',
-    shavingsCost: 2500,
-    ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 }
+    shavingsCost: 800000,
+    ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 },
+    tapPower: 200
   },
   11: {
     level: 11,
     name: 'Титановый Слиток',
     icon: '🔷',
     era: 'Пояс Астероидов',
-    shavingsCost: 3500,
-    ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 }
+    shavingsCost: 1500000,
+    ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 },
+    tapPower: 300
   },
   12: {
     level: 12,
     name: 'Кобальтовый Слиток',
     icon: '🔵',
     era: 'Пояс Астероидов',
-    shavingsCost: 5000,
-    ingotCost: { cobalt: 4, titanium: 3, platincon: 2 }
+    shavingsCost: 3000000,
+    ingotCost: { cobalt: 4, titanium: 3, platincon: 2 },
+    tapPower: 450
   },
   13: {
     level: 13,
     name: 'Иридиевый Слиток',
     icon: '💠',
     era: 'Далёкий Космос',
-    shavingsCost: 7000,
-    ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 }
+    shavingsCost: 6000000,
+    ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 },
+    tapPower: 700
   },
   14: {
     level: 14,
     name: 'Платиновый Слиток',
     icon: '💎',
     era: 'Далёкий Космос',
-    shavingsCost: 10000,
-    ingotCost: { platincon: 6, iridium: 3, starchrome: 4 }
+    shavingsCost: 12000000,
+    ingotCost: { platincon: 6, iridium: 3, starchrome: 4 },
+    tapPower: 1000
   },
   15: {
     level: 15,
     name: 'Космониумный Слиток',
     icon: '🌈',
     era: 'Далёкий Космос',
-    shavingsCost: 15000,
-    ingotCost: { cosmonium: 1, nebulite: 2, singular: 2, meteor_gold: 3 }
+    shavingsCost: 25000000,
+    ingotCost: { cosmonium: 1, nebulite: 2, singular: 2, meteor_gold: 3 },
+    tapPower: 1500
   }
 };
 
@@ -132,7 +147,8 @@ let ingotState = {
   tapEnergy: 500,
   maxTapEnergy: 500,
   lastEnergyRegen: Date.now(),
-  levelLocked: false
+  levelLocked: false,
+  uiUpdateInterval: null
 };
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
@@ -147,6 +163,7 @@ export function initIngotState(savedData) {
 }
 
 export function resetIngotState() {
+  stopUIUpdates();
   ingotState.shavings = 0;
   ingotState.tapEnergy = 500;
   ingotState.maxTapEnergy = 500;
@@ -189,15 +206,19 @@ export function regenEnergy() {
   }
 }
 
-// ========== ТАП ==========
+// ========== ТАП С УЧЁТОМ МУЛЬТИ-ТАПА ==========
 export function tapIngot() {
   if (ingotState.tapEnergy <= 0) {
     return { success: false, message: 'Нет энергии! Подождите восстановления.' };
   }
+  
+  const ingotData = getCurrentIngotData();
+  const tapPower = ingotData.tapPower || 1;
+  
   ingotState.tapEnergy--;
-  ingotState.shavings++;
+  ingotState.shavings += tapPower;
   saveGame();
-  return { success: true, shavings: ingotState.shavings, energy: ingotState.tapEnergy };
+  return { success: true, shavings: ingotState.shavings, energy: ingotState.tapEnergy, tapPower };
 }
 
 // ========== ЗАСЛОНКА ==========
@@ -218,7 +239,7 @@ function getNextLevelXP(level) {
   return LEVELS[level] || LEVELS[LEVELS.length - 1];
 }
 
-// ========== ПЕРЕПЛАВКА (ВОЗВРАЩАЕТ ДАННЫЕ ДЛЯ АНИМАЦИИ) ==========
+// ========== ПЕРЕПЛАВКА ==========
 export function performUpgrade() {
   const state = getPlayerState();
   if (!ingotState.levelLocked) return { success: false, message: 'Опыт ещё не заполнен!' };
@@ -233,7 +254,6 @@ export function performUpgrade() {
     }
   }
   
-  // Сохраняем старые данные для окна эволюции
   const oldIngot = { name: ingotData.name, icon: ingotData.icon, era: ingotData.era, level: state.player.level };
   
   ingotState.shavings -= ingotData.shavingsCost;
@@ -249,8 +269,26 @@ export function performUpgrade() {
   return { success: true, oldIngot, newIngot: { name: newData.name, icon: newData.icon, era: newData.era, level: state.player.level } };
 }
 
+// ========== ЖИВОЕ ОБНОВЛЕНИЕ UI ==========
+function startUIUpdates() {
+  if (ingotState.uiUpdateInterval) return;
+  ingotState.uiUpdateInterval = setInterval(() => {
+    regenEnergy();
+    updateIngotUI();
+  }, 300);
+}
+
+function stopUIUpdates() {
+  if (ingotState.uiUpdateInterval) {
+    clearInterval(ingotState.uiUpdateInterval);
+    ingotState.uiUpdateInterval = null;
+  }
+}
+
 // ========== ОТРИСОВКА ==========
 export function renderIngotScreen(container) {
+  stopUIUpdates();
+  
   const state = getPlayerState();
   const ingotData = getCurrentIngotData();
   const nextIngot = getIngotDataForLevel(state.player.level + 1);
@@ -260,6 +298,7 @@ export function renderIngotScreen(container) {
   const locked = ingotState.levelLocked;
   const nextXP = getNextLevelXP(state.player.level);
   const energyPct = (energy / maxEnergy) * 100;
+  const tapPower = ingotData.tapPower || 1;
   
   let html = '';
   
@@ -329,7 +368,7 @@ export function renderIngotScreen(container) {
         flex-shrink: 0;
       }
       .ingot-shavings-label {
-        font-size: 10px;
+        font-size: 11px;
         color: rgba(255,255,255,0.3);
         letter-spacing: 2px;
         text-transform: uppercase;
@@ -401,7 +440,7 @@ export function renderIngotScreen(container) {
         position: absolute;
         font-family: 'Unbounded', sans-serif;
         font-weight: 800;
-        font-size: 16px;
+        font-size: 18px;
         color: #FFD700;
         pointer-events: none;
         z-index: 10;
@@ -446,25 +485,55 @@ export function renderIngotScreen(container) {
       }
       .ingot-goal-title {
         font-family: 'Unbounded', sans-serif;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 700;
-        color: rgba(255,255,255,0.65);
+        color: rgba(255,255,255,0.7);
         text-align: center;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
         letter-spacing: 1px;
       }
       .ingot-goal-title strong { color: #FFD700; }
       
-      .ingot-progress-list { display: flex; flex-direction: column; gap: 8px; }
+      .ingot-progress-list { display: flex; flex-direction: column; gap: 10px; }
       .ingot-progress-row { display: flex; align-items: center; gap: 10px; }
-      .ingot-progress-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+      .ingot-progress-icon { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
       .ingot-progress-info { flex: 1; min-width: 0; }
-      .ingot-progress-header { display: flex; justify-content: space-between; font-size: 10px; color: rgba(255,255,255,0.45); margin-bottom: 3px; }
-      .ingot-progress-bar-outer { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 8px; overflow: hidden; }
-      .ingot-progress-bar-inner { height: 100%; border-radius: 8px; transition: width 0.5s ease; }
-      .ingot-progress-bar-inner.shavings { background: linear-gradient(90deg, #FFD700, #FFA500); box-shadow: 0 0 8px rgba(255,180,0,0.4); }
-      .ingot-progress-bar-inner.ingot { background: linear-gradient(90deg, #B0B0B0, #D0D0D0); }
-      .ingot-progress-bar-inner.xp { background: linear-gradient(90deg, #FF4500, #FF8C00); box-shadow: 0 0 8px rgba(255,80,0,0.4); }
+      .ingot-progress-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: rgba(255,255,255,0.6);
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+      .ingot-progress-header span:last-child {
+        color: rgba(255,255,255,0.8);
+        font-weight: 600;
+      }
+      .ingot-progress-bar-outer {
+        width: 100%;
+        height: 12px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .ingot-progress-bar-inner {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.5s ease;
+      }
+      .ingot-progress-bar-inner.shavings {
+        background: linear-gradient(90deg, #FFD700, #FFA500);
+        box-shadow: 0 0 12px rgba(255,180,0,0.5);
+      }
+      .ingot-progress-bar-inner.ingot {
+        background: linear-gradient(90deg, #C0C0C0, #E0E0E0);
+        box-shadow: 0 0 8px rgba(200,200,200,0.3);
+      }
+      .ingot-progress-bar-inner.xp {
+        background: linear-gradient(90deg, #FF4500, #FF8C00);
+        box-shadow: 0 0 12px rgba(255,80,0,0.5);
+      }
       
       .ingot-upgrade-btn {
         display: block;
@@ -495,7 +564,6 @@ export function renderIngotScreen(container) {
         padding: 24px;
       }
       
-      /* Эволюция */
       .evolution-flash {
         position: fixed;
         top: 0; left: 0;
@@ -650,6 +718,9 @@ export function renderIngotScreen(container) {
   html += `</div></div>`;
   container.innerHTML = html;
   
+  // Запуск живого обновления
+  startUIUpdates();
+  
   // ===== ОБРАБОТЧИКИ =====
   setTimeout(() => {
     const wrapper = document.getElementById('ingotFloatWrapper');
@@ -666,25 +737,22 @@ export function renderIngotScreen(container) {
           return;
         }
         
-        // Анимация сжатия
         if (wrapper) {
           wrapper.classList.remove('tap-active');
           void wrapper.offsetWidth;
           wrapper.classList.add('tap-active');
         }
         
-        // Частица "+1"
         const particle = document.createElement('span');
         particle.className = 'tap-particle';
-        particle.textContent = '+1';
+        particle.textContent = '+' + result.tapPower;
         const rect = iconDisplay.getBoundingClientRect();
         const coreRect = coreArea.getBoundingClientRect();
-        particle.style.left = (rect.left + rect.width / 2 - coreRect.left - 20 + (Math.random() - 0.5) * 40) + 'px';
+        particle.style.left = (rect.left + rect.width / 2 - coreRect.left - 24 + (Math.random() - 0.5) * 40) + 'px';
         particle.style.top = (rect.top - coreRect.top) + 'px';
         coreArea.appendChild(particle);
         setTimeout(() => particle.remove(), 700);
         
-        // Искры
         for (let i = 0; i < 4; i++) {
           const spark = document.createElement('div');
           spark.className = 'tap-spark';
@@ -711,7 +779,6 @@ export function renderIngotScreen(container) {
           return;
         }
         
-        // Тряска + вспышка + окно эволюции
         if (wrapper) {
           wrapper.classList.add('shaking');
           setTimeout(() => wrapper.classList.remove('shaking'), 500);
@@ -737,7 +804,7 @@ function buildProgressRow(icon, label, current, needed, cssClass) {
     <div class="ingot-progress-row">
       <span class="ingot-progress-icon">${icon}</span>
       <div class="ingot-progress-info">
-        <div class="ingot-progress-header"><span>${label}</span><span>${current}/${needed}</span></div>
+        <div class="ingot-progress-header"><span>${label}</span><span>${current} / ${needed}</span></div>
         <div class="ingot-progress-bar-outer">
           <div class="ingot-progress-bar-inner ${cssClass}" style="width:${pct}%;"></div>
         </div>
@@ -774,6 +841,7 @@ function showEvolutionModal(oldData, newData) {
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay || e.target.id === 'evolutionCloseBtn') {
       overlay.remove();
+      stopUIUpdates();
       import('./ui.js').then(ui => ui.renderCurrentTab());
     }
   });
