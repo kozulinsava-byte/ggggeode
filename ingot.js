@@ -50,7 +50,7 @@ const INGOT_LEVELS = {
     icon: '🟤',
     era: 'Эпоха Джунглей',
     shavingsCost: 10000,
-    ingotCost: { vinebronze: 2, woodalloy: 1 },
+    ingotCost: { iron: 3, nickel: 3, coal: 4 },
     tapPower: 30,
     image: 'assets/king_ingot/ingot_5.png'
   },
@@ -60,7 +60,7 @@ const INGOT_LEVELS = {
     icon: '🔩',
     era: 'Эпоха Джунглей',
     shavingsCost: 25000,
-    ingotCost: { iron: 4, coal: 4, nickel: 2 },
+    ingotCost: { vinebronze: 2, woodalloy: 1 },
     tapPower: 60,
     image: 'assets/king_ingot/ingot_6.png'
   },
@@ -100,7 +100,7 @@ const INGOT_LEVELS = {
     icon: '⭐',
     era: 'Пояс Астероидов',
     shavingsCost: 800000,
-    ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 },
+    ingotCost: { oxidizedsilver: 3, emeraldsteel: 3, biocopper: 4 },
     tapPower: 1000,
     image: 'assets/king_ingot/ingot_10.png'
   },
@@ -110,7 +110,7 @@ const INGOT_LEVELS = {
     icon: '🔷',
     era: 'Пояс Астероидов',
     shavingsCost: 1800000,
-    ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 },
+    ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 },
     tapPower: 2200,
     image: 'assets/king_ingot/ingot_11.png'
   },
@@ -120,7 +120,7 @@ const INGOT_LEVELS = {
     icon: '🔵',
     era: 'Пояс Астероидов',
     shavingsCost: 4000000,
-    ingotCost: { cobalt: 4, titanium: 3, platincon: 2 },
+    ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 },
     tapPower: 5000,
     image: 'assets/king_ingot/ingot_12.png'
   },
@@ -130,7 +130,7 @@ const INGOT_LEVELS = {
     icon: '💠',
     era: 'Далёкий Космос',
     shavingsCost: 10000000,
-    ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 },
+    ingotCost: { cobalt: 4, titanium: 3, platincon: 2 },
     tapPower: 12000,
     image: 'assets/king_ingot/ingot_13.png'
   },
@@ -140,7 +140,7 @@ const INGOT_LEVELS = {
     icon: '💎',
     era: 'Далёкий Космос',
     shavingsCost: 25000000,
-    ingotCost: { platincon: 6, iridium: 3, starchrome: 4 },
+    ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 },
     tapPower: 30000,
     image: 'assets/king_ingot/ingot_14.png'
   },
@@ -150,7 +150,7 @@ const INGOT_LEVELS = {
     icon: '🌈',
     era: 'Далёкий Космос',
     shavingsCost: 60000000,
-    ingotCost: { cosmonium: 1, nebulite: 2, singular: 2, meteor_gold: 3 },
+    ingotCost: { platincon: 6, iridium: 3, starchrome: 4 },
     tapPower: 70000,
     image: 'assets/king_ingot/ingot_15.png'
   }
@@ -321,8 +321,8 @@ export function renderIngotScreen(container) {
   html += `
     <style>
       @keyframes ingotFloat {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-14px); }
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        50% { transform: translate3d(0, -14px, 0); }
       }
       @keyframes shadowPulse {
         0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.5; }
@@ -333,24 +333,24 @@ export function renderIngotScreen(container) {
         50% { filter: drop-shadow(0 0 55px rgba(255,140,0,1)) drop-shadow(0 0 100px rgba(255,80,0,0.55)); }
       }
       @keyframes tapBounce {
-        0% { transform: scale(1); }
-        40% { transform: scale(0.92); }
-        100% { transform: scale(1); }
+        0% { transform: translate3d(0, 0, 0) scale(1); }
+        40% { transform: translate3d(0, 0, 0) scale(0.92); }
+        100% { transform: translate3d(0, 0, 0) scale(1); }
       }
       @keyframes sparkFly {
         0% { opacity: 1; transform: translate(0, 0) scale(1); }
         100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
       }
       @keyframes textFloatUp {
-        0% { opacity: 1; transform: translateY(0) scale(1); }
-        100% { opacity: 0; transform: translateY(-60px) scale(1.4); }
+        0% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+        100% { opacity: 0; transform: translate3d(0, -60px, 0) scale(1.4); }
       }
       @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-8px); }
-        40% { transform: translateX(8px); }
-        60% { transform: translateX(-5px); }
-        80% { transform: translateX(5px); }
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        20% { transform: translate3d(-8px, 0, 0); }
+        40% { transform: translate3d(8px, 0, 0); }
+        60% { transform: translate3d(-5px, 0, 0); }
+        80% { transform: translate3d(5px, 0, 0); }
       }
       @keyframes screenFlash {
         0% { opacity: 0; }
@@ -358,8 +358,8 @@ export function renderIngotScreen(container) {
         100% { opacity: 0; }
       }
       @keyframes pulseUpgrade {
-        0%, 100% { transform: scale(1); box-shadow: 0 0 30px rgba(255,50,0,0.6), 0 0 60px rgba(255,100,0,0.3); }
-        50% { transform: scale(1.03); box-shadow: 0 0 50px rgba(255,50,0,0.9), 0 0 100px rgba(255,100,0,0.6); }
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); box-shadow: 0 0 30px rgba(255,50,0,0.6), 0 0 60px rgba(255,100,0,0.3); }
+        50% { transform: translate3d(0, 0, 0) scale(1.03); box-shadow: 0 0 50px rgba(255,50,0,0.9), 0 0 100px rgba(255,100,0,0.6); }
       }
       @keyframes spinGlow {
         0% { transform: translate(-50%, -50%) rotate(0deg); }
@@ -442,6 +442,7 @@ export function renderIngotScreen(container) {
         user-select: none;
         -webkit-tap-highlight-color: transparent;
         position: relative;
+        image-rendering: auto;
       }
       
       .ingot-image {
@@ -449,6 +450,10 @@ export function renderIngotScreen(container) {
         height: 100%;
         object-fit: contain;
         animation: ingotGlow 2.5s ease-in-out infinite;
+        image-rendering: auto;
+        transform: translate3d(0, 0, 0);
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
       }
       
       .ingot-fallback {
@@ -461,6 +466,9 @@ export function renderIngotScreen(container) {
         align-items: center;
         justify-content: center;
         font-size: 70px;
+        transform: translate3d(0, 0, 0);
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
       }
       
       .ingot-shadow {
@@ -513,6 +521,7 @@ export function renderIngotScreen(container) {
         background: linear-gradient(90deg, #3A8CFF, #00D4FF);
         box-shadow: 0 0 10px rgba(0,180,255,0.5);
         transition: width 0.4s ease;
+        transform: translate3d(0, 0, 0);
       }
       
       .ingot-bottom {
@@ -557,6 +566,7 @@ export function renderIngotScreen(container) {
         height: 100%;
         border-radius: 10px;
         transition: width 0.5s ease;
+        transform: translate3d(0, 0, 0);
       }
       .ingot-progress-bar-inner.shavings {
         background: linear-gradient(90deg, #FFD700, #FFA500);
@@ -587,8 +597,9 @@ export function renderIngotScreen(container) {
         color: #000;
         animation: pulseUpgrade 2s ease-in-out infinite;
         margin-top: 4px;
+        transform: translate3d(0, 0, 0);
       }
-      .ingot-upgrade-btn:active { transform: scale(0.95) !important; }
+      .ingot-upgrade-btn:active { transform: translate3d(0, 0, 0) scale(0.95) !important; }
       .ingot-upgrade-btn:disabled { opacity: 0.3; cursor: not-allowed; animation: none; }
       
       .ingot-max-msg {
@@ -657,6 +668,8 @@ export function renderIngotScreen(container) {
         width: 100%;
         height: 100%;
         object-fit: contain;
+        image-rendering: auto;
+        transform: translate3d(0, 0, 0);
       }
       .evolution-icon-fallback {
         width: 100px;
