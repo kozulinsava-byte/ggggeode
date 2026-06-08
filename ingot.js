@@ -4,156 +4,21 @@ import { getPlayerState, saveGame } from './core.js';
 
 // ========== ДАННЫЕ ПРОГРЕССИИ СЛИТКА (15 УРОВНЕЙ) ==========
 const INGOT_LEVELS = {
-  1: {
-    level: 1,
-    name: 'Ржавый Слиток',
-    icon: '🪨',
-    era: 'Эпоха Шахт',
-    shavingsCost: 150,
-    ingotCost: { copper: 3 },
-    tapPower: 1,
-    image: 'assets/king_ingot/ingot_1.png'
-  },
-  2: {
-    level: 2,
-    name: 'Чугунный Слиток',
-    icon: '⚫',
-    era: 'Эпоха Шахт',
-    shavingsCost: 500,
-    ingotCost: { iron: 2, coal: 2 },
-    tapPower: 3,
-    image: 'assets/king_ingot/ingot_2.png'
-  },
-  3: {
-    level: 3,
-    name: 'Медный Слиток',
-    icon: '🟫',
-    era: 'Эпоха Шахт',
-    shavingsCost: 1500,
-    ingotCost: { copper: 5, tin: 2 },
-    tapPower: 7,
-    image: 'assets/king_ingot/ingot_3.png'
-  },
-  4: {
-    level: 4,
-    name: 'Железный Слиток',
-    icon: '⬜',
-    era: 'Эпоха Шахт',
-    shavingsCost: 4000,
-    ingotCost: { iron: 5, nickel: 2, coal: 3 },
-    tapPower: 15,
-    image: 'assets/king_ingot/ingot_4.png'
-  },
-  5: {
-    level: 5,
-    name: 'Бронзовый Слиток',
-    icon: '🟤',
-    era: 'Эпоха Джунглей',
-    shavingsCost: 10000,
-    ingotCost: { iron: 3, nickel: 3, coal: 4 },
-    tapPower: 30,
-    image: 'assets/king_ingot/ingot_5.png'
-  },
-  6: {
-    level: 6,
-    name: 'Стальной Слиток',
-    icon: '🔩',
-    era: 'Эпоха Джунглей',
-    shavingsCost: 25000,
-    ingotCost: { vinebronze: 2, woodalloy: 1 },
-    tapPower: 60,
-    image: 'assets/king_ingot/ingot_6.png'
-  },
-  7: {
-    level: 7,
-    name: 'Изумрудный Слиток',
-    icon: '💚',
-    era: 'Эпоха Джунглей',
-    shavingsCost: 60000,
-    ingotCost: { emeraldsteel: 2, biocopper: 3 },
-    tapPower: 120,
-    image: 'assets/king_ingot/ingot_7.png'
-  },
-  8: {
-    level: 8,
-    name: 'Окисленный Слиток',
-    icon: '🥈',
-    era: 'Эпоха Джунглей',
-    shavingsCost: 150000,
-    ingotCost: { oxidizedsilver: 2, vinebronze: 3, woodalloy: 2 },
-    tapPower: 250,
-    image: 'assets/king_ingot/ingot_8.png'
-  },
-  9: {
-    level: 9,
-    name: 'Био-Стальной Слиток',
-    icon: '🧬',
-    era: 'Эпоха Джунглей',
-    shavingsCost: 350000,
-    ingotCost: { biocopper: 4, emeraldsteel: 2, woodalloy: 3 },
-    tapPower: 500,
-    image: 'assets/king_ingot/ingot_9.png'
-  },
-  10: {
-    level: 10,
-    name: 'Вольфрамовый Слиток',
-    icon: '⭐',
-    era: 'Пояс Астероидов',
-    shavingsCost: 800000,
-    ingotCost: { oxidizedsilver: 3, emeraldsteel: 3, biocopper: 4 },
-    tapPower: 1000,
-    image: 'assets/king_ingot/ingot_10.png'
-  },
-  11: {
-    level: 11,
-    name: 'Титановый Слиток',
-    icon: '🔷',
-    era: 'Пояс Астероидов',
-    shavingsCost: 1800000,
-    ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 },
-    tapPower: 2200,
-    image: 'assets/king_ingot/ingot_11.png'
-  },
-  12: {
-    level: 12,
-    name: 'Кобальтовый Слиток',
-    icon: '🔵',
-    era: 'Пояс Астероидов',
-    shavingsCost: 4000000,
-    ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 },
-    tapPower: 5000,
-    image: 'assets/king_ingot/ingot_12.png'
-  },
-  13: {
-    level: 13,
-    name: 'Иридиевый Слиток',
-    icon: '💠',
-    era: 'Далёкий Космос',
-    shavingsCost: 10000000,
-    ingotCost: { cobalt: 4, titanium: 3, platincon: 2 },
-    tapPower: 12000,
-    image: 'assets/king_ingot/ingot_13.png'
-  },
-  14: {
-    level: 14,
-    name: 'Платиновый Слиток',
-    icon: '💎',
-    era: 'Далёкий Космос',
-    shavingsCost: 25000000,
-    ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 },
-    tapPower: 30000,
-    image: 'assets/king_ingot/ingot_14.png'
-  },
-  15: {
-    level: 15,
-    name: 'Космониумный Слиток',
-    icon: '🌈',
-    era: 'Далёкий Космос',
-    shavingsCost: 60000000,
-    ingotCost: { platincon: 6, iridium: 3, starchrome: 4 },
-    tapPower: 70000,
-    image: 'assets/king_ingot/ingot_15.png'
-  }
+  1: { level: 1, name: 'Ржавый Слиток', icon: '🪨', era: 'Эпоха Шахт', shavingsCost: 150, ingotCost: { copper: 3 }, tapPower: 1, image: 'assets/king_ingot/ingot_1.png' },
+  2: { level: 2, name: 'Чугунный Слиток', icon: '⚫', era: 'Эпоха Шахт', shavingsCost: 500, ingotCost: { iron: 2, coal: 2 }, tapPower: 3, image: 'assets/king_ingot/ingot_2.png' },
+  3: { level: 3, name: 'Медный Слиток', icon: '🟫', era: 'Эпоха Шахт', shavingsCost: 1500, ingotCost: { copper: 5, tin: 2 }, tapPower: 7, image: 'assets/king_ingot/ingot_3.png' },
+  4: { level: 4, name: 'Железный Слиток', icon: '⬜', era: 'Эпоха Шахт', shavingsCost: 4000, ingotCost: { iron: 5, nickel: 2, coal: 3 }, tapPower: 15, image: 'assets/king_ingot/ingot_4.png' },
+  5: { level: 5, name: 'Бронзовый Слиток', icon: '🟤', era: 'Эпоха Джунглей', shavingsCost: 10000, ingotCost: { iron: 3, nickel: 3, coal: 4 }, tapPower: 30, image: 'assets/king_ingot/ingot_5.png' },
+  6: { level: 6, name: 'Стальной Слиток', icon: '🔩', era: 'Эпоха Джунглей', shavingsCost: 25000, ingotCost: { vinebronze: 2, woodalloy: 1 }, tapPower: 60, image: 'assets/king_ingot/ingot_6.png' },
+  7: { level: 7, name: 'Изумрудный Слиток', icon: '💚', era: 'Эпоха Джунглей', shavingsCost: 60000, ingotCost: { emeraldsteel: 2, biocopper: 3 }, tapPower: 120, image: 'assets/king_ingot/ingot_7.png' },
+  8: { level: 8, name: 'Окисленный Слиток', icon: '🥈', era: 'Эпоха Джунглей', shavingsCost: 150000, ingotCost: { oxidizedsilver: 2, vinebronze: 3, woodalloy: 2 }, tapPower: 250, image: 'assets/king_ingot/ingot_8.png' },
+  9: { level: 9, name: 'Био-Стальной Слиток', icon: '🧬', era: 'Эпоха Джунглей', shavingsCost: 350000, ingotCost: { biocopper: 4, emeraldsteel: 2, woodalloy: 3 }, tapPower: 500, image: 'assets/king_ingot/ingot_9.png' },
+  10: { level: 10, name: 'Вольфрамовый Слиток', icon: '⭐', era: 'Пояс Астероидов', shavingsCost: 800000, ingotCost: { oxidizedsilver: 3, emeraldsteel: 3, biocopper: 4 }, tapPower: 1000, image: 'assets/king_ingot/ingot_10.png' },
+  11: { level: 11, name: 'Титановый Слиток', icon: '🔷', era: 'Пояс Астероидов', shavingsCost: 1800000, ingotCost: { starchrome: 2, titanium: 2, cobalt: 1 }, tapPower: 2200, image: 'assets/king_ingot/ingot_11.png' },
+  12: { level: 12, name: 'Кобальтовый Слиток', icon: '🔵', era: 'Пояс Астероидов', shavingsCost: 4000000, ingotCost: { titanium: 4, starchrome: 3, lunarsilver: 2 }, tapPower: 5000, image: 'assets/king_ingot/ingot_12.png' },
+  13: { level: 13, name: 'Иридиевый Слиток', icon: '💠', era: 'Далёкий Космос', shavingsCost: 10000000, ingotCost: { cobalt: 4, titanium: 3, platincon: 2 }, tapPower: 12000, image: 'assets/king_ingot/ingot_13.png' },
+  14: { level: 14, name: 'Платиновый Слиток', icon: '💎', era: 'Далёкий Космос', shavingsCost: 25000000, ingotCost: { iridium: 2, platincon: 4, lunarsilver: 3 }, tapPower: 30000, image: 'assets/king_ingot/ingot_14.png' },
+  15: { level: 15, name: 'Космониумный Слиток', icon: '🌈', era: 'Далёкий Космос', shavingsCost: 60000000, ingotCost: { platincon: 6, iridium: 3, starchrome: 4 }, tapPower: 70000, image: 'assets/king_ingot/ingot_15.png' }
 };
 
 // ========== СОСТОЯНИЕ СЛИТКА ==========
@@ -284,12 +149,15 @@ export function performUpgrade() {
   return { success: true, oldIngot, newIngot: { name: newData.name, icon: newData.icon, era: newData.era, level: state.player.level, image: newData.image } };
 }
 
-// ========== ЖИВОЕ ОБНОВЛЕНИЕ UI ==========
+// ========== ЖИВОЕ ОБНОВЛЕНИЕ UI (ТОЛЬКО ЭНЕРГИЯ) ==========
 function startUIUpdates() {
   if (ingotState.uiUpdateInterval) return;
   ingotState.uiUpdateInterval = setInterval(() => {
     regenEnergy();
-    updateIngotUI();
+    const bar = document.getElementById('ingotEnergyBar');
+    if (bar) {
+      bar.style.width = (ingotState.tapEnergy / ingotState.maxTapEnergy * 100) + '%';
+    }
   }, 300);
 }
 
@@ -300,7 +168,7 @@ function stopUIUpdates() {
   }
 }
 
-// ========== ОТРИСОВКА ==========
+// ========== БЫСТРАЯ ОТРИСОВКА (БЕЗ ТЯЖЁЛЫХ ЦИКЛОВ) ==========
 export function renderIngotScreen(container) {
   stopUIUpdates();
   
@@ -313,7 +181,6 @@ export function renderIngotScreen(container) {
   const locked = ingotState.levelLocked;
   const nextXP = getNextLevelXP(state.player.level);
   const energyPct = (energy / maxEnergy) * 100;
-  const tapPower = ingotData.tapPower || 1;
   
   let html = '';
   
@@ -442,7 +309,6 @@ export function renderIngotScreen(container) {
         user-select: none;
         -webkit-tap-highlight-color: transparent;
         position: relative;
-        image-rendering: auto;
       }
       
       .ingot-image {
@@ -450,7 +316,6 @@ export function renderIngotScreen(container) {
         height: 100%;
         object-fit: contain;
         animation: ingotGlow 2.5s ease-in-out infinite;
-        image-rendering: auto;
         transform: translate3d(0, 0, 0);
         -webkit-backface-visibility: hidden;
         backface-visibility: hidden;
@@ -630,7 +495,6 @@ export function renderIngotScreen(container) {
         display: flex;
         align-items: center;
         justify-content: center;
-        animation: screenFlash 0.4s ease-out reverse;
       }
       .evolution-card {
         background: radial-gradient(circle at 50% 0%, rgba(255,140,0,0.2) 0%, rgba(20,20,20,0.95) 70%);
@@ -668,7 +532,6 @@ export function renderIngotScreen(container) {
         width: 100%;
         height: 100%;
         object-fit: contain;
-        image-rendering: auto;
         transform: translate3d(0, 0, 0);
       }
       .evolution-icon-fallback {
@@ -713,7 +576,7 @@ export function renderIngotScreen(container) {
     </style>
   `;
   
-  // ===== HTML =====
+  // ===== HTML (МГНОВЕННАЯ ГЕНЕРАЦИЯ) =====
   html += `<div class="ingot-screen">`;
   
   // Верх
@@ -727,7 +590,7 @@ export function renderIngotScreen(container) {
     </div>
   `;
   
-  // Центр
+  // Центр — Слиток появляется МГНОВЕННО
   html += `
     <div class="ingot-core" id="ingotCoreArea">
       <div class="ingot-float-wrapper" id="ingotFloatWrapper">
@@ -788,89 +651,92 @@ export function renderIngotScreen(container) {
   }
   
   html += `</div></div>`;
+  
+  // МГНОВЕННАЯ вставка в DOM
   container.innerHTML = html;
   
-  // Запуск живого обновления
+  // Запуск ТОЛЬКО обновления энергии (не перерисовывает весь экран)
   startUIUpdates();
   
-  // ===== ОБРАБОТЧИКИ =====
-  setTimeout(() => {
-    const wrapper = document.getElementById('ingotFloatWrapper');
-    const coreArea = document.getElementById('ingotCoreArea');
-    const imageContainer = document.getElementById('ingotImageContainer');
-    
-    if (imageContainer && coreArea) {
-      imageContainer.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const result = tapIngot();
-        if (!result.success) {
-          import('./ui.js').then(ui => ui.showToast(result.message, '⚡'));
-          return;
-        }
-        
-        if (wrapper) {
-          wrapper.classList.remove('tap-active');
-          void wrapper.offsetWidth;
-          wrapper.classList.add('tap-active');
-        }
-        
-        // МГНОВЕННОЕ обновление счётчика стружки
-        const shavingsDisplay = document.getElementById('ingotShavingsDisplay');
-        if (shavingsDisplay) {
-          shavingsDisplay.textContent = result.shavings;
-        }
-        
-        const particle = document.createElement('span');
-        particle.className = 'tap-particle';
-        particle.textContent = '+' + result.tapPower;
-        const rect = imageContainer.getBoundingClientRect();
-        const coreRect = coreArea.getBoundingClientRect();
-        particle.style.left = (rect.left + rect.width / 2 - coreRect.left - 24 + (Math.random() - 0.5) * 40) + 'px';
-        particle.style.top = (rect.top - coreRect.top) + 'px';
-        coreArea.appendChild(particle);
-        setTimeout(() => particle.remove(), 700);
-        
-        for (let i = 0; i < 4; i++) {
-          const spark = document.createElement('div');
-          spark.className = 'tap-spark';
-          spark.style.left = (rect.left + rect.width / 2 - coreRect.left) + 'px';
-          spark.style.top = (rect.top + rect.height / 2 - coreRect.top) + 'px';
-          const angle = Math.random() * Math.PI * 2;
-          const dist = 25 + Math.random() * 35;
-          spark.style.setProperty('--sx', Math.cos(angle) * dist + 'px');
-          spark.style.setProperty('--sy', Math.sin(angle) * dist + 'px');
-          coreArea.appendChild(spark);
-          setTimeout(() => spark.remove(), 500);
-        }
-      });
-    }
-    
-    const upgradeBtn = document.getElementById('performUpgradeBtn');
-    if (upgradeBtn) {
-      upgradeBtn.addEventListener('click', () => {
-        const result = performUpgrade();
-        if (!result.success) {
-          import('./ui.js').then(ui => ui.showToast(result.message, '⚠️'));
-          return;
-        }
-        
-        if (wrapper) {
-          wrapper.classList.add('shaking');
-          setTimeout(() => wrapper.classList.remove('shaking'), 500);
-        }
-        
-        const flash = document.createElement('div');
-        flash.className = 'evolution-flash';
-        document.body.appendChild(flash);
-        setTimeout(() => flash.remove(), 600);
-        
-        setTimeout(() => {
-          showEvolutionModal(result.oldIngot, result.newIngot);
-        }, 300);
-      });
-    }
-  }, 10);
+  // ===== МГНОВЕННЫЕ ОБРАБОТЧИКИ (без setTimeout!) =====
+  const wrapper = document.getElementById('ingotFloatWrapper');
+  const coreArea = document.getElementById('ingotCoreArea');
+  const imageContainer = document.getElementById('ingotImageContainer');
+  const shavingsDisplay = document.getElementById('ingotShavingsDisplay');
+  
+  if (imageContainer && coreArea) {
+    imageContainer.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const result = tapIngot();
+      if (!result.success) {
+        import('./ui.js').then(ui => ui.showToast(result.message, '⚡'));
+        return;
+      }
+      
+      // Анимация сжатия
+      if (wrapper) {
+        wrapper.classList.remove('tap-active');
+        void wrapper.offsetWidth;
+        wrapper.classList.add('tap-active');
+      }
+      
+      // МГНОВЕННОЕ обновление счётчика стружки
+      if (shavingsDisplay) {
+        shavingsDisplay.textContent = result.shavings;
+      }
+      
+      // Частица "+X"
+      const particle = document.createElement('span');
+      particle.className = 'tap-particle';
+      particle.textContent = '+' + result.tapPower;
+      const rect = imageContainer.getBoundingClientRect();
+      const coreRect = coreArea.getBoundingClientRect();
+      particle.style.left = (rect.left + rect.width / 2 - coreRect.left - 24 + (Math.random() - 0.5) * 40) + 'px';
+      particle.style.top = (rect.top - coreRect.top) + 'px';
+      coreArea.appendChild(particle);
+      setTimeout(() => particle.remove(), 700);
+      
+      // Искры
+      for (let i = 0; i < 4; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'tap-spark';
+        spark.style.left = (rect.left + rect.width / 2 - coreRect.left) + 'px';
+        spark.style.top = (rect.top + rect.height / 2 - coreRect.top) + 'px';
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 25 + Math.random() * 35;
+        spark.style.setProperty('--sx', Math.cos(angle) * dist + 'px');
+        spark.style.setProperty('--sy', Math.sin(angle) * dist + 'px');
+        coreArea.appendChild(spark);
+        setTimeout(() => spark.remove(), 500);
+      }
+    });
+  }
+  
+  const upgradeBtn = document.getElementById('performUpgradeBtn');
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener('click', () => {
+      const result = performUpgrade();
+      if (!result.success) {
+        import('./ui.js').then(ui => ui.showToast(result.message, '⚠️'));
+        return;
+      }
+      
+      if (wrapper) {
+        wrapper.classList.add('shaking');
+        setTimeout(() => wrapper.classList.remove('shaking'), 500);
+      }
+      
+      const flash = document.createElement('div');
+      flash.className = 'evolution-flash';
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 600);
+      
+      setTimeout(() => {
+        showEvolutionModal(result.oldIngot, result.newIngot);
+      }, 300);
+    });
+  }
 }
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
@@ -887,13 +753,6 @@ function buildProgressRow(icon, label, current, needed, cssClass) {
       </div>
     </div>
   `;
-}
-
-function updateIngotUI() {
-  const display = document.getElementById('ingotShavingsDisplay');
-  const bar = document.getElementById('ingotEnergyBar');
-  if (display) display.textContent = ingotState.shavings;
-  if (bar) bar.style.width = (ingotState.tapEnergy / ingotState.maxTapEnergy * 100) + '%';
 }
 
 // ========== ОКНО ЭВОЛЮЦИИ ==========
