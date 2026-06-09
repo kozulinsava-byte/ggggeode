@@ -168,7 +168,7 @@ function stopUIUpdates() {
   }
 }
 
-// ========== БЫСТРАЯ ОТРИСОВКА (БЕЗ ТЯЖЁЛЫХ ЦИКЛОВ) ==========
+// ========== БЫСТРАЯ ОТРИСОВКА (БЕЗ ТЯЖЁЛЫХ ЦИКЛОВ, БЕЗ setTimeout) ==========
 export function renderIngotScreen(container) {
   stopUIUpdates();
   
@@ -184,49 +184,31 @@ export function renderIngotScreen(container) {
   
   let html = '';
   
-  // ===== CSS =====
+  // ===== CSS (облегчённый, без тяжёлых box-shadow на анимированных элементах) =====
   html += `
     <style>
       @keyframes ingotFloat {
-        0%, 100% { transform: translate3d(0, 0, 0); }
-        50% { transform: translate3d(0, -14px, 0); }
-      }
-      @keyframes shadowPulse {
-        0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.5; }
-        50% { transform: translateX(-50%) scale(0.75); opacity: 0.25; }
-      }
-      @keyframes ingotGlow {
-        0%, 100% { filter: drop-shadow(0 0 35px rgba(255,140,0,0.7)) drop-shadow(0 0 70px rgba(255,80,0,0.35)); }
-        50% { filter: drop-shadow(0 0 55px rgba(255,140,0,1)) drop-shadow(0 0 100px rgba(255,80,0,0.55)); }
+        0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+        25% { transform: translate3d(3px, -8px, 0) rotate(0.8deg); }
+        50% { transform: translate3d(-2px, -14px, 0) rotate(1.5deg); }
+        75% { transform: translate3d(4px, -6px, 0) rotate(-0.6deg); }
       }
       @keyframes tapBounce {
         0% { transform: translate3d(0, 0, 0) scale(1); }
         40% { transform: translate3d(0, 0, 0) scale(0.92); }
         100% { transform: translate3d(0, 0, 0) scale(1); }
       }
-      @keyframes sparkFly {
-        0% { opacity: 1; transform: translate(0, 0) scale(1); }
-        100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
-      }
       @keyframes textFloatUp {
         0% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
         100% { opacity: 0; transform: translate3d(0, -60px, 0) scale(1.4); }
       }
-      @keyframes shake {
-        0%, 100% { transform: translate3d(0, 0, 0); }
-        20% { transform: translate3d(-8px, 0, 0); }
-        40% { transform: translate3d(8px, 0, 0); }
-        60% { transform: translate3d(-5px, 0, 0); }
-        80% { transform: translate3d(5px, 0, 0); }
-      }
-      @keyframes screenFlash {
-        0% { opacity: 0; }
-        30% { opacity: 1; }
-        100% { opacity: 0; }
+      @keyframes sparkFly {
+        0% { opacity: 1; transform: translate(0, 0) scale(1); }
+        100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
       }
       @keyframes pulseUpgrade {
-        0%, 100% { transform: translate3d(0, 0, 0) scale(1); box-shadow: 0 0 30px rgba(255,50,0,0.6), 0 0 60px rgba(255,100,0,0.3); }
-        50% { transform: translate3d(0, 0, 0) scale(1.03); box-shadow: 0 0 50px rgba(255,50,0,0.9), 0 0 100px rgba(255,100,0,0.6); }
+        0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+        50% { transform: translate3d(0, 0, 0) scale(1.03); }
       }
       @keyframes spinGlow {
         0% { transform: translate(-50%, -50%) rotate(0deg); }
@@ -238,7 +220,7 @@ export function renderIngotScreen(container) {
         display: flex;
         flex-direction: column;
         padding: 0;
-        background: radial-gradient(circle at 50% 40%, rgba(230,92,0,0.1) 0%, rgba(15,15,15,1) 75%);
+        background: radial-gradient(circle at 50% 40%, rgba(230,92,0,0.08) 0%, rgba(15,15,15,1) 75%);
         position: relative;
         overflow-y: auto;
         overflow-x: hidden;
@@ -263,7 +245,6 @@ export function renderIngotScreen(container) {
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 3px 10px rgba(255,160,0,0.5));
         line-height: 1;
         margin-bottom: 6px;
       }
@@ -276,7 +257,6 @@ export function renderIngotScreen(container) {
       .ingot-core {
         flex: 1;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
         position: relative;
@@ -285,37 +265,28 @@ export function renderIngotScreen(container) {
       }
       
       .ingot-float-wrapper {
-        animation: ingotFloat 4s ease-in-out infinite;
+        animation: ingotFloat 5s ease-in-out infinite;
         position: relative;
         z-index: 2;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
       }
       .ingot-float-wrapper.tap-active {
         animation: tapBounce 0.18s ease-out;
-      }
-      .ingot-float-wrapper.shaking {
-        animation: shake 0.5s ease-in-out;
       }
       
       .ingot-image-container {
         width: 180px;
         height: 180px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         cursor: pointer;
         user-select: none;
         -webkit-tap-highlight-color: transparent;
         position: relative;
+        filter: drop-shadow(0 0 25px rgba(255,140,0,0.4));
       }
       
       .ingot-image {
         width: 100%;
         height: 100%;
         object-fit: contain;
-        animation: ingotGlow 2.5s ease-in-out infinite;
         transform: translate3d(0, 0, 0);
         -webkit-backface-visibility: hidden;
         backface-visibility: hidden;
@@ -326,7 +297,6 @@ export function renderIngotScreen(container) {
         height: 160px;
         border-radius: 32px;
         background: linear-gradient(135deg, #B87333 0%, #FFD700 40%, #FF8C00 70%, #8B4513 100%);
-        box-shadow: 0 0 35px rgba(255,140,0,0.6), 0 0 70px rgba(255,80,0,0.3);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -334,15 +304,6 @@ export function renderIngotScreen(container) {
         transform: translate3d(0, 0, 0);
         -webkit-backface-visibility: hidden;
         backface-visibility: hidden;
-      }
-      
-      .ingot-shadow {
-        width: 100px;
-        height: 16px;
-        background: radial-gradient(ellipse, rgba(0,0,0,0.6) 0%, transparent 70%);
-        border-radius: 50%;
-        margin-top: 8px;
-        animation: shadowPulse 4s ease-in-out infinite;
       }
       
       .tap-particle {
@@ -362,7 +323,6 @@ export function renderIngotScreen(container) {
         height: 6px;
         border-radius: 50%;
         background: #FF8C00;
-        box-shadow: 0 0 6px #FFD700;
         pointer-events: none;
         z-index: 9;
         animation: sparkFly 0.5s ease-out forwards;
@@ -384,7 +344,6 @@ export function renderIngotScreen(container) {
         height: 100%;
         border-radius: 10px;
         background: linear-gradient(90deg, #3A8CFF, #00D4FF);
-        box-shadow: 0 0 10px rgba(0,180,255,0.5);
         transition: width 0.4s ease;
         transform: translate3d(0, 0, 0);
       }
@@ -416,10 +375,7 @@ export function renderIngotScreen(container) {
         margin-bottom: 4px;
         font-weight: 500;
       }
-      .ingot-progress-header span:last-child {
-        color: rgba(255,255,255,0.8);
-        font-weight: 600;
-      }
+      .ingot-progress-header span:last-child { color: rgba(255,255,255,0.8); font-weight: 600; }
       .ingot-progress-bar-outer {
         width: 100%;
         height: 12px;
@@ -433,18 +389,9 @@ export function renderIngotScreen(container) {
         transition: width 0.5s ease;
         transform: translate3d(0, 0, 0);
       }
-      .ingot-progress-bar-inner.shavings {
-        background: linear-gradient(90deg, #FFD700, #FFA500);
-        box-shadow: 0 0 12px rgba(255,180,0,0.5);
-      }
-      .ingot-progress-bar-inner.ingot {
-        background: linear-gradient(90deg, #C0C0C0, #E0E0E0);
-        box-shadow: 0 0 8px rgba(200,200,200,0.3);
-      }
-      .ingot-progress-bar-inner.xp {
-        background: linear-gradient(90deg, #FF4500, #FF8C00);
-        box-shadow: 0 0 12px rgba(255,80,0,0.5);
-      }
+      .ingot-progress-bar-inner.shavings { background: linear-gradient(90deg, #FFD700, #FFA500); }
+      .ingot-progress-bar-inner.ingot { background: linear-gradient(90deg, #C0C0C0, #E0E0E0); }
+      .ingot-progress-bar-inner.xp { background: linear-gradient(90deg, #FF4500, #FF8C00); }
       
       .ingot-upgrade-btn {
         display: block;
@@ -476,15 +423,6 @@ export function renderIngotScreen(container) {
         padding: 24px;
       }
       
-      .evolution-flash {
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        background: #fff;
-        z-index: 9999;
-        pointer-events: none;
-        animation: screenFlash 0.6s ease-out forwards;
-      }
       .evolution-overlay {
         position: fixed;
         top: 0; left: 0;
@@ -598,7 +536,6 @@ export function renderIngotScreen(container) {
           <img class="ingot-image" id="ingotImage" src="${ingotData.image}" alt="${ingotData.name}" onerror="this.style.display='none';document.getElementById('ingotFallback').style.display='flex';" />
           <div class="ingot-fallback" id="ingotFallback" style="display:none;">${ingotData.icon}</div>
         </div>
-        <div class="ingot-shadow"></div>
       </div>
     </div>
   `;
@@ -655,10 +592,10 @@ export function renderIngotScreen(container) {
   // МГНОВЕННАЯ вставка в DOM
   container.innerHTML = html;
   
-  // Запуск ТОЛЬКО обновления энергии (не перерисовывает весь экран)
+  // Запуск ТОЛЬКО обновления энергии
   startUIUpdates();
   
-  // ===== МГНОВЕННЫЕ ОБРАБОТЧИКИ (без setTimeout!) =====
+  // ===== МГНОВЕННЫЕ ОБРАБОТЧИКИ (БЕЗ setTimeout!) =====
   const wrapper = document.getElementById('ingotFloatWrapper');
   const coreArea = document.getElementById('ingotCoreArea');
   const imageContainer = document.getElementById('ingotImageContainer');
@@ -668,6 +605,8 @@ export function renderIngotScreen(container) {
     imageContainer.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      
+      // Прямой тап
       const result = tapIngot();
       if (!result.success) {
         import('./ui.js').then(ui => ui.showToast(result.message, '⚡'));
@@ -681,9 +620,9 @@ export function renderIngotScreen(container) {
         wrapper.classList.add('tap-active');
       }
       
-      // МГНОВЕННОЕ обновление счётчика стружки
+      // МГНОВЕННОЕ обновление счётчика стружки — ПРЯМОЕ
       if (shavingsDisplay) {
-        shavingsDisplay.textContent = result.shavings;
+        shavingsDisplay.textContent = ingotState.shavings;
       }
       
       // Частица "+X"
@@ -722,13 +661,8 @@ export function renderIngotScreen(container) {
         return;
       }
       
-      if (wrapper) {
-        wrapper.classList.add('shaking');
-        setTimeout(() => wrapper.classList.remove('shaking'), 500);
-      }
-      
       const flash = document.createElement('div');
-      flash.className = 'evolution-flash';
+      flash.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9999;pointer-events:none;animation:screenFlash 0.6s ease-out forwards;';
       document.body.appendChild(flash);
       setTimeout(() => flash.remove(), 600);
       
