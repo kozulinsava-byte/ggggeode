@@ -2,7 +2,6 @@
 import { CONFIG_ITEMS } from './config.js';
 import { getPlayerState, saveGame } from './core.js';
 
-// ========== ДАННЫЕ ПРОГРЕССИИ СЛИТКА (15 УРОВНЕЙ) ==========
 const INGOT_LEVELS = {
   1: { level: 1, name: 'Ржавый Слиток', icon: '🪨', era: 'Эпоха Шахт', shavingsCost: 150, ingotCost: { copper: 3 }, tapPower: 1, image: 'assets/king_ingot/ingot_1.png' },
   2: { level: 2, name: 'Чугунный Слиток', icon: '⚫', era: 'Эпоха Шахт', shavingsCost: 500, ingotCost: { iron: 2, coal: 2 }, tapPower: 3, image: 'assets/king_ingot/ingot_2.png' },
@@ -21,7 +20,6 @@ const INGOT_LEVELS = {
   15: { level: 15, name: 'Космониумный Слиток', icon: '🌈', era: 'Далёкий Космос', shavingsCost: 60000000, ingotCost: { platincon: 6, iridium: 3, starchrome: 4 }, tapPower: 70000, image: 'assets/king_ingot/ingot_15.png' }
 };
 
-// ========== СОСТОЯНИЕ СЛИТКА ==========
 let ingotState = {
   shavings: 0,
   tapEnergy: 500,
@@ -31,7 +29,6 @@ let ingotState = {
   uiUpdateInterval: null
 };
 
-// ========== ИНИЦИАЛИЗАЦИЯ ==========
 export function initIngotState(savedData) {
   if (savedData) {
     ingotState.shavings = savedData.ingotShavings || 0;
@@ -75,7 +72,6 @@ export function getIngotDataForLevel(level) {
   return INGOT_LEVELS[level] || null;
 }
 
-// ========== РЕГЕНЕРАЦИЯ ЭНЕРГИИ ==========
 export function regenEnergy() {
   const now = Date.now();
   const elapsed = now - ingotState.lastEnergyRegen;
@@ -86,7 +82,6 @@ export function regenEnergy() {
   }
 }
 
-// ========== ТАП ==========
 export function tapIngot() {
   if (ingotState.tapEnergy <= 0) {
     return { success: false, message: 'Нет энергии!' };
@@ -95,12 +90,10 @@ export function tapIngot() {
   const tapPower = ingotData.tapPower || 1;
   ingotState.tapEnergy--;
   ingotState.shavings += tapPower;
-  // saveGame вызывается, но не блокирует возврат
   saveGame();
   return { success: true, shavings: ingotState.shavings, energy: ingotState.tapEnergy, tapPower };
 }
 
-// ========== ЗАСЛОНКА ==========
 export function checkLevelLock() {
   const state = getPlayerState();
   const nextXP = getNextLevelXP(state.player.level);
@@ -118,7 +111,6 @@ function getNextLevelXP(level) {
   return LEVELS[level] || LEVELS[LEVELS.length - 1];
 }
 
-// ========== ПЕРЕПЛАВКА ==========
 export function performUpgrade() {
   const state = getPlayerState();
   if (!ingotState.levelLocked) return { success: false, message: 'Опыт ещё не заполнен!' };
@@ -141,7 +133,6 @@ export function performUpgrade() {
   return { success: true, oldIngot, newIngot: { name: newData.name, icon: newData.icon, era: newData.era, level: state.player.level, image: newData.image } };
 }
 
-// ========== ЖИВОЕ ОБНОВЛЕНИЕ ТОЛЬКО ЭНЕРГИИ ==========
 function startUIUpdates() {
   if (ingotState.uiUpdateInterval) return;
   ingotState.uiUpdateInterval = setInterval(() => {
@@ -155,7 +146,6 @@ function stopUIUpdates() {
   if (ingotState.uiUpdateInterval) { clearInterval(ingotState.uiUpdateInterval); ingotState.uiUpdateInterval = null; }
 }
 
-// ========== ОТРИСОВКА ==========
 export function renderIngotScreen(container) {
   stopUIUpdates();
   const state = getPlayerState();
@@ -337,7 +327,6 @@ export function renderIngotScreen(container) {
   container.innerHTML = html;
   startUIUpdates();
 
-  // МГНОВЕННЫЕ обработчики — никаких setTimeout
   const wrapper = document.getElementById('ingotFloatWrapper');
   const coreArea = document.getElementById('ingotCoreArea');
   const imageContainer = document.getElementById('ingotImageContainer');
@@ -349,14 +338,11 @@ export function renderIngotScreen(container) {
       const result = tapIngot();
       if (!result.success) { import('./ui.js').then(ui => ui.showToast(result.message, '⚡')); return; }
       if (wrapper) { wrapper.classList.remove('tap-active'); void wrapper.offsetWidth; wrapper.classList.add('tap-active'); }
-      // ПРЯМОЕ обновление счётчика из ingotState
       if (shavingsDisplay) shavingsDisplay.textContent = ingotState.shavings;
-      // Частица
       const p = document.createElement('span'); p.className = 'tap-particle'; p.textContent = '+' + result.tapPower;
       const r = imageContainer.getBoundingClientRect(), cr = coreArea.getBoundingClientRect();
       p.style.left = (r.left + r.width / 2 - cr.left - 24 + (Math.random() - 0.5) * 40) + 'px';
       p.style.top = (r.top - cr.top) + 'px'; coreArea.appendChild(p); setTimeout(() => p.remove(), 700);
-      // Искры
       for (let i = 0; i < 4; i++) {
         const s = document.createElement('div'); s.className = 'tap-spark';
         s.style.left = (r.left + r.width / 2 - cr.left) + 'px';
